@@ -1,30 +1,49 @@
 export default async function handler(req, res) {
-  const key = process.env.ALPHA_VANTAGE_KEY;
+  const key = process.env.FINNHUB_API_KEY;
 
   const assets = [
-    { symbol: "QQQ", high: 748.65 },
-    { symbol: "NVDA", high: 236.54 },
-    { symbol: "TSM", high: 450.16 },
-    { symbol: "AVGO", high: 495 },
-    { symbol: "GOOGL", high: 408.61 },
-    { symbol: "AMD", high: 546.44 },
-    { symbol: "MRVL", high: 324.2 },
-    { symbol: "RKLB", high: 151 }
+    "QQQ",
+    "NVDA",
+    "TSM",
+    "AVGO",
+    "GOOGL",
+    "AMD",
+    "MRVL",
+    "RKLB"
   ];
 
   try {
     const results = [];
 
-    for (const asset of assets) {
-      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${asset.symbol}&apikey=${key}`;
-      const response = await fetch(url);
-      const quoteData = await response.json();
+    for (const symbol of assets) {
+      const quoteUrl =
+        `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${key}`;
+
+      const metricUrl =
+        `https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${key}`;
+
+      const quoteRes = await fetch(quoteUrl);
+      const quoteData = await quoteRes.json();
+
+      const metricRes = await fetch(metricUrl);
+      const metricData = await metricRes.json();
+
+      const price = Number(quoteData.c || 0);
+
+      const high = Number(
+        metricData?.metric?.["52WeekHigh"] || 0
+      );
+
+      const discount =
+        high > 0
+          ? Number((((price - high) / high) * 100).toFixed(1))
+          : 0;
 
       results.push({
-        symbol: asset.symbol,
-        price: Number(quoteData["Global Quote"]?.["05. price"] || 0),
-        high: asset.high,
-        currency: "USD"
+        symbol,
+        price,
+        high,
+        discount
       });
     }
 
@@ -32,19 +51,22 @@ export default async function handler(req, res) {
       symbol: "SPCX",
       price: 161.29,
       high: 176,
-      currency: "USD",
+      discount: -8.4,
       source: "manual"
     });
 
     res.status(200).json({
       updatedAt: new Date().toISOString(),
-      source: "Alpha Vantage + manual 52W high",
+      source: "Finnhub",
       data: results
     });
+
   } catch (error) {
+
     res.status(500).json({
-      error: "alpha_vantage_failed",
+      error: "finnhub_failed",
       message: error.message
     });
+
   }
 }
