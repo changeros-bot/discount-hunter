@@ -21,56 +21,85 @@ export default function Home() {
       "第一買點": 4,
       "尚未到買點": 5
     };
-
     return order[a.signal?.text] - order[b.signal?.text];
   });
 
+  const buyList = sortedAssets.filter((a) => a.signal?.text !== "尚未到買點");
+
   return (
-    <div className="container">
-      <h1>折扣獵人 V9</h1>
-      <p className="subtitle">幣安換便宜戰情表｜即時價格＋52週高點</p>
+    <main className="page">
+      <section className="hero">
+        <h1>折扣獵人 V9</h1>
+        <p>幣安換便宜戰情表｜即時價格 × 52週高點</p>
+        <div className="update">
+          更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
+        </div>
+      </section>
 
-      <p className="time">
-        更新時間：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
-      </p>
+      <section className="summary">
+        <div>
+          <span>今日可出手</span>
+          <strong>{buyList.length} 檔</strong>
+        </div>
+        <div>
+          <span>監控名單</span>
+          <strong>{assets.length} 檔</strong>
+        </div>
+      </section>
 
-      {sortedAssets.map((a) => (
-        <div className="card" key={a.symbol}>
-          <div className="top">
-            <div>
-              <h2>{a.symbol}</h2>
-              <p>{a.name}</p>
-              <p>{a.grade} 級</p>
+      {buyList.length > 0 && (
+        <section className="alertBox">
+          🎯 今日可出手：
+          {buyList.map((a) => a.symbol).join("、")}
+        </section>
+      )}
+
+      <section className="list">
+        {sortedAssets.map((a) => (
+          <div
+            className={`card ${
+              a.signal?.text === "尚未到買點" ? "idle" : "active"
+            }`}
+            key={a.symbol}
+          >
+            <div className="cardTop">
+              <div>
+                <h2>{a.symbol}</h2>
+                <p>{a.name}</p>
+              </div>
+
+              <div className="badge">{a.grade}級</div>
             </div>
 
             <div
-              className="signal"
-              style={{ color: a.signal?.color || "gray" }}
+              className={`signal ${
+                a.signal?.text === "尚未到買點" ? "gray" : "green"
+              }`}
             >
               {a.signal?.text}
             </div>
-          </div>
 
-          <div className="row">
-            <span>{a.highType || "52週高點"}</span>
-            <strong>{a.high}</strong>
+            <div className="dataGrid">
+              <div>
+                <span>{a.highType || "52週高點"}</span>
+                <strong>{a.high}</strong>
+              </div>
+              <div>
+                <span>現價</span>
+                <strong>{a.price}</strong>
+              </div>
+              <div>
+                <span>跌幅</span>
+                <strong>{a.discount}%</strong>
+              </div>
+              <div>
+                <span>建議投入</span>
+                <strong>{a.signal?.amount || "0"}</strong>
+              </div>
+            </div>
           </div>
-
-          <div className="row">
-            <span>現價</span>
-            <strong>{a.price}</strong>
-          </div>
-
-          <div className="row">
-            <span>跌幅</span>
-            <strong>{a.discount}%</strong>
-          </div>
-
-          <div className="amount">
-            建議投入：{a.signal?.amount || "0"}
-          </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </section>
+    </main>
   );
 }
