@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
+
 export default function Home() {
   const [assets, setAssets] = useState([]);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -21,6 +23,7 @@ export default function Home() {
       "第一買點": 4,
       "尚未到買點": 5
     };
+
     return order[a.signal?.text] - order[b.signal?.text];
   });
 
@@ -87,7 +90,11 @@ export default function Home() {
               <div>
                 <h2>{a.symbol}</h2>
                 <p>{a.name}</p>
+                <p className="desc">
+                  {a.grade}級 ｜ {a.description}
+                </p>
               </div>
+
               <div className="badge">{a.grade}級</div>
             </div>
 
@@ -116,6 +123,26 @@ export default function Home() {
                 <span>建議投入</span>
                 <strong>{a.signal?.amount || "0"}</strong>
               </div>
+            </div>
+
+            <div className="ruleBox">
+              <h4>買點規則</h4>
+
+              {a.rules?.map((rule, idx) => (
+                <div
+                  key={idx}
+                  className={
+                    a.signal?.level === idx + 1 ? "rule activeRule" : "rule"
+                  }
+                >
+                  <span>
+                    {ruleColors[idx]} 第{idx + 1}買點
+                  </span>
+                  <strong>
+                    {rule}% → {a.amounts?.[idx]} 美元
+                  </strong>
+                </div>
+              ))}
             </div>
           </div>
         ))}
