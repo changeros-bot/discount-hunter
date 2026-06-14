@@ -2,23 +2,33 @@ export default async function handler(req, res) {
   const key = process.env.FINNHUB_API_KEY;
 
   const assets = [
-    { symbol: "QQQ", name: "Invesco QQQ", grade: "A+", rules: [-15, -25, -35, -50] },
-    { symbol: "NVDA", name: "NVIDIA", grade: "A", rules: [-15, -25, -35, -50] },
-    { symbol: "TSM", name: "Taiwan Semiconductor", grade: "A", rules: [-15, -25, -35, -50], manualHigh: 450.16 },
-    { symbol: "AVGO", name: "Broadcom", grade: "A", rules: [-15, -25, -35, -50] },
-    { symbol: "SPCX", name: "SpaceX", grade: "A-", rules: [-20, -35, -50, -65], manualHigh: 176.52, highType: "IPO以來高點" },
-    { symbol: "GOOGL", name: "Alphabet", grade: "B", rules: [-20, -35, -50, -65] },
-    { symbol: "AMD", name: "Advanced Micro Devices", grade: "B", rules: [-20, -35, -50, -65] },
-    { symbol: "MRVL", name: "Marvell", grade: "B", rules: [-20, -35, -50, -65] },
-    { symbol: "RKLB", name: "Rocket Lab", grade: "C", rules: [-25, -40, -60] }
+    { symbol: "QQQ", name: "Invesco QQQ", grade: "A+", description: "核心ETF｜Nasdaq 100", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
+    { symbol: "NVDA", name: "NVIDIA", grade: "A", description: "AI GPU核心龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
+    { symbol: "TSM", name: "Taiwan Semiconductor", grade: "A", description: "全球先進製程龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20], manualHigh: 450.16 },
+    { symbol: "AVGO", name: "Broadcom", grade: "A", description: "AI網路 + ASIC龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
+    { symbol: "SPCX", name: "SpaceX", grade: "A-", description: "高成長太空龍頭", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20], manualHigh: 176.52, highType: "IPO以來高點" },
+    { symbol: "GOOGL", name: "Alphabet", grade: "B", description: "AI + 搜尋 + 雲端", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
+    { symbol: "AMD", name: "Advanced Micro Devices", grade: "B", description: "AI GPU挑戰者", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
+    { symbol: "MRVL", name: "Marvell", grade: "B", description: "AI網通與ASIC供應鏈", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
+    { symbol: "RKLB", name: "Rocket Lab", grade: "C", description: "高風險太空成長股", rules: [-25, -40, -60], amounts: [5, 10, 15] }
   ];
 
-  function getSignal(discount, rules) {
-    if (discount <= rules[3]) return { text: "第四買點", amount: "20 美元", color: "red" };
-    if (discount <= rules[2]) return { text: "第三買點", amount: "15 美元", color: "orange" };
-    if (discount <= rules[1]) return { text: "第二買點", amount: "10 美元", color: "gold" };
-    if (discount <= rules[0]) return { text: "第一買點", amount: "5 美元", color: "lime" };
-    return { text: "尚未到買點", amount: "0", color: "gray" };
+  function getSignal(discount, rules, amounts) {
+    for (let i = rules.length - 1; i >= 0; i--) {
+      if (discount <= rules[i]) {
+        return {
+          text: `第${i + 1}買點`,
+          amount: `${amounts[i]} 美元`,
+          level: i + 1
+        };
+      }
+    }
+
+    return {
+      text: "尚未到買點",
+      amount: "0",
+      level: 0
+    };
   }
 
   try {
@@ -46,7 +56,7 @@ export default async function handler(req, res) {
           ? Number((((price - high) / high) * 100).toFixed(1))
           : 0;
 
-      const signal = getSignal(discount, asset.rules);
+      const signal = getSignal(discount, asset.rules, asset.amounts);
 
       results.push({
         ...asset,
