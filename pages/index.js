@@ -13,6 +13,18 @@ export default function Home() {
       });
   }, []);
 
+  const sortedAssets = [...assets].sort((a, b) => {
+    const order = {
+      "第四買點": 1,
+      "第三買點": 2,
+      "第二買點": 3,
+      "第一買點": 4,
+      "尚未到買點": 5
+    };
+
+    return order[a.signal?.text] - order[b.signal?.text];
+  });
+
   return (
     <div className="container">
       <h1>折扣獵人 V9</h1>
@@ -22,7 +34,7 @@ export default function Home() {
         更新時間：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
       </p>
 
-      {assets.map((a) => (
+      {sortedAssets.map((a) => (
         <div className="card" key={a.symbol}>
           <div className="top">
             <div>
