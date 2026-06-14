@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#071a33"/>
+  <circle cx="256" cy="256" r="170" fill="#10284a"/>
+
+  <text
+    x="256"
+    y="290"
+    text-anchor="middle"
+    font-size="170"
+    font-weight="900"
+    fill="#facc15"
+    font-family="Arial"
+  >
+    折
+  </text>
+
+  <text
+    x="256"
+    y="380"
+    text-anchor="middle"
+    font-size="60"
+    font-weight="800"
+    fill="#22c55e"
+    font-family="Arial"
+  >
+    V9
+  </text>
+</svg>
