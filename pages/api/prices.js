@@ -1,21 +1,63 @@
 export default async function handler(req, res) {
-  const symbols = ["QQQ","NVDA"];
+  const key = process.env.ALPHA_VANTAGE_KEY;
+
+  const symbols = [
+    "QQQ",
+    "NVDA",
+    "TSM",
+    "AVGO",
+    "GOOGL",
+    "AMD",
+    "MRVL",
+    "RKLB"
+  ];
 
   try {
-    const url =
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`;
+    const results = [];
 
-    const response = await fetch(url);
+    for (const symbol of symbols) {
+      const quoteUrl =
+        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
 
-    const data = await response.json();
+      const overviewUrl =
+        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${key}`;
 
-    res.status(200).json(data);
+      const quoteRes = await fetch(quoteUrl);
+      const quoteData = await quoteRes.json();
 
-  } catch(error) {
+      const overviewRes = await fetch(overviewUrl);
+      const overviewData = await overviewRes.json();
 
-    res.status(500).json({
-      error:error.message
+      results.push({
+        symbol,
+        price: Number(
+          quoteData["Global Quote"]?.["05. price"] || 0
+        ),
+        high: Number(
+          overviewData["52WeekHigh"] || 0
+        ),
+        currency: "USD"
+      });
+    }
+
+    results.push({
+      symbol: "SPCX",
+      price: 161.29,
+      high: 176.0,
+      currency: "USD",
+      source: "manual"
     });
 
+    res.status(200).json({
+      updatedAt: new Date().toISOString(),
+      source: "Alpha Vantage",
+      data: results
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: "alpha_vantage_failed",
+      message: error.message
+    });
   }
 }
