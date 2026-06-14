@@ -14,11 +14,13 @@ export default async function handler(req, res) {
       const quoteUrl =
         `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`;
 
-      const overviewUrl =
-        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${key}`;
-
-      const quoteRes = await fetch(quoteUrl);
-      const quoteData = await quoteRes.json();
+      results.push({
+  symbol,
+  price: Number(
+    quoteData["Global Quote"]?.["05. price"] || 0
+  ),
+  currency: "USD"
+});
 
       const overviewRes = await fetch(overviewUrl);
       const overviewData = await overviewRes.json();
