@@ -1,0 +1,15 @@
+{
+  "name": "折扣獵人 V9",
+  "short_name": "折扣獵人",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071a33",
+  "theme_color": "#071a33",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
