@@ -3,13 +3,8 @@ export default async function handler(req, res) {
 
   const symbols = [
     "QQQ",
-    "NVDA",
-    "TSM",
-    "AVGO",
-    "GOOGL",
-    "AMD",
-    "MRVL",
-    "RKLB"
+    "NVDA"
+    
   ];
 
   try {
