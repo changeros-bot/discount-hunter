@@ -30,7 +30,7 @@ export default function Home() {
     <main className="page">
       <section className="hero">
         <h1>折扣獵人 V9</h1>
-        <p>幣安換便宜戰情表｜即時價格 × 52週高點</p>
+        <p>幣安換便宜戰情表｜即時價格 × 參考高點</p>
         <div className="update">
           更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
         </div>
@@ -49,10 +49,31 @@ export default function Home() {
 
       {buyList.length > 0 && (
         <section className="alertBox">
-          🎯 今日可出手：
-          {buyList.map((a) => a.symbol).join("、")}
+          🎯 今日可出手：{buyList.map((a) => a.symbol).join("、")}
         </section>
       )}
+
+      <section className="strategyBox">
+        <h3>V9 操作原則</h3>
+        <p>只看距離高點跌多少，不追高、不猜底。</p>
+        <p>符合買點才分批投入，每筆 5 / 10 / 15 / 20 美元。</p>
+        <p>長期持有，不因短線漲跌賣出。</p>
+      </section>
+
+      <section className="strategyBox">
+        <h3>資料說明</h3>
+        <p>現價：Finnhub 即時抓取。</p>
+        <p>跌幅：App 依「現價 ÷ 參考高點 - 1」自動計算。</p>
+        <p>52週高點屬慢變數，必要時採手動備援，避免 API 異常造成誤判。</p>
+        <p>SPCX 因上市未滿 52 週，暫用 IPO 以來高點作為參考高點。</p>
+      </section>
+
+      <section className="strategyBox">
+        <h3>年度審查</h3>
+        <p>每年 1 月 1 日或 11 月 12 日檢查一次。</p>
+        <p>只問：公司是否仍值得留在 V9 名單？</p>
+        <p>不看報酬率、不看成本、不為過去決策辯護。</p>
+      </section>
 
       <section className="list">
         {sortedAssets.map((a) => (
@@ -67,7 +88,6 @@ export default function Home() {
                 <h2>{a.symbol}</h2>
                 <p>{a.name}</p>
               </div>
-
               <div className="badge">{a.grade}級</div>
             </div>
 
