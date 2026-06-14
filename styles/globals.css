@@ -259,3 +259,26 @@ body {
 .infoFooter h3:first-child {
   margin-top: 0;
 }
+
+.logoText {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1d4ed8, #22c55e);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.infoFooter {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.infoFooter h3 {
+  font-size: 12px;
+}
