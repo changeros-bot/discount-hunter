@@ -223,3 +223,39 @@ body {
   padding: 8px;
   border-radius: 10px;
 }
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #0f172a;
+  object-fit: contain;
+  padding: 5px;
+}
+
+.infoFooter {
+  margin-top: 28px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #0f1a2d;
+  border: 1px solid #24324a;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.infoFooter h3 {
+  color: #e2e8f0;
+  font-size: 14px;
+  margin: 14px 0 6px;
+}
+
+.infoFooter h3:first-child {
+  margin-top: 0;
+}
