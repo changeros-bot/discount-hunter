@@ -22,14 +22,12 @@ const headers = {
   origin: "https://www.binance.com",
   pragma: "no-cache",
   referer: "https://www.binance.com/en/markets/overview/rwa",
-  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+  "user-agent": "binance-web3/1.1 (Skill)"
 };
 
 function getSignal(discount, rules, amounts) {
   for (let i = rules.length - 1; i >= 0; i--) {
-    if (discount <= rules[i]) {
-      return { text: `第${i + 1}買點`, amount: `${amounts[i]}U`, level: i + 1 };
-    }
+    if (discount <= rules[i]) return { text: `第${i + 1}買點`, amount: `${amounts[i]}U`, level: i + 1 };
   }
   return { text: "尚未到買點", amount: "0U", level: 0 };
 }
@@ -82,9 +80,7 @@ async function getBinanceDynamic(item) {
   const chainId = item?.chainId || item?.chainID || item?.chain?.id || 56;
   const contractAddress = item?.contractAddress || item?.address || item?.tokenAddress;
 
-  if (!contractAddress) {
-    throw new Error(`missing contractAddress for ${getSymbol(item) || "unknown"}`);
-  }
+  if (!contractAddress) throw new Error(`missing contractAddress for ${getSymbol(item) || "unknown"}`);
 
   const url = `${BINANCE_DYNAMIC_URL}?chainId=${encodeURIComponent(chainId)}&contractAddress=${encodeURIComponent(contractAddress)}`;
   return fetchJson(url);
@@ -95,22 +91,31 @@ function normalize(asset, tokenMeta, dynamicRaw) {
   const tokenInfo = root.tokenInfo || root.token || {};
   const stockInfo = root.stockInfo || root.stock || {};
 
-  const tokenPrice = firstNumber(tokenInfo.price, root.price);
+  const rawTokenPrice = firstNumber(tokenInfo.price, root.price);
   const stockPrice = firstNumber(stockInfo.price);
-  const price = firstNumber(tokenPrice, stockPrice);
+  const sharesMultiplier = firstNumber(
+    tokenInfo.sharesMultiplier,
+    stockInfo.sharesMultiplier,
+    tokenInfo.multiplier,
+    stockInfo.multiplier,
+    tokenMeta?.sharesMultiplier,
+    tokenMeta?.multiplier
+  ) || 1;
+
+  const displayPrice = rawTokenPrice > 0 ? rawTokenPrice / sharesMultiplier : stockPrice;
   const high = firstNumber(stockInfo.priceHigh52w, stockInfo.week52High, stockInfo.fiftyTwoWeekHigh);
   const low = firstNumber(stockInfo.priceLow52w, stockInfo.week52Low, stockInfo.fiftyTwoWeekLow);
   const marketCap = firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap);
   const volume = firstNumber(stockInfo.volume, tokenInfo.volume24h, root.volume);
-  const sharesMultiplier = firstNumber(tokenInfo.sharesMultiplier, stockInfo.sharesMultiplier, tokenMeta?.sharesMultiplier, tokenMeta?.multiplier) || 1;
 
-  const discount = high > 0 && price > 0 ? Number((((price - high) / high) * 100).toFixed(1)) : null;
+  const discount = high > 0 && displayPrice > 0 ? Number((((displayPrice - high) / high) * 100).toFixed(1)) : null;
   const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
 
   return {
     ...asset,
-    price,
-    tokenPrice,
+    price: displayPrice,
+    rawTokenPrice,
+    tokenPrice: displayPrice,
     stockPrice,
     high,
     low,
@@ -119,7 +124,7 @@ function normalize(asset, tokenMeta, dynamicRaw) {
     sharesMultiplier,
     highType: "Binance 52週高點",
     lowType: "Binance 52週低點",
-    priceSource: "Binance tokenInfo.price",
+    priceSource: "Binance tokenInfo.price / sharesMultiplier",
     discount,
     signal
   };
@@ -142,6 +147,7 @@ export default async function handler(req, res) {
           return {
             ...asset,
             price: 0,
+            rawTokenPrice: 0,
             tokenPrice: 0,
             stockPrice: 0,
             high: 0,
@@ -151,7 +157,7 @@ export default async function handler(req, res) {
             sharesMultiplier: 1,
             highType: "Binance 52週高點",
             lowType: "Binance 52週低點",
-            priceSource: "Binance tokenInfo.price",
+            priceSource: "Binance tokenInfo.price / sharesMultiplier",
             discount: null,
             signal: { text: "資料未就緒", amount: "0U", level: 0 }
           };
