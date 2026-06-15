@@ -53,7 +53,7 @@ export default function Home() {
       <section className="hero compactHero">
         <div className="versionPill">DCA 折價獵人 V10</div>
         <h1>今日戰情室</h1>
-        <p>真實資料源：Ondo GM API｜以 xStocks 52週高點計算回撤。</p>
+        <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
         <div className="update">
           更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
         </div>
@@ -63,8 +63,8 @@ export default function Home() {
       {!dataReady && (
         <section className="dataGuard">
           <strong>資料源未就緒</strong>
-          <p>{warning === "missing_ondo_api_key" ? "尚未設定 ONDO_API_KEY。" : error || "等待 Ondo 行情資料。"}</p>
-          <span>保護規則：沒有真實 xStocks 資料，就不顯示訊號。</span>
+          <p>{error || "等待 Binance xStocks 真實行情資料。"}</p>
+          <span>保護規則：沒有真實 Binance xStocks 資料，就不顯示訊號。</span>
         </section>
       )}
 
@@ -139,7 +139,7 @@ export default function Home() {
         <h3>V10 產品原則</h3>
         <p>首頁只回答一件事：今天要不要買、買多少。任何會讓30秒變成3分鐘的功能，都先不要放進首頁。</p>
         <h3>資料說明</h3>
-        <p>現價、52週高點、52週低點改由 Ondo GM API 提供，對齊 Binance Wallet 的 Ondo Tokenized Stocks。</p>
+        <p>現價、52週高點、52週低點、市值與成交量改由 Binance xStocks Public API 提供，對齊你實際在 Binance Wallet 看到的代幣化股票資料。</p>
       </section>
     </main>
   );
