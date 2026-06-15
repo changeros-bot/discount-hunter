@@ -1,4 +1,4 @@
-const BINANCE_LIST_URL = "https://www.binance.com/bapi/earn/v1/friendly/finance-earn/market/token/rwa/stock/detail/list/ai";
+const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
 const BINANCE_DYNAMIC_URL = "https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/market/token/rwa/dynamic/ai";
 
 const watchlist = [
@@ -14,9 +14,13 @@ const watchlist = [
 ];
 
 const headers = {
-  "accept": "application/json",
-  "referer": "https://www.binance.com/",
-  "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  accept: "application/json, text/plain, */*",
+  "accept-language": "en-US,en;q=0.9",
+  clienttype: "web",
+  lang: "en",
+  origin: "https://www.binance.com",
+  referer: "https://www.binance.com/en/markets/overview/rwa",
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 };
 
 function getSignal(discount, rules, amounts) {
@@ -57,8 +61,13 @@ function getSymbol(item) {
 
 async function fetchJson(url) {
   const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error(`${url} ${response.status}`);
-  return response.json();
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${url} ${response.status} ${text.slice(0, 180)}`);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${url} returned non-json: ${text.slice(0, 180)}`);
+  }
 }
 
 async function getBinanceTokenList() {
@@ -67,11 +76,11 @@ async function getBinanceTokenList() {
 }
 
 async function getBinanceDynamic(item) {
-  const chainId = item?.chainId || item?.chainID || item?.chain?.id;
+  const chainId = item?.chainId || item?.chainID || item?.chain?.id || 56;
   const contractAddress = item?.contractAddress || item?.address || item?.tokenAddress;
 
-  if (!chainId || !contractAddress) {
-    throw new Error(`missing chainId or contractAddress for ${getSymbol(item) || "unknown"}`);
+  if (!contractAddress) {
+    throw new Error(`missing contractAddress for ${getSymbol(item) || "unknown"}`);
   }
 
   const url = `${BINANCE_DYNAMIC_URL}?chainId=${encodeURIComponent(chainId)}&contractAddress=${encodeURIComponent(contractAddress)}`;
