@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 const levelClasses = ["idle", "level1", "level2", "level3", "level4"];
-const REFRESH_MS = 30000;
+const REFRESH_MS = 5000;
+const REALTIME_LIMIT_SEC = 8;
+const DELAYED_LIMIT_SEC = 20;
 
 function parseAmount(value) {
   const number = Number(String(value || "0").replace(/[^0-9.]/g, ""));
@@ -61,8 +63,20 @@ export default function Home() {
 
   const dataReady = !warning && !error && assets.length > 0;
   const age = secondsAgo(updatedAt);
-  const syncLabel = age === null ? "同步中" : age <= 40 ? "即時同步" : age <= 120 ? "稍有延遲" : "需重整";
-  const syncClass = age === null ? "syncPending" : age <= 40 ? "syncLive" : age <= 120 ? "syncLag" : "syncStale";
+  const syncLabel = age === null
+    ? "自動同步中"
+    : age <= REALTIME_LIMIT_SEC
+      ? "實時同步"
+      : age <= DELAYED_LIMIT_SEC
+        ? "同步延遲"
+        : "資料逾時";
+  const syncClass = age === null
+    ? "syncPending"
+    : age <= REALTIME_LIMIT_SEC
+      ? "syncLive"
+      : age <= DELAYED_LIMIT_SEC
+        ? "syncLag"
+        : "syncStale";
 
   const sortedAssets = useMemo(() => {
     return [...assets].sort((a, b) => {
@@ -85,7 +99,7 @@ export default function Home() {
           更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
         </div>
         <div className={`syncPill ${syncClass}`}>
-          {refreshing ? "更新中…" : syncLabel}{age !== null ? `｜${age}秒前` : ""}
+          {refreshing ? "自動更新中…" : syncLabel}{age !== null ? `｜${age}秒前｜每5秒自動更新` : ""}
         </div>
         {source && <div className="sourcePill">資料源：{source}</div>}
       </section>
