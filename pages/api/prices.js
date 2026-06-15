@@ -45,6 +45,20 @@ function firstNumber(...values) {
   return 0;
 }
 
+function pctDiff(a, b) {
+  const x = num(a);
+  const y = num(b);
+  if (x <= 0 || y <= 0) return null;
+  return Number((((x - y) / y) * 100).toFixed(4));
+}
+
+function auditStatus(absPct) {
+  if (absPct === null) return "UNKNOWN";
+  if (absPct <= 0.2) return "PASS";
+  if (absPct <= 0.5) return "WATCH";
+  return "ALERT";
+}
+
 function asArray(value) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.data)) return value.data;
@@ -61,19 +75,22 @@ function getSymbol(item) {
 
 async function fetchJson(url) {
   const cacheBustUrl = `${url}${url.includes("?") ? "&" : "?"}_=${Date.now()}`;
+  const startedAt = Date.now();
   const response = await fetch(cacheBustUrl, { headers, cache: "no-store" });
   const text = await response.text();
+  const latencyMs = Date.now() - startedAt;
   if (!response.ok) throw new Error(`${url} ${response.status} ${text.slice(0, 180)}`);
   try {
-    return JSON.parse(text);
+    const json = JSON.parse(text);
+    return { json, latencyMs, status: response.status };
   } catch {
     throw new Error(`${url} returned non-json: ${text.slice(0, 180)}`);
   }
 }
 
 async function getBinanceTokenList() {
-  const raw = await fetchJson(BINANCE_LIST_URL);
-  return asArray(raw);
+  const result = await fetchJson(BINANCE_LIST_URL);
+  return { list: asArray(result.json), latencyMs: result.latencyMs, status: result.status };
 }
 
 async function getBinanceDynamic(item) {
@@ -83,10 +100,12 @@ async function getBinanceDynamic(item) {
   if (!contractAddress) throw new Error(`missing contractAddress for ${getSymbol(item) || "unknown"}`);
 
   const url = `${BINANCE_DYNAMIC_URL}?chainId=${encodeURIComponent(chainId)}&contractAddress=${encodeURIComponent(contractAddress)}`;
-  return fetchJson(url);
+  const result = await fetchJson(url);
+  return { ...result, chainId, contractAddress };
 }
 
-function normalize(asset, tokenMeta, dynamicRaw) {
+function normalize(asset, tokenMeta, dynamicResult) {
+  const dynamicRaw = dynamicResult?.json;
   const root = dynamicRaw?.data || dynamicRaw || {};
   const tokenInfo = root.tokenInfo || root.token || {};
   const stockInfo = root.stockInfo || root.stock || {};
@@ -108,6 +127,10 @@ function normalize(asset, tokenMeta, dynamicRaw) {
   const marketCap = firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap);
   const volume = firstNumber(stockInfo.volume, tokenInfo.volume24h, root.volume);
 
+  const stockDiffPct = pctDiff(displayPrice, stockPrice);
+  const rawDiffPct = pctDiff(rawTokenPrice, displayPrice);
+  const priceAuditAbsPct = stockDiffPct === null ? null : Math.abs(stockDiffPct);
+
   const discount = high > 0 && displayPrice > 0 ? Number((((displayPrice - high) / high) * 100).toFixed(1)) : null;
   const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
 
@@ -126,7 +149,22 @@ function normalize(asset, tokenMeta, dynamicRaw) {
     lowType: "Binance 52週低點",
     priceSource: "Binance tokenInfo.price / sharesMultiplier",
     discount,
-    signal
+    signal,
+    binanceAudit: {
+      status: auditStatus(priceAuditAbsPct),
+      appPrice: displayPrice,
+      rawTokenPrice,
+      stockPrice,
+      sharesMultiplier,
+      tokenVsDisplayDiffPct: rawDiffPct,
+      displayVsStockDiffPct: stockDiffPct,
+      absDisplayVsStockDiffPct: priceAuditAbsPct,
+      latencyMs: dynamicResult?.latencyMs ?? null,
+      chainId: dynamicResult?.chainId,
+      contractAddress: dynamicResult?.contractAddress,
+      checkedAt: new Date().toISOString(),
+      note: "App 價格=Binance tokenInfo.price / sharesMultiplier；與 stockInfo.price 比較作為自動稽核。"
+    }
   };
 }
 
@@ -136,7 +174,8 @@ export default async function handler(req, res) {
   res.setHeader("Expires", "0");
 
   try {
-    const tokenList = await getBinanceTokenList();
+    const tokenListResult = await getBinanceTokenList();
+    const tokenList = tokenListResult.list;
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
 
     const data = await Promise.all(
@@ -159,7 +198,8 @@ export default async function handler(req, res) {
             lowType: "Binance 52週低點",
             priceSource: "Binance tokenInfo.price / sharesMultiplier",
             discount: null,
-            signal: { text: "資料未就緒", amount: "0U", level: 0 }
+            signal: { text: "資料未就緒", amount: "0U", level: 0 },
+            binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() }
           };
         }
 
@@ -168,11 +208,23 @@ export default async function handler(req, res) {
       })
     );
 
+    const auditSummary = data.reduce((summary, item) => {
+      const status = item.binanceAudit?.status || "UNKNOWN";
+      summary[status] = (summary[status] || 0) + 1;
+      return summary;
+    }, {});
+
     res.status(200).json({
       updatedAt: new Date().toISOString(),
       source: "Binance xStocks public API",
       count: data.length,
       cachePolicy: "no-store",
+      binanceHealth: {
+        ok: true,
+        listStatus: tokenListResult.status,
+        listLatencyMs: tokenListResult.latencyMs,
+        auditSummary
+      },
       data
     });
   } catch (error) {
