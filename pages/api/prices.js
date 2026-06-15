@@ -16,9 +16,11 @@ const watchlist = [
 const headers = {
   accept: "application/json, text/plain, */*",
   "accept-language": "en-US,en;q=0.9",
+  "cache-control": "no-cache",
   clienttype: "web",
   lang: "en",
   origin: "https://www.binance.com",
+  pragma: "no-cache",
   referer: "https://www.binance.com/en/markets/overview/rwa",
   "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 };
@@ -60,7 +62,8 @@ function getSymbol(item) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url, { headers });
+  const cacheBustUrl = `${url}${url.includes("?") ? "&" : "?"}_=${Date.now()}`;
+  const response = await fetch(cacheBustUrl, { headers, cache: "no-store" });
   const text = await response.text();
   if (!response.ok) throw new Error(`${url} ${response.status} ${text.slice(0, 180)}`);
   try {
@@ -92,7 +95,9 @@ function normalize(asset, tokenMeta, dynamicRaw) {
   const tokenInfo = root.tokenInfo || root.token || {};
   const stockInfo = root.stockInfo || root.stock || {};
 
-  const price = firstNumber(tokenInfo.price, root.price, stockInfo.price);
+  const tokenPrice = firstNumber(tokenInfo.price, root.price);
+  const stockPrice = firstNumber(stockInfo.price);
+  const price = firstNumber(tokenPrice, stockPrice);
   const high = firstNumber(stockInfo.priceHigh52w, stockInfo.week52High, stockInfo.fiftyTwoWeekHigh);
   const low = firstNumber(stockInfo.priceLow52w, stockInfo.week52Low, stockInfo.fiftyTwoWeekLow);
   const marketCap = firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap);
@@ -105,6 +110,8 @@ function normalize(asset, tokenMeta, dynamicRaw) {
   return {
     ...asset,
     price,
+    tokenPrice,
+    stockPrice,
     high,
     low,
     marketCap,
@@ -112,13 +119,17 @@ function normalize(asset, tokenMeta, dynamicRaw) {
     sharesMultiplier,
     highType: "Binance 52週高點",
     lowType: "Binance 52週低點",
-    priceSource: "Binance xStocks API",
+    priceSource: "Binance tokenInfo.price",
     discount,
     signal
   };
 }
 
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   try {
     const tokenList = await getBinanceTokenList();
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
@@ -131,6 +142,8 @@ export default async function handler(req, res) {
           return {
             ...asset,
             price: 0,
+            tokenPrice: 0,
+            stockPrice: 0,
             high: 0,
             low: 0,
             marketCap: 0,
@@ -138,7 +151,7 @@ export default async function handler(req, res) {
             sharesMultiplier: 1,
             highType: "Binance 52週高點",
             lowType: "Binance 52週低點",
-            priceSource: "Binance xStocks API",
+            priceSource: "Binance tokenInfo.price",
             discount: null,
             signal: { text: "資料未就緒", amount: "0U", level: 0 }
           };
@@ -153,6 +166,7 @@ export default async function handler(req, res) {
       updatedAt: new Date().toISOString(),
       source: "Binance xStocks public API",
       count: data.length,
+      cachePolicy: "no-store",
       data
     });
   } catch (error) {
