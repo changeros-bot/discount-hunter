@@ -9,9 +9,18 @@ function parseAmount(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function formatNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "--";
+  return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 export default function Home() {
   const [assets, setAssets] = useState([]);
   const [updatedAt, setUpdatedAt] = useState("");
+  const [source, setSource] = useState("");
+  const [warning, setWarning] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/prices")
@@ -19,8 +28,14 @@ export default function Home() {
       .then((data) => {
         setAssets(data.data || []);
         setUpdatedAt(data.updatedAt || "");
-      });
+        setSource(data.source || "");
+        setWarning(data.warning || "");
+        setError(data.error || "");
+      })
+      .catch((err) => setError(err.message || "資料讀取失敗"));
   }, []);
+
+  const dataReady = !warning && !error && assets.length > 0;
 
   const sortedAssets = useMemo(() => {
     return [...assets].sort((a, b) => {
@@ -29,8 +44,8 @@ export default function Home() {
     });
   }, [assets]);
 
-  const buyList = sortedAssets.filter((a) => a.signal?.level > 0);
-  const idleList = sortedAssets.filter((a) => !a.signal?.level);
+  const buyList = dataReady ? sortedAssets.filter((a) => a.signal?.level > 0) : [];
+  const idleList = dataReady ? sortedAssets.filter((a) => !a.signal?.level) : [];
   const totalAmount = buyList.reduce((sum, asset) => sum + parseAmount(asset.signal?.amount), 0);
 
   return (
@@ -38,11 +53,20 @@ export default function Home() {
       <section className="hero compactHero">
         <div className="versionPill">DCA 折價獵人 V10</div>
         <h1>今日戰情室</h1>
-        <p>30秒決策：今天該不該買、買哪幾檔、總共投入多少。</p>
+        <p>真實資料源：Ondo GM API｜以 xStocks 52週高點計算回撤。</p>
         <div className="update">
           更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
         </div>
+        {source && <div className="sourcePill">資料源：{source}</div>}
       </section>
+
+      {!dataReady && (
+        <section className="dataGuard">
+          <strong>資料源未就緒</strong>
+          <p>{warning === "missing_ondo_api_key" ? "尚未設定 ONDO_API_KEY。" : error || "等待 Ondo 行情資料。"}</p>
+          <span>保護規則：沒有真實 xStocks 資料，就不顯示訊號。</span>
+        </section>
+      )}
 
       <section className="warRoom">
         <div className="warRoomHeader">
@@ -61,7 +85,6 @@ export default function Home() {
             {buyList.map((asset) => {
               const level = asset.signal?.level || 0;
               const amount = parseAmount(asset.signal?.amount);
-
               return (
                 <div className={`missionItem ${levelClasses[level] || "idle"}`} key={asset.symbol}>
                   <div className="missionLeft">
@@ -78,8 +101,8 @@ export default function Home() {
           </div>
         ) : (
           <div className="emptyMission">
-            <strong>今天沒有任務</strong>
-            <p>沒有標的達到買點，保持現金，關掉 App。</p>
+            <strong>{dataReady ? "今天沒有任務" : "等待真實數據"}</strong>
+            <p>{dataReady ? "沒有標的達到買點，保持現金，關掉 App。" : "資料完成前，不顯示投入金額。"}</p>
           </div>
         )}
       </section>
@@ -91,35 +114,32 @@ export default function Home() {
         <div><span>🔴 第四層</span><strong>20U</strong></div>
       </section>
 
-      <section className="sectionTitle">
-        <h2>全部監控</h2>
-        <p>已達買點自動置頂；未達買點收在下方。</p>
-      </section>
+      {dataReady && (
+        <>
+          <section className="sectionTitle">
+            <h2>全部監控</h2>
+            <p>已達買點自動置頂；未達買點收在下方。</p>
+          </section>
 
-      <section className="list">
-        {buyList.map((a) => (
-          <AssetCard asset={a} key={a.symbol} />
-        ))}
-
-        {idleList.length > 0 && (
-          <details className="idleGroup">
-            <summary>尚未到買點｜{idleList.length} 檔</summary>
-            <div className="idleList">
-              {idleList.map((a) => (
-                <AssetCard asset={a} key={a.symbol} />
-              ))}
-            </div>
-          </details>
-        )}
-      </section>
+          <section className="list">
+            {buyList.map((a) => <AssetCard asset={a} key={a.symbol} />)}
+            {idleList.length > 0 && (
+              <details className="idleGroup">
+                <summary>尚未到買點｜{idleList.length} 檔</summary>
+                <div className="idleList">
+                  {idleList.map((a) => <AssetCard asset={a} key={a.symbol} />)}
+                </div>
+              </details>
+            )}
+          </section>
+        </>
+      )}
 
       <section className="infoFooter">
         <h3>V10 產品原則</h3>
         <p>首頁只回答一件事：今天要不要買、買多少。任何會讓30秒變成3分鐘的功能，都先不要放進首頁。</p>
-
         <h3>資料說明</h3>
-        <p>現價由 Finnhub 抓取；跌幅由 App 依「現價 ÷ 參考高點 - 1」自動計算。</p>
-        <p>SPCX 因上市未滿 52 週，暫用開市以來最高點作為參考高點。</p>
+        <p>現價、52週高點、52週低點改由 Ondo GM API 提供，對齊 Binance Wallet 的 Ondo Tokenized Stocks。</p>
       </section>
     </main>
   );
@@ -150,15 +170,15 @@ function AssetCard({ asset }) {
       <div className="dataGrid">
         <div>
           <span>{asset.highType || "52週高點"}</span>
-          <strong>{asset.high}</strong>
+          <strong>{formatNumber(asset.high)}</strong>
         </div>
         <div>
           <span>現價</span>
-          <strong>{asset.price}</strong>
+          <strong>{formatNumber(asset.price)}</strong>
         </div>
         <div>
           <span>回撤</span>
-          <strong>{asset.discount}%</strong>
+          <strong>{asset.discount ?? "--"}%</strong>
         </div>
         <div>
           <span>建議投入</span>
