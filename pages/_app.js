@@ -5,7 +5,7 @@ export default function App({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <title>折扣獵人 V9</title>
+        <title>DCA折價獵人 V10</title>
 
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icon.svg" />
