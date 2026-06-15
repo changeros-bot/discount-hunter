@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 const levelClasses = ["idle", "level1", "level2", "level3", "level4"];
+const REFRESH_MS = 30000;
 
 function parseAmount(value) {
   const number = Number(String(value || "0").replace(/[^0-9.]/g, ""));
@@ -15,27 +16,53 @@ function formatNumber(value) {
   return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+function secondsAgo(isoString) {
+  if (!isoString) return null;
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  return Number.isFinite(diff) ? Math.max(diff, 0) : null;
+}
+
 export default function Home() {
   const [assets, setAssets] = useState([]);
   const [updatedAt, setUpdatedAt] = useState("");
   const [source, setSource] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    fetch("/api/prices")
-      .then((res) => res.json())
-      .then((data) => {
+    async function loadPrices() {
+      setRefreshing(true);
+      try {
+        const res = await fetch(`/api/prices?t=${Date.now()}`, { cache: "no-store" });
+        const data = await res.json();
         setAssets(data.data || []);
         setUpdatedAt(data.updatedAt || "");
         setSource(data.source || "");
         setWarning(data.warning || "");
         setError(data.error || "");
-      })
-      .catch((err) => setError(err.message || "資料讀取失敗"));
+      } catch (err) {
+        setError(err.message || "資料讀取失敗");
+      } finally {
+        setRefreshing(false);
+      }
+    }
+
+    loadPrices();
+    const timer = setInterval(loadPrices, REFRESH_MS);
+    const clock = setInterval(() => setTick((value) => value + 1), 1000);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(clock);
+    };
   }, []);
 
   const dataReady = !warning && !error && assets.length > 0;
+  const age = secondsAgo(updatedAt);
+  const syncLabel = age === null ? "同步中" : age <= 40 ? "即時同步" : age <= 120 ? "稍有延遲" : "需重整";
+  const syncClass = age === null ? "syncPending" : age <= 40 ? "syncLive" : age <= 120 ? "syncLag" : "syncStale";
 
   const sortedAssets = useMemo(() => {
     return [...assets].sort((a, b) => {
@@ -56,6 +83,9 @@ export default function Home() {
         <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
         <div className="update">
           更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
+        </div>
+        <div className={`syncPill ${syncClass}`}>
+          {refreshing ? "更新中…" : syncLabel}{age !== null ? `｜${age}秒前` : ""}
         </div>
         {source && <div className="sourcePill">資料源：{source}</div>}
       </section>
