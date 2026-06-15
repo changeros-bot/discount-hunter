@@ -1,6 +1,6 @@
-const ONDO_BASE_URL = "https://api.gm.ondo.finance/v1/assets";
+const ONDO_ALL_MARKET_URL = "https://api.gm.ondo.finance/v1/assets/all/market";
 
-const assets = [
+const watchlist = [
   { symbol: "QQQon", name: "Invesco QQQ", grade: "A+", description: "核心ETF｜Nasdaq 100", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
   { symbol: "NVDAon", name: "NVIDIA", grade: "A", description: "AI GPU核心龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
   { symbol: "TSMon", name: "Taiwan Semiconductor", grade: "A", description: "全球先進製程龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
@@ -34,16 +34,30 @@ function firstNumber(...values) {
   return 0;
 }
 
-async function getOndoMarket(symbol, key) {
-  const response = await fetch(`${ONDO_BASE_URL}/${symbol}/market`, {
+async function getAllOndoMarkets(key) {
+  const response = await fetch(ONDO_ALL_MARKET_URL, {
     headers: { "x-api-key": key, accept: "application/json" }
   });
-  if (!response.ok) throw new Error(`${symbol} ${response.status}`);
+  if (!response.ok) throw new Error(`Ondo bulk market ${response.status}`);
   return response.json();
 }
 
-function normalize(asset, raw) {
-  const root = raw?.data || raw || {};
+function getMarketItems(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.assets)) return raw.assets;
+  if (Array.isArray(raw?.markets)) return raw.markets;
+  if (Array.isArray(raw?.data?.assets)) return raw.data.assets;
+  if (Array.isArray(raw?.data?.markets)) return raw.data.markets;
+  return [];
+}
+
+function getSymbol(item) {
+  return item?.symbol || item?.ticker || item?.assetSymbol || item?.asset?.symbol || item?.token?.symbol || item?.data?.symbol;
+}
+
+function normalize(asset, item) {
+  const root = item?.data || item || {};
   const primary = root.primaryMarket || {};
   const underlying = root.underlyingMarket || {};
 
@@ -77,7 +91,7 @@ export default async function handler(req, res) {
   if (!key) {
     return res.status(200).json({
       updatedAt: new Date().toISOString(),
-      source: "Ondo GM API",
+      source: "Ondo GM API bulk endpoint",
       count: 0,
       data: [],
       warning: "missing_ondo_api_key"
@@ -85,13 +99,33 @@ export default async function handler(req, res) {
   }
 
   try {
-    const data = await Promise.all(
-      assets.map(async (asset) => normalize(asset, await getOndoMarket(asset.symbol, key)))
-    );
+    const raw = await getAllOndoMarkets(key);
+    const items = getMarketItems(raw);
+    const bySymbol = new Map(items.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
+
+    const data = watchlist.map((asset) => {
+      const item = bySymbol.get(asset.symbol);
+      if (!item) {
+        return {
+          ...asset,
+          price: 0,
+          high: 0,
+          low: 0,
+          marketCap: 0,
+          volume: 0,
+          highType: "Ondo 52週高點",
+          lowType: "Ondo 52週低點",
+          priceSource: "Ondo GM API",
+          discount: null,
+          signal: { text: "資料未就緒", amount: "0U", level: 0 }
+        };
+      }
+      return normalize(asset, item);
+    });
 
     res.status(200).json({
       updatedAt: new Date().toISOString(),
-      source: "Ondo GM API market endpoint",
+      source: "Ondo GM API all market endpoint",
       count: data.length,
       data
     });
