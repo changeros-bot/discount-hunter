@@ -1,70 +1,88 @@
-const ONDO_ALL_MARKET_URL = "https://api.gm.ondo.finance/v1/assets/all/market";
+const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
+const BINANCE_DYNAMIC_URL = "https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/market/token/rwa/dynamic/ai";
 const TARGET_SYMBOLS = ["QQQon", "NVDAon", "TSMon", "AVGOon", "SPCXon", "GOOGLon", "AMDon", "MRVLon", "RKLBon"];
 
-function getMarketItems(raw) {
-  if (Array.isArray(raw)) return raw;
-  if (Array.isArray(raw?.data)) return raw.data;
-  if (Array.isArray(raw?.assets)) return raw.assets;
-  if (Array.isArray(raw?.markets)) return raw.markets;
-  if (Array.isArray(raw?.data?.assets)) return raw.data.assets;
-  if (Array.isArray(raw?.data?.markets)) return raw.data.markets;
+const headers = {
+  accept: "application/json, text/plain, */*",
+  "accept-language": "en-US,en;q=0.9",
+  clienttype: "web",
+  lang: "en",
+  origin: "https://www.binance.com",
+  referer: "https://www.binance.com/en/markets/overview/rwa",
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+};
+
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.data?.list)) return value.data.list;
+  if (Array.isArray(value?.list)) return value.list;
   return [];
 }
 
 function getSymbol(item) {
-  return item?.symbol || item?.ticker || item?.assetSymbol || item?.asset?.symbol || item?.token?.symbol || item?.data?.symbol || null;
+  return item?.symbol || item?.ticker || item?.tokenSymbol || item?.stockSymbol || item?.assetSymbol || item?.data?.symbol || null;
 }
 
-function compactMarket(item) {
-  const root = item?.data || item || {};
-  const primary = root.primaryMarket || {};
-  const underlying = root.underlyingMarket || {};
+function compactDynamic(symbol, raw) {
+  const root = raw?.data || raw || {};
+  const tokenInfo = root.tokenInfo || root.token || {};
+  const stockInfo = root.stockInfo || root.stock || {};
 
   return {
-    symbol: getSymbol(item),
-    primaryMarketKeys: Object.keys(primary),
-    underlyingMarketKeys: Object.keys(underlying),
-    price: primary.price || primary.currentPrice || primary.lastPrice || underlying.price || root.price || null,
-    priceHigh52w: underlying.priceHigh52w || underlying.week52High || underlying.fiftyTwoWeekHigh || root.priceHigh52w || root.week52High || null,
-    priceLow52w: underlying.priceLow52w || underlying.week52Low || underlying.fiftyTwoWeekLow || root.priceLow52w || root.week52Low || null,
-    marketCap: underlying.marketCap || root.marketCap || null,
-    volume: underlying.volume || root.volume || null
+    symbol,
+    tokenInfoKeys: Object.keys(tokenInfo),
+    stockInfoKeys: Object.keys(stockInfo),
+    price: tokenInfo.price || root.price || stockInfo.price || null,
+    priceHigh52w: stockInfo.priceHigh52w || stockInfo.week52High || stockInfo.fiftyTwoWeekHigh || null,
+    priceLow52w: stockInfo.priceLow52w || stockInfo.week52Low || stockInfo.fiftyTwoWeekLow || null,
+    marketCap: stockInfo.marketCap || tokenInfo.marketCap || root.marketCap || null,
+    volume: stockInfo.volume || tokenInfo.volume24h || root.volume || null,
+    sharesMultiplier: tokenInfo.sharesMultiplier || stockInfo.sharesMultiplier || null
   };
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, { headers });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${url} ${response.status} ${text.slice(0, 180)}`);
+  return JSON.parse(text);
+}
+
 export default async function handler(req, res) {
-  const key = process.env.ONDO_API_KEY;
-
-  if (!key) {
-    return res.status(200).json({
-      ok: false,
-      reason: "missing_ondo_api_key"
-    });
-  }
-
   try {
-    const response = await fetch(ONDO_ALL_MARKET_URL, {
-      headers: { "x-api-key": key, accept: "application/json" }
-    });
-
-    const raw = await response.json();
-    const items = getMarketItems(raw);
+    const listRaw = await fetchJson(BINANCE_LIST_URL);
+    const items = asArray(listRaw);
     const bySymbol = new Map(items.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
     const requested = String(req.query.symbol || "").trim();
     const symbols = requested ? [requested] : TARGET_SYMBOLS;
 
+    const samples = await Promise.all(
+      symbols
+        .map((symbol) => bySymbol.get(symbol))
+        .filter(Boolean)
+        .map(async (item) => {
+          const symbol = getSymbol(item);
+          const chainId = item?.chainId || item?.chainID || item?.chain?.id || 56;
+          const contractAddress = item?.contractAddress || item?.address || item?.tokenAddress;
+          const dynamicUrl = `${BINANCE_DYNAMIC_URL}?chainId=${encodeURIComponent(chainId)}&contractAddress=${encodeURIComponent(contractAddress)}`;
+          const dynamicRaw = await fetchJson(dynamicUrl);
+          return compactDynamic(symbol, dynamicRaw);
+        })
+    );
+
     return res.status(200).json({
-      ok: response.ok,
-      status: response.status,
+      ok: true,
+      source: "Binance xStocks public API",
       itemCount: items.length,
       matchedSymbols: symbols.filter((symbol) => bySymbol.has(symbol)),
       missingSymbols: symbols.filter((symbol) => !bySymbol.has(symbol)),
-      samples: symbols.map((symbol) => bySymbol.get(symbol)).filter(Boolean).map(compactMarket)
+      samples
     });
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      reason: "ondo_debug_failed",
+      reason: "binance_xstocks_debug_failed",
       message: error.message
     });
   }
