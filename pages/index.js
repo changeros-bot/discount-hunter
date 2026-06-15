@@ -73,6 +73,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [tick, setTick] = useState(0);
   const [holdings, setHoldings] = useState({});
+  const [health, setHealth] = useState(null);
 
   useEffect(() => {
     try {
@@ -113,18 +114,39 @@ export default function Home() {
       }
     }
 
+    async function loadHealth() {
+      try {
+        const res = await fetch(`/api/binance-health?t=${Date.now()}`, { cache: "no-store" });
+        const data = await res.json();
+        setHealth(data);
+      } catch {
+        setHealth({
+          ok: false,
+          status: "down",
+          label: "🔴 Binance API檢查失敗",
+          symbolsFound: 0,
+          symbolsExpected: 9
+        });
+      }
+    }
+
     loadPrices();
-    const timer = setInterval(loadPrices, REFRESH_MS);
+    loadHealth();
+
+    const priceTimer = setInterval(loadPrices, REFRESH_MS);
+    const healthTimer = setInterval(loadHealth, 30000);
     const clock = setInterval(() => setTick((value) => value + 1), 1000);
 
     return () => {
-      clearInterval(timer);
+      clearInterval(priceTimer);
+      clearInterval(healthTimer);
       clearInterval(clock);
     };
   }, []);
 
   const dataReady = !warning && !error && assets.length > 0;
   const age = secondsAgo(updatedAt);
+
   const syncLabel = age === null
     ? "自動同步中"
     : age <= REALTIME_LIMIT_SEC
@@ -132,6 +154,7 @@ export default function Home() {
       : age <= DELAYED_LIMIT_SEC
         ? "同步延遲"
         : "資料逾時";
+
   const syncClass = age === null
     ? "syncPending"
     : age <= REALTIME_LIMIT_SEC
@@ -142,14 +165,28 @@ export default function Home() {
 
   const sortedAssets = useMemo(() => {
     return [...assets].sort((a, b) => {
-      const getLevel = (x) => x.signal?.level || 99;
-      return getLevel(a) - getLevel(b);
+      const aStats = getHoldingStats(a, holdings[a.symbol]);
+      const bStats = getHoldingStats(b, holdings[b.symbol]);
+
+      const aHolding = aStats.hasPosition ? 1 : 0;
+      const bHolding = bStats.hasPosition ? 1 : 0;
+
+      const aSignal = a.signal?.level || 0;
+      const bSignal = b.signal?.level || 0;
+
+      const aScore = (aHolding ? 1000 : 0) + (aSignal > 0 ? 500 : 0) + aSignal;
+      const bScore = (bHolding ? 1000 : 0) + (bSignal > 0 ? 500 : 0) + bSignal;
+
+      return bScore - aScore;
     });
-  }, [assets]);
+  }, [assets, holdings]);
 
   const buyList = dataReady ? sortedAssets.filter((a) => a.signal?.level > 0) : [];
-  const idleList = dataReady ? sortedAssets.filter((a) => !a.signal?.level) : [];
+  const holdingList = dataReady ? sortedAssets.filter((a) => getHoldingStats(a, holdings[a.symbol]).hasPosition) : [];
+  const idleList = dataReady ? sortedAssets.filter((a) => !a.signal?.level && !getHoldingStats(a, holdings[a.symbol]).hasPosition) : [];
+
   const totalAmount = buyList.reduce((sum, asset) => sum + parseAmount(asset.signal?.amount), 0);
+
   const portfolio = assets.reduce((sum, asset) => {
     const stats = getHoldingStats(asset, holdings[asset.symbol]);
     return {
@@ -158,21 +195,58 @@ export default function Home() {
       pnl: sum.pnl + stats.pnl
     };
   }, { invested: 0, value: 0, pnl: 0 });
+
   const portfolioPct = portfolio.invested > 0 ? (portfolio.pnl / portfolio.invested) * 100 : 0;
 
   return (
     <main className="page">
       <section className="hero compactHero">
-        <div className="versionPill">DCA 折價獵人 V11</div>
-        <h1>今日戰情室</h1>
+        <h1 style={{ fontSize: "34px", fontWeight: 950, margin: "6px 0 4px" }}>
+          美股DCA折價獵人
+        </h1>
+
+        <div className="versionPill">V12</div>
+
+        <h2 style={{ fontSize: "17px", margin: "12px 0 6px", color: "#cbd5e1" }}>
+          Binance xStocks 戰情室
+        </h2>
+
         <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
+
         <div className="update">
           更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}
         </div>
+
         <div className={`syncPill ${syncClass}`}>
-          {refreshing ? "自動更新中…" : syncLabel}{age !== null ? `｜${age}秒前｜每5秒自動更新` : ""}
+          {refreshing ? "自動更新中…" : syncLabel}
+          {age !== null ? `｜${age}秒前｜每5秒自動更新` : ""}
         </div>
+
         {source && <div className="sourcePill">資料源：{source}</div>}
+
+        <section
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 14,
+            background: "#0f172a",
+            border: "1px solid #1e293b",
+            textAlign: "left"
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>
+            {health?.label || "🟡 Binance API檢查中"}
+          </div>
+          <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+            標的在線：{health?.symbolsFound ?? "--"}/{health?.symbolsExpected ?? 9}
+          </div>
+          <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+            API延遲：{health?.latencyMs ? `${health.latencyMs}ms` : "--"}
+          </div>
+          <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+            系統狀態：Price Engine / Signal Engine / Auto Refresh
+          </div>
+        </section>
       </section>
 
       {!dataReady && (
@@ -199,9 +273,12 @@ export default function Home() {
           </div>
           <div>
             <span>未實現損益</span>
-            <strong style={{ color: portfolio.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{formatNumber(portfolio.pnl)}U</strong>
+            <strong style={{ color: portfolio.pnl >= 0 ? "#22c55e" : "#ef4444" }}>
+              {formatNumber(portfolio.pnl)}U
+            </strong>
           </div>
         </div>
+
         {portfolio.invested > 0 && (
           <div style={{ color: portfolio.pnl >= 0 ? "#bbf7d0" : "#fecaca", fontWeight: 800, textAlign: "center", marginBottom: 12 }}>
             總投入 {formatNumber(portfolio.invested)}U｜報酬 {portfolioPct.toFixed(2)}%
@@ -246,16 +323,37 @@ export default function Home() {
         <>
           <section className="sectionTitle">
             <h2>全部監控</h2>
-            <p>已達買點自動置頂；未達買點收在下方。持倉資料存在本機瀏覽器。</p>
+            <p>排序：已持倉優先，其次是今日買點，其餘收在下方。</p>
           </section>
 
           <section className="list">
-            {buyList.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} onUpdateHolding={updateHolding} key={a.symbol} />)}
+            {holdingList.length > 0 && (
+              <>
+                <div style={{ fontWeight: 900, color: "#bbf7d0", margin: "4px 0" }}>我的持倉</div>
+                {holdingList.map((a) => (
+                  <AssetCard asset={a} holding={holdings[a.symbol]} onUpdateHolding={updateHolding} key={a.symbol} />
+                ))}
+              </>
+            )}
+
+            {buyList.filter((a) => !getHoldingStats(a, holdings[a.symbol]).hasPosition).length > 0 && (
+              <>
+                <div style={{ fontWeight: 900, color: "#fde68a", margin: "4px 0" }}>今日買點</div>
+                {buyList
+                  .filter((a) => !getHoldingStats(a, holdings[a.symbol]).hasPosition)
+                  .map((a) => (
+                    <AssetCard asset={a} holding={holdings[a.symbol]} onUpdateHolding={updateHolding} key={a.symbol} />
+                  ))}
+              </>
+            )}
+
             {idleList.length > 0 && (
               <details className="idleGroup">
                 <summary>尚未到買點｜{idleList.length} 檔</summary>
                 <div className="idleList">
-                  {idleList.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} onUpdateHolding={updateHolding} key={a.symbol} />)}
+                  {idleList.map((a) => (
+                    <AssetCard asset={a} holding={holdings[a.symbol]} onUpdateHolding={updateHolding} key={a.symbol} />
+                  ))}
                 </div>
               </details>
             )}
@@ -264,10 +362,10 @@ export default function Home() {
       )}
 
       <section className="infoFooter">
-        <h3>V11 產品原則</h3>
-        <p>首頁回答五件事：是否同步、今天要不要買、買多少、離下一層差多遠、目前持倉賺虧多少。</p>
+        <h3>V12 產品原則</h3>
+        <p>折價獵人只處理 Binance xStocks 折價買點，不與富邦長期DCA、妖股幣追蹤混在同一專案。</p>
         <h3>資料說明</h3>
-        <p>現價、52週高點、52週低點、市值與成交量改由 Binance xStocks Public API 提供；持倉資料先存在本機瀏覽器，之後再做 Binance 持倉同步。</p>
+        <p>現價、52週高點、52週低點、市值與成交量由 Binance xStocks Public API 提供；持倉資料存在本機瀏覽器。</p>
       </section>
     </main>
   );
@@ -298,22 +396,10 @@ function AssetCard({ asset, holding, onUpdateHolding }) {
       </div>
 
       <div className="dataGrid">
-        <div>
-          <span>{asset.highType || "52週高點"}</span>
-          <strong>{formatNumber(asset.high)}</strong>
-        </div>
-        <div>
-          <span>現價</span>
-          <strong>{formatNumber(asset.price)}</strong>
-        </div>
-        <div>
-          <span>回撤</span>
-          <strong>{asset.discount ?? "--"}%</strong>
-        </div>
-        <div>
-          <span>建議投入</span>
-          <strong>{parseAmount(asset.signal?.amount)}U</strong>
-        </div>
+        <div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div>
+        <div><span>現價</span><strong>{formatNumber(asset.price)}</strong></div>
+        <div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div>
+        <div><span>建議投入</span><strong>{parseAmount(asset.signal?.amount)}U</strong></div>
       </div>
 
       <div className="nextBuyBox">
@@ -329,16 +415,19 @@ function AssetCard({ asset, holding, onUpdateHolding }) {
 
       <details className="nextBuyBox">
         <summary style={{ cursor: "pointer", fontWeight: 900 }}>我的持倉 / 未實現損益</summary>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
           <label>
             <span style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 4 }}>持有數量</span>
             <input value={holding?.qty || ""} onChange={(e) => onUpdateHolding(asset.symbol, "qty", e.target.value)} placeholder="例 0.12" inputMode="decimal" style={{ width: "100%", borderRadius: 10, border: "1px solid #334155", background: "#0f172a", color: "white", padding: 10 }} />
           </label>
+
           <label>
             <span style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 4 }}>平均成本</span>
             <input value={holding?.cost || ""} onChange={(e) => onUpdateHolding(asset.symbol, "cost", e.target.value)} placeholder="例 396.3" inputMode="decimal" style={{ width: "100%", borderRadius: 10, border: "1px solid #334155", background: "#0f172a", color: "white", padding: 10 }} />
           </label>
         </div>
+
         <div className="dataGrid">
           <div><span>投入成本</span><strong>{formatNumber(stats.invested)}U</strong></div>
           <div><span>目前市值</span><strong>{formatNumber(stats.value)}U</strong></div>
