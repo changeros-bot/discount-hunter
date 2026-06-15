@@ -1,4 +1,5 @@
-const ONDO_ALL_MARKET_URL = "https://api.gm.ondo.finance/v1/assets/all/market";
+const BINANCE_LIST_URL = "https://www.binance.com/bapi/earn/v1/friendly/finance-earn/market/token/rwa/stock/detail/list/ai";
+const BINANCE_DYNAMIC_URL = "https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/market/token/rwa/dynamic/ai";
 
 const watchlist = [
   { symbol: "QQQon", name: "Invesco QQQ", grade: "A+", description: "核心ETF｜Nasdaq 100", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
@@ -11,6 +12,12 @@ const watchlist = [
   { symbol: "MRVLon", name: "Marvell", grade: "B", description: "AI網通與ASIC供應鏈", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
   { symbol: "RKLBon", name: "Rocket Lab", grade: "C", description: "高風險太空成長股", rules: [-25, -40, -60], amounts: [5, 10, 15] }
 ];
+
+const headers = {
+  "accept": "application/json",
+  "referer": "https://www.binance.com/",
+  "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+};
 
 function getSignal(discount, rules, amounts) {
   for (let i = rules.length - 1; i >= 0; i--) {
@@ -34,38 +41,54 @@ function firstNumber(...values) {
   return 0;
 }
 
-async function getAllOndoMarkets(key) {
-  const response = await fetch(ONDO_ALL_MARKET_URL, {
-    headers: { "x-api-key": key, accept: "application/json" }
-  });
-  if (!response.ok) throw new Error(`Ondo bulk market ${response.status}`);
-  return response.json();
-}
-
-function getMarketItems(raw) {
-  if (Array.isArray(raw)) return raw;
-  if (Array.isArray(raw?.data)) return raw.data;
-  if (Array.isArray(raw?.assets)) return raw.assets;
-  if (Array.isArray(raw?.markets)) return raw.markets;
-  if (Array.isArray(raw?.data?.assets)) return raw.data.assets;
-  if (Array.isArray(raw?.data?.markets)) return raw.data.markets;
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.data?.list)) return value.data.list;
+  if (Array.isArray(value?.data?.rows)) return value.data.rows;
+  if (Array.isArray(value?.list)) return value.list;
+  if (Array.isArray(value?.rows)) return value.rows;
   return [];
 }
 
 function getSymbol(item) {
-  return item?.symbol || item?.ticker || item?.assetSymbol || item?.asset?.symbol || item?.token?.symbol || item?.data?.symbol;
+  return item?.symbol || item?.ticker || item?.tokenSymbol || item?.stockSymbol || item?.assetSymbol || item?.data?.symbol;
 }
 
-function normalize(asset, item) {
-  const root = item?.data || item || {};
-  const primary = root.primaryMarket || {};
-  const underlying = root.underlyingMarket || {};
+async function fetchJson(url) {
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`${url} ${response.status}`);
+  return response.json();
+}
 
-  const price = firstNumber(primary.price, primary.currentPrice, primary.lastPrice, underlying.price, root.price);
-  const high = firstNumber(underlying.priceHigh52w, underlying.week52High, underlying.fiftyTwoWeekHigh, root.priceHigh52w, root.week52High);
-  const low = firstNumber(underlying.priceLow52w, underlying.week52Low, underlying.fiftyTwoWeekLow, root.priceLow52w, root.week52Low);
-  const marketCap = firstNumber(underlying.marketCap, root.marketCap);
-  const volume = firstNumber(underlying.volume, root.volume);
+async function getBinanceTokenList() {
+  const raw = await fetchJson(BINANCE_LIST_URL);
+  return asArray(raw);
+}
+
+async function getBinanceDynamic(item) {
+  const chainId = item?.chainId || item?.chainID || item?.chain?.id;
+  const contractAddress = item?.contractAddress || item?.address || item?.tokenAddress;
+
+  if (!chainId || !contractAddress) {
+    throw new Error(`missing chainId or contractAddress for ${getSymbol(item) || "unknown"}`);
+  }
+
+  const url = `${BINANCE_DYNAMIC_URL}?chainId=${encodeURIComponent(chainId)}&contractAddress=${encodeURIComponent(contractAddress)}`;
+  return fetchJson(url);
+}
+
+function normalize(asset, tokenMeta, dynamicRaw) {
+  const root = dynamicRaw?.data || dynamicRaw || {};
+  const tokenInfo = root.tokenInfo || root.token || {};
+  const stockInfo = root.stockInfo || root.stock || {};
+
+  const price = firstNumber(tokenInfo.price, root.price, stockInfo.price);
+  const high = firstNumber(stockInfo.priceHigh52w, stockInfo.week52High, stockInfo.fiftyTwoWeekHigh);
+  const low = firstNumber(stockInfo.priceLow52w, stockInfo.week52Low, stockInfo.fiftyTwoWeekLow);
+  const marketCap = firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap);
+  const volume = firstNumber(stockInfo.volume, tokenInfo.volume24h, root.volume);
+  const sharesMultiplier = firstNumber(tokenInfo.sharesMultiplier, stockInfo.sharesMultiplier, tokenMeta?.sharesMultiplier, tokenMeta?.multiplier) || 1;
 
   const discount = high > 0 && price > 0 ? Number((((price - high) / high) * 100).toFixed(1)) : null;
   const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
@@ -77,59 +100,53 @@ function normalize(asset, item) {
     low,
     marketCap,
     volume,
-    highType: "Ondo 52週高點",
-    lowType: "Ondo 52週低點",
-    priceSource: "Ondo GM API",
+    sharesMultiplier,
+    highType: "Binance 52週高點",
+    lowType: "Binance 52週低點",
+    priceSource: "Binance xStocks API",
     discount,
     signal
   };
 }
 
 export default async function handler(req, res) {
-  const key = process.env.ONDO_API_KEY;
-
-  if (!key) {
-    return res.status(200).json({
-      updatedAt: new Date().toISOString(),
-      source: "Ondo GM API bulk endpoint",
-      count: 0,
-      data: [],
-      warning: "missing_ondo_api_key"
-    });
-  }
-
   try {
-    const raw = await getAllOndoMarkets(key);
-    const items = getMarketItems(raw);
-    const bySymbol = new Map(items.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
+    const tokenList = await getBinanceTokenList();
+    const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
 
-    const data = watchlist.map((asset) => {
-      const item = bySymbol.get(asset.symbol);
-      if (!item) {
-        return {
-          ...asset,
-          price: 0,
-          high: 0,
-          low: 0,
-          marketCap: 0,
-          volume: 0,
-          highType: "Ondo 52週高點",
-          lowType: "Ondo 52週低點",
-          priceSource: "Ondo GM API",
-          discount: null,
-          signal: { text: "資料未就緒", amount: "0U", level: 0 }
-        };
-      }
-      return normalize(asset, item);
-    });
+    const data = await Promise.all(
+      watchlist.map(async (asset) => {
+        const tokenMeta = bySymbol.get(asset.symbol);
+
+        if (!tokenMeta) {
+          return {
+            ...asset,
+            price: 0,
+            high: 0,
+            low: 0,
+            marketCap: 0,
+            volume: 0,
+            sharesMultiplier: 1,
+            highType: "Binance 52週高點",
+            lowType: "Binance 52週低點",
+            priceSource: "Binance xStocks API",
+            discount: null,
+            signal: { text: "資料未就緒", amount: "0U", level: 0 }
+          };
+        }
+
+        const dynamic = await getBinanceDynamic(tokenMeta);
+        return normalize(asset, tokenMeta, dynamic);
+      })
+    );
 
     res.status(200).json({
       updatedAt: new Date().toISOString(),
-      source: "Ondo GM API all market endpoint",
+      source: "Binance xStocks public API",
       count: data.length,
       data
     });
   } catch (error) {
-    res.status(500).json({ error: "ondo_market_fetch_failed", message: error.message });
+    res.status(500).json({ error: "binance_xstocks_fetch_failed", message: error.message });
   }
 }
