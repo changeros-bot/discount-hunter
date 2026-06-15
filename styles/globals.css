@@ -20,8 +20,12 @@ body {
   margin-bottom: 18px;
 }
 
+.compactHero {
+  margin-bottom: 14px;
+}
+
 .hero h1 {
-  margin: 0;
+  margin: 8px 0 0;
   font-size: 32px;
   letter-spacing: 1px;
 }
@@ -29,12 +33,198 @@ body {
 .hero p {
   color: #94a3b8;
   font-size: 14px;
+  line-height: 1.5;
+}
+
+.versionPill,
+.sourcePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.versionPill {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.42);
+  color: #bbf7d0;
+}
+
+.sourcePill {
+  margin-top: 8px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.38);
+  color: #bfdbfe;
 }
 
 .update {
   color: #cbd5e1;
   font-size: 13px;
   margin-top: 8px;
+}
+
+.dataGuard {
+  background: linear-gradient(135deg, #3b1d05, #111827);
+  border: 1px solid rgba(251, 146, 60, 0.66);
+  color: #fed7aa;
+  padding: 14px;
+  border-radius: 16px;
+  margin-bottom: 14px;
+}
+
+.dataGuard strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.dataGuard p {
+  margin: 0 0 8px;
+  color: #ffedd5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dataGuard span {
+  color: #fdba74;
+  font-size: 12px;
+}
+
+.warRoom {
+  background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.22), transparent 40%), #111c30;
+  border: 1px solid #263a55;
+  border-radius: 20px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.warRoomHeader {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.warRoomHeader div {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.warRoomHeader span,
+.quickRule span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.warRoomHeader strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 26px;
+}
+
+.missionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.missionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.missionLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.signalDot {
+  font-size: 22px;
+}
+
+.missionLeft strong {
+  display: block;
+  font-size: 18px;
+}
+
+.missionLeft p {
+  margin: 3px 0 0;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.missionAmount {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.emptyMission {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px dashed rgba(148, 163, 184, 0.32);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
+.emptyMission strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.emptyMission p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.quickRule {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.quickRule div {
+  background: #111c30;
+  border: 1px solid #24324a;
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.quickRule strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.sectionTitle {
+  margin: 18px 0 10px;
+}
+
+.sectionTitle h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.sectionTitle p {
+  margin: 5px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .summary {
@@ -73,10 +263,29 @@ body {
   font-weight: 700;
 }
 
-.list {
+.list,
+.idleList {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.idleGroup {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid #24324a;
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.idleGroup summary {
+  cursor: pointer;
+  color: #cbd5e1;
+  font-weight: 800;
+  padding: 4px 0;
+}
+
+.idleList {
+  margin-top: 12px;
 }
 
 .card {
@@ -90,6 +299,21 @@ body {
 .card.active {
   border-color: #22c55e;
   background: linear-gradient(180deg, #17311f, #172238);
+}
+
+.card.level2,
+.missionItem.level2 {
+  border-color: rgba(234, 179, 8, 0.7);
+}
+
+.card.level3,
+.missionItem.level3 {
+  border-color: rgba(249, 115, 22, 0.75);
+}
+
+.card.level4,
+.missionItem.level4 {
+  border-color: rgba(239, 68, 68, 0.75);
 }
 
 .cardTop {
@@ -124,10 +348,24 @@ body {
   font-size: 16px;
 }
 
+.signal.level1,
 .signal.green {
   color: #22c55e;
 }
 
+.signal.level2 {
+  color: #eab308;
+}
+
+.signal.level3 {
+  color: #f97316;
+}
+
+.signal.level4 {
+  color: #ef4444;
+}
+
+.signal.idle,
 .signal.gray {
   color: #64748b;
 }
@@ -155,26 +393,6 @@ body {
   display: block;
   margin-top: 4px;
   font-size: 17px;
-}
-
-.strategyBox {
-  background: #111c30;
-  border: 1px solid #24324a;
-  border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 14px;
-}
-
-.strategyBox h3 {
-  margin: 0 0 10px;
-  font-size: 17px;
-}
-
-.strategyBox p {
-  margin: 6px 0;
-  color: #cbd5e1;
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 .desc {
@@ -230,36 +448,6 @@ body {
   gap: 12px;
 }
 
-.logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #0f172a;
-  object-fit: contain;
-  padding: 5px;
-}
-
-.infoFooter {
-  margin-top: 28px;
-  padding: 16px;
-  border-radius: 16px;
-  background: #0f1a2d;
-  border: 1px solid #24324a;
-  color: #94a3b8;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.infoFooter h3 {
-  color: #e2e8f0;
-  font-size: 14px;
-  margin: 14px 0 6px;
-}
-
-.infoFooter h3:first-child {
-  margin-top: 0;
-}
-
 .logoText {
   width: 44px;
   height: 44px;
@@ -275,10 +463,22 @@ body {
 }
 
 .infoFooter {
+  margin-top: 28px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #0f1a2d;
+  border: 1px solid #24324a;
+  color: #94a3b8;
   font-size: 10px;
   line-height: 1.45;
 }
 
 .infoFooter h3 {
+  color: #e2e8f0;
   font-size: 12px;
+  margin: 14px 0 6px;
+}
+
+.infoFooter h3:first-child {
+  margin-top: 0;
 }
