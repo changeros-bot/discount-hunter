@@ -24,6 +24,35 @@ function secondsAgo(isoString) {
   return Number.isFinite(diff) ? Math.max(diff, 0) : null;
 }
 
+function getNextBuyPoint(asset) {
+  const discount = Number(asset.discount);
+  const rules = asset.rules || [];
+  const amounts = asset.amounts || [];
+
+  if (!Number.isFinite(discount) || rules.length === 0) {
+    return { label: "下一買點", text: "資料未就緒", amount: "0U", progress: 0 };
+  }
+
+  const nextIndex = rules.findIndex((rule) => discount > rule);
+
+  if (nextIndex === -1) {
+    return { label: "下一買點", text: "已達最深層", amount: "完成", progress: 100 };
+  }
+
+  const target = rules[nextIndex];
+  const gap = Math.max(0, discount - target);
+  const previous = nextIndex === 0 ? 0 : rules[nextIndex - 1];
+  const range = Math.abs(target - previous) || 1;
+  const progress = Math.min(100, Math.max(0, ((previous - discount) / range) * 100));
+
+  return {
+    label: `${levelNames[nextIndex + 1]}買點`,
+    text: `還差 ${gap.toFixed(1)}% 到 ${target}%`,
+    amount: `${amounts[nextIndex]}U`,
+    progress
+  };
+}
+
 export default function Home() {
   const [assets, setAssets] = useState([]);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -92,7 +121,7 @@ export default function Home() {
   return (
     <main className="page">
       <section className="hero compactHero">
-        <div className="versionPill">DCA 折價獵人 V10</div>
+        <div className="versionPill">DCA 折價獵人 V10.2</div>
         <h1>今日戰情室</h1>
         <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
         <div className="update">
@@ -180,8 +209,8 @@ export default function Home() {
       )}
 
       <section className="infoFooter">
-        <h3>V10 產品原則</h3>
-        <p>首頁只回答一件事：今天要不要買、買多少。任何會讓30秒變成3分鐘的功能，都先不要放進首頁。</p>
+        <h3>V10.2 產品原則</h3>
+        <p>首頁只回答四件事：現在是否同步、今天要不要買、買多少、離下一層還差多遠。</p>
         <h3>資料說明</h3>
         <p>現價、52週高點、52週低點、市值與成交量改由 Binance xStocks Public API 提供，對齊你實際在 Binance Wallet 看到的代幣化股票資料。</p>
       </section>
@@ -192,6 +221,7 @@ export default function Home() {
 function AssetCard({ asset }) {
   const level = asset.signal?.level || 0;
   const levelClass = levelClasses[level] || "idle";
+  const nextBuy = getNextBuyPoint(asset);
 
   return (
     <div className={`card ${level > 0 ? "active" : "idle"} ${levelClass}`}>
@@ -227,6 +257,17 @@ function AssetCard({ asset }) {
         <div>
           <span>建議投入</span>
           <strong>{parseAmount(asset.signal?.amount)}U</strong>
+        </div>
+      </div>
+
+      <div className="nextBuyBox">
+        <div className="nextBuyTop">
+          <span>{nextBuy.label}</span>
+          <strong>{nextBuy.amount}</strong>
+        </div>
+        <p>{nextBuy.text}</p>
+        <div className="nextBuyTrack">
+          <div style={{ width: `${nextBuy.progress}%` }} />
         </div>
       </div>
 
