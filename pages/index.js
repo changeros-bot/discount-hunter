@@ -171,7 +171,7 @@ export default function Home() {
     <main className="page">
       <section className="hero compactHero">
         <h1 style={{ fontSize: "34px", fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價獵人</h1>
-        <div className="versionPill">V13</div>
+        <div className="versionPill">V13.1</div>
         <h2 style={{ fontSize: "17px", margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
         <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
         <div className="update">更新：{updatedAt ? new Date(updatedAt).toLocaleString() : "讀取中"}</div>
