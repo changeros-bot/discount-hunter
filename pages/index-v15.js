@@ -86,45 +86,30 @@ export default function IndexV15() {
     try { setTradeHistory(JSON.parse(localStorage.getItem("discountHunterTradeHistory") || "[]")); } catch { setTradeHistory([]); }
   }, []);
 
-  function saveHoldings(next) {
-    setHoldings(next);
-    localStorage.setItem("discountHunterHoldings", JSON.stringify(next));
-  }
-
-  function saveHistory(next) {
-    setTradeHistory(next);
-    localStorage.setItem("discountHunterTradeHistory", JSON.stringify(next));
-  }
-
+  function saveHoldings(next) { setHoldings(next); localStorage.setItem("discountHunterHoldings", JSON.stringify(next)); }
+  function saveHistory(next) { setTradeHistory(next); localStorage.setItem("discountHunterTradeHistory", JSON.stringify(next)); }
   function updateHoldingField(symbol, field, value) {
     const next = { ...holdings, [symbol]: { ...(holdings[symbol] || { type: getDefaultType(symbol), executedLevels: [], qty: "", cost: "", note: "" }), [field]: value } };
     saveHoldings(next);
   }
-
   function toggleExecutedLevel(symbol, level) {
-    const currentHolding = holdings[symbol] || { type: getDefaultType(symbol), executedLevels: [], qty: "", cost: "", note: "" };
-    const currentLevels = currentHolding.executedLevels || [];
-    const nextLevels = currentLevels.includes(level) ? currentLevels.filter((l) => l !== level) : [...currentLevels, level].sort();
-    updateHoldingField(symbol, "executedLevels", nextLevels);
+    const h = holdings[symbol] || { type: getDefaultType(symbol), executedLevels: [], qty: "", cost: "", note: "" };
+    const current = h.executedLevels || [];
+    updateHoldingField(symbol, "executedLevels", current.includes(level) ? current.filter((l) => l !== level) : [...current, level].sort());
   }
-
   function addTrade(asset, level) {
-    const amount = parseAmount(asset.amounts?.[level - 1] || asset.signal?.amount || 0);
     const symbol = asset.symbol;
-    const currentHolding = holdings[symbol] || { type: getDefaultType(symbol), executedLevels: [], qty: "", cost: "", note: "" };
-    const nextLevels = Array.from(new Set([...(currentHolding.executedLevels || []), level])).sort();
-    const nextHoldings = { ...holdings, [symbol]: { ...currentHolding, executedLevels: nextLevels } };
-    const record = { id: `${Date.now()}-${symbol}-${level}`, date: todayText(), symbol, level, levelName: levelNames[level], amount, price: Number(asset.price || 0), note: currentHolding.note || "" };
-    saveHoldings(nextHoldings);
+    const h = holdings[symbol] || { type: getDefaultType(symbol), executedLevels: [], qty: "", cost: "", note: "" };
+    const duplicated = tradeHistory.some((t) => t.date === todayText() && t.symbol === symbol && Number(t.level) === Number(level));
+    if (duplicated && !confirm(`${symbol} 今天已記錄過第${level}層，仍要新增？`)) return;
+    const nextLevels = Array.from(new Set([...(h.executedLevels || []), level])).sort();
+    const record = { id: `${Date.now()}-${symbol}-${level}`, date: todayText(), symbol, level, levelName: levelNames[level], amount: parseAmount(asset.amounts?.[level - 1] || asset.signal?.amount || 0), price: Number(asset.price || 0), note: h.note || "" };
+    saveHoldings({ ...holdings, [symbol]: { ...h, executedLevels: nextLevels } });
     saveHistory([record, ...tradeHistory]);
   }
-
-  function deleteTrade(id) {
-    saveHistory(tradeHistory.filter((t) => t.id !== id));
-  }
-
+  function deleteTrade(id) { saveHistory(tradeHistory.filter((t) => t.id !== id)); }
   function exportBackup() {
-    const payload = { version: "15.1", exportDate: new Date().toISOString(), holdings, tradeHistory };
+    const payload = { version: "15.2", exportDate: new Date().toISOString(), holdings, tradeHistory };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -133,7 +118,6 @@ export default function IndexV15() {
     a.click();
     URL.revokeObjectURL(url);
   }
-
   function importBackup(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -144,9 +128,7 @@ export default function IndexV15() {
         if (data.holdings && typeof data.holdings === "object") saveHoldings(data.holdings);
         if (Array.isArray(data.tradeHistory)) saveHistory(data.tradeHistory);
         alert("匯入完成");
-      } catch {
-        alert("匯入失敗：JSON 格式錯誤");
-      }
+      } catch { alert("匯入失敗：JSON 格式錯誤"); }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -159,22 +141,19 @@ export default function IndexV15() {
         const res = await fetch(`/api/prices?t=${Date.now()}`, { cache: "no-store" });
         const data = await res.json();
         const nextAssets = data.data || [];
-        const currentAssetsSnapshot = assetsRef.current;
-        setPriceDirections((prevDirections) => {
-          const updatedDirections = {};
-          nextAssets.forEach((nextAsset) => {
-            const symbol = nextAsset.symbol;
-            if (!symbol) return;
-            const oldAsset = currentAssetsSnapshot.find((a) => a.symbol === symbol);
-            const oldPrice = oldAsset ? Number(oldAsset.price) : null;
-            const nextPrice = Number(nextAsset.price);
-            if (oldPrice !== null && Number.isFinite(nextPrice) && Number.isFinite(oldPrice)) {
+        const oldAssets = assetsRef.current;
+        setPriceDirections((prev) => {
+          const out = {};
+          nextAssets.forEach((n) => {
+            const old = oldAssets.find((a) => a.symbol === n.symbol);
+            const oldPrice = old ? Number(old.price) : null;
+            const nextPrice = Number(n.price);
+            if (oldPrice !== null && Number.isFinite(oldPrice) && Number.isFinite(nextPrice)) {
               const diff = nextPrice - oldPrice;
-              if (Math.abs(diff) < PRICE_MOVE_EPSILON) updatedDirections[symbol] = prevDirections[symbol] || null;
-              else updatedDirections[symbol] = { direction: diff > 0 ? "up" : "down", diff };
-            } else updatedDirections[symbol] = prevDirections[symbol] || null;
+              out[n.symbol] = Math.abs(diff) < PRICE_MOVE_EPSILON ? prev[n.symbol] || null : { direction: diff > 0 ? "up" : "down", diff };
+            } else out[n.symbol] = prev[n.symbol] || null;
           });
-          return updatedDirections;
+          return out;
         });
         assetsRef.current = nextAssets;
         setAssets(nextAssets);
@@ -182,22 +161,14 @@ export default function IndexV15() {
         setSource(data.source || "");
         setWarning(data.warning || "");
         setError(data.error || "");
-      } catch (err) {
-        setError(err.message || "資料讀取失敗");
-      } finally {
-        setRefreshing(false);
-      }
+      } catch (err) { setError(err.message || "資料讀取失敗"); }
+      finally { setRefreshing(false); }
     }
     async function loadHealth() {
-      try {
-        const res = await fetch(`/api/binance-health?t=${Date.now()}`, { cache: "no-store" });
-        setHealth(await res.json());
-      } catch {
-        setHealth({ ok: false, status: "down", label: "🔴 Binance API檢查失敗", symbolsFound: 0, symbolsExpected: 9 });
-      }
+      try { const res = await fetch(`/api/binance-health?t=${Date.now()}`, { cache: "no-store" }); setHealth(await res.json()); }
+      catch { setHealth({ ok: false, status: "down", label: "🔴 Binance API檢查失敗", symbolsFound: 0, symbolsExpected: 9 }); }
     }
-    loadPrices();
-    loadHealth();
+    loadPrices(); loadHealth();
     const priceTimer = setInterval(loadPrices, REFRESH_MS);
     const healthTimer = setInterval(loadHealth, 30000);
     return () => { clearInterval(priceTimer); clearInterval(healthTimer); };
@@ -232,7 +203,7 @@ export default function IndexV15() {
     <main className="page">
       <section className="hero compactHero">
         <h1 style={{ fontSize: "34px", fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價獵人</h1>
-        <div className="versionPill">V15.1 測試版</div>
+        <div className="versionPill">V15.2 測試版</div>
         <h2 style={{ fontSize: "17px", margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
         <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
         <div className="update">更新：{formatUpdateTime(updatedAt)}</div>
@@ -248,10 +219,7 @@ export default function IndexV15() {
       </section>
 
       {isManageMode && <HoldingsManager assets={assets} holdings={holdings} updateHoldingField={updateHoldingField} toggleExecutedLevel={toggleExecutedLevel} addTrade={addTrade} exportBackup={exportBackup} importBackup={importBackup} />}
-
       {!dataReady && <section className="dataGuard"><strong>資料源未就緒</strong><p>{error || "等待 Binance xStocks 真實行情資料。"}</p><span>保護規則：沒有真實 Binance xStocks 資料，就不顯示訊號。</span></section>}
-
-      {dataReady && <TodayAction buyList={buyList} totalAmount={totalAmount} />}
 
       <section className="warRoom">
         <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -262,24 +230,25 @@ export default function IndexV15() {
       </section>
 
       <TradeJournal tradeHistory={tradeHistory} deleteTrade={deleteTrade} />
-
       <section className="quickRule"><div><span>🟢 第一層</span><strong>5U</strong></div><div><span>🟡 第二層</span><strong>10U</strong></div><div><span>🟠 第三層</span><strong>15U</strong></div><div><span>🔴 第四層</span><strong>20U</strong></div></section>
 
-      {dataReady && <><section className="sectionTitle"><h2>監控清單</h2><p>V15.1：分區持倉、日期交易日誌、JSON備份。</p></section><section className="list">
+      {dataReady && <><section className="sectionTitle"><h2>監控清單</h2><p>V15.2：今日買點移到最下方，避免干擾持倉檢查。</p></section><section className="list">
         <SectionHeader color="#4ade80" title="📅 本月DCA" count={dcaHoldingList.length} subtitle="例行投入" />
         {dcaHoldingList.length > 0 ? dcaHoldingList.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} directionInfo={priceDirections[a.symbol]} key={a.symbol} />) : <EmptyBlock text="尚無 monthlyDca 現有持倉。" />}
         <SectionHeader color="#3b82f6" title="⚡ 折價加碼" count={dipHoldingList.length} subtitle="低點獵人" />
         {dipHoldingList.length > 0 ? dipHoldingList.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} directionInfo={priceDirections[a.symbol]} key={a.symbol} />) : <EmptyBlock text="尚無 dipBuy 現有持倉。" />}
-        {buyWithoutHolding.length > 0 && <><div style={{ fontWeight: 900, color: "#fde68a", margin: "18px 0 6px", fontSize: 16 }}>🎯 今日觸發買點（尚未建倉）</div>{buyWithoutHolding.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} directionInfo={priceDirections[a.symbol]} key={a.symbol} />)}</>}
         {idleList.length > 0 && <details className="idleGroup" style={{ marginTop: 16 }}><summary>尚未到買點｜{idleList.length} 檔</summary><div className="idleList">{idleList.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} directionInfo={priceDirections[a.symbol]} key={a.symbol} />)}</div></details>}
+        {buyWithoutHolding.length > 0 && <><div style={{ fontWeight: 900, color: "#fde68a", margin: "18px 0 6px", fontSize: 16 }}>🎯 今日觸發買點（尚未建倉）</div>{buyWithoutHolding.map((a) => <AssetCard asset={a} holding={holdings[a.symbol]} directionInfo={priceDirections[a.symbol]} key={a.symbol} />)}</>}
       </section></>}
-      <section className="infoFooter"><h2>V15.1 產品原則</h2><p>本頁為測試版：只處理 Binance xStocks 折價獵人，不混入其他專案。</p><h2>資料說明</h2><p>持倉與交易日誌存在本機瀏覽器，可用 JSON 匯出/匯入備份。</p></section>
+
+      {dataReady && <TodayAction buyList={buyList} totalAmount={totalAmount} />}
+      <section className="infoFooter"><h2>V15.2 產品原則</h2><p>本頁為測試版：只處理 Binance xStocks 折價獵人，不混入其他專案。</p><h2>資料說明</h2><p>持倉與交易日誌存在本機瀏覽器，可用 JSON 匯出/匯入備份。</p></section>
     </main>
   );
 }
 
 function TodayAction({ buyList, totalAmount }) {
-  return <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: "2px solid #3b82f6" }}><h2 style={{ fontSize: 20, fontWeight: 900, color: "#3b82f6", margin: "0 0 12px" }}>⚡ 今日執行</h2>{buyList.length > 0 ? <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "0 8px 8px", borderBottom: "1px solid #334155", color: "#94a3b8", fontSize: 13, fontWeight: 700 }}><div>標的</div><div style={{ textAlign: "center" }}>買點層級</div><div style={{ textAlign: "right" }}>建議投入</div></div><div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>{buyList.map((asset) => { const level = asset.signal?.level || 0; return <div key={`today-${asset.symbol}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "10px 8px", background: "#0f172a", borderRadius: 10, alignItems: "center", fontSize: 15 }}><div style={{ fontWeight: 900 }}>{asset.symbol}</div><div style={{ textAlign: "center", color: "#fcd34d", fontWeight: 800 }}>{ruleColors[level - 1]} {levelNames[level]}</div><div style={{ textAlign: "right", fontWeight: 900, color: "#4ade80" }}>{parseAmount(asset.signal?.amount)}U</div></div>; })}</div><div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", fontWeight: 900, color: "#fff" }}><span>今日總投入</span><span style={{ color: "#4ade80", fontSize: 20 }}>{totalAmount}U</span></div></div> : <div style={{ padding: "16px 0", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>今天無任何標的觸發買點。</div>}</section>;
+  return <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: "2px solid #3b82f6" }}><h2 style={{ fontSize: 20, fontWeight: 900, color: "#3b82f6", margin: "0 0 12px" }}>⚡ 今日到買點</h2>{buyList.length > 0 ? <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "0 8px 8px", borderBottom: "1px solid #334155", color: "#94a3b8", fontSize: 13, fontWeight: 700 }}><div>標的</div><div style={{ textAlign: "center" }}>買點層級</div><div style={{ textAlign: "right" }}>建議投入</div></div><div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>{buyList.map((asset) => { const level = asset.signal?.level || 0; return <div key={`today-${asset.symbol}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "10px 8px", background: "#0f172a", borderRadius: 10, alignItems: "center", fontSize: 15 }}><div style={{ fontWeight: 900 }}>{asset.symbol}</div><div style={{ textAlign: "center", color: "#fcd34d", fontWeight: 800 }}>{ruleColors[level - 1]} {levelNames[level]}</div><div style={{ textAlign: "right", fontWeight: 900, color: "#4ade80" }}>{parseAmount(asset.signal?.amount)}U</div></div>; })}</div><div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", fontWeight: 900, color: "#fff" }}><span>今日總投入</span><span style={{ color: "#4ade80", fontSize: 20 }}>{totalAmount}U</span></div></div> : <div style={{ padding: "16px 0", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>今天無任何標的觸發買點。</div>}</section>;
 }
 
 function TradeJournal({ tradeHistory, deleteTrade }) {
@@ -295,7 +264,6 @@ function HoldingsManager({ assets, holdings, updateHoldingField, toggleExecutedL
 const managerLabel = { display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 4 };
 const managerInput = { width: "100%", borderRadius: 8, border: "1px solid #334155", background: "#1e293b", color: "white", padding: 8 };
 const managerButton = (active, color) => ({ padding: "8px 4px", borderRadius: 8, border: "1px solid #334155", background: active ? color : "#1e293b", color: "white", fontWeight: 800, cursor: "pointer", fontSize: 12 });
-
 function SectionHeader({ title, subtitle, count, color }) { return <div style={{ fontWeight: 950, color, margin: "18px 0 6px", fontSize: 18, display: "flex", alignItems: "center", gap: 6 }}><span>{title}</span><span style={{ fontSize: 12, background: "rgba(148,163,184,0.15)", padding: "2px 8px", borderRadius: 20 }}>{subtitle} ({count})</span></div>; }
 function EmptyBlock({ text }) { return <div style={{ padding: 12, background: "#1e293b", borderRadius: 12, color: "#64748b", fontSize: 13, textAlign: "center" }}>{text}</div>; }
 
