@@ -1,21 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "14.5-holding-hotfix";
+const MODEL_VERSION = "14.6-real-source-only";
 const REFRESH_MS = 5000;
+const WALLET_ADDRESS = process.env.NEXT_PUBLIC_WALLET_ADDRESS || "0x657f5cbBC1FBE274299a6be52b5e46C3C6a9AD76";
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
-
-const DEFAULT_HOLDINGS = {
-  GOOGLon: { balance: "0.01353" },
-  NVDAon: { balance: "0.02387" },
-  QQQon: { balance: "0.0067441" },
-  TSMon: { balance: "0.011408" },
-  SPCXon: { balance: "0.023336" },
-  AMDon: { balance: "0.0091571" },
-  MRVLon: { balance: "0.016591" },
-  RKLBon: { balance: "0.046432" },
-  AVGOon: { balance: "0.012659" }
-};
 
 function parseAmount(value) {
   const number = Number(String(value || "0").replace(/[^0-9.]/g, ""));
@@ -32,13 +21,6 @@ function formatTime(isoString) {
   if (!isoString) return "讀取中";
   const d = new Date(isoString);
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-}
-
-function getStats(asset, holding) {
-  const quantity = Number(holding?.balance || holding?.quantity || 0);
-  const price = Number(asset?.price || 0);
-  const value = quantity * price;
-  return { quantity, price, value, hasPosition: quantity > 0 && price > 0 };
 }
 
 function getNextBuyPoint(asset) {
@@ -61,24 +43,12 @@ export default function Home() {
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [holdings, setHoldings] = useState({});
+  const [walletData, setWalletData] = useState(null);
+  const [walletError, setWalletError] = useState("");
 
   useEffect(() => {
-    try {
-      const storedVersion = localStorage.getItem("discountHunterModelVersion");
-      const stored = JSON.parse(localStorage.getItem("discountHunterHoldings") || "{}");
-      const shouldReset = storedVersion !== MODEL_VERSION;
-      setHoldings(shouldReset ? DEFAULT_HOLDINGS : stored);
-      if (shouldReset) localStorage.setItem("discountHunterHoldings", JSON.stringify(DEFAULT_HOLDINGS));
-      localStorage.setItem("discountHunterModelVersion", MODEL_VERSION);
-    } catch {
-      setHoldings(DEFAULT_HOLDINGS);
-    }
+    try { localStorage.setItem("discountHunterModelVersion", MODEL_VERSION); } catch {}
   }, []);
-
-  function getHolding(symbol) {
-    return { ...(DEFAULT_HOLDINGS[symbol] || {}), ...(holdings[symbol] || {}) };
-  }
 
   useEffect(() => {
     async function loadPrices() {
@@ -96,10 +66,31 @@ export default function Home() {
         setRefreshing(false);
       }
     }
+
+    async function loadWallet() {
+      try {
+        const res = await fetch(`/api/wallet-holdings?address=${encodeURIComponent(WALLET_ADDRESS)}&t=${Date.now()}`, { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.message || data.error || "wallet sync failed");
+        setWalletData(data);
+        setWalletError("");
+      } catch (err) {
+        setWalletError(err.message || "wallet balance 讀取失敗");
+      }
+    }
+
     loadPrices();
-    const timer = setInterval(loadPrices, REFRESH_MS);
-    return () => clearInterval(timer);
+    loadWallet();
+    const priceTimer = setInterval(loadPrices, REFRESH_MS);
+    const walletTimer = setInterval(loadWallet, REFRESH_MS);
+    return () => { clearInterval(priceTimer); clearInterval(walletTimer); };
   }, []);
+
+  const walletBySymbol = useMemo(() => {
+    const map = new Map();
+    (walletData?.holdings || []).forEach((h) => map.set(h.symbol, h));
+    return map;
+  }, [walletData]);
 
   const sortedAssets = useMemo(() => [...assets].sort((a, b) => {
     const aLevel = a.signal?.level || 0;
@@ -111,30 +102,29 @@ export default function Home() {
   const buyList = sortedAssets.filter((asset) => (asset.signal?.level || 0) > 0);
   const watchList = sortedAssets.filter((asset) => (asset.signal?.level || 0) === 0);
   const totalAmount = buyList.reduce((sum, asset) => sum + parseAmount(asset.signal?.amount), 0);
-  const portfolio = assets.reduce((sum, asset) => {
-    const stats = getStats(asset, getHolding(asset.symbol));
-    return { value: sum.value + stats.value, count: sum.count + (stats.hasPosition ? 1 : 0) };
-  }, { value: 0, count: 0 });
+  const activeWalletCount = (walletData?.holdings || []).filter((h) => Number(h.quantity || h.balance || 0) > 0).length;
 
   return <main className="page">
     <section className="hero compactHero">
       <h1 style={{ fontSize: 34, fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價追蹤</h1>
-      <div className="versionPill">V14.5 Holding Hotfix</div>
+      <div className="versionPill">V14.6 Real Source Only</div>
       <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
-      <p>真實資料源：Binance xStocks Public API｜持倉數量規則：Balance 餘額。</p>
+      <p>封板規則：只顯示 Binance 行情與 BSC Wallet Balance。成本、損益、總投入待 Binance 交易紀錄串接後再恢復。</p>
       <div className="update">更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive">{refreshing ? "自動更新中…" : "LIVE｜每5秒自動更新"}</div>
-      {source && <div className="sourcePill">資料源：{source}</div>}
+      {source && <div className="sourcePill">行情資料源：{source}</div>}
+      {walletData?.updatedAt && <div className="sourcePill">Wallet Balance：{formatTime(walletData.updatedAt)}</div>}
       {error && <div className="dataGuard">{error}</div>}
+      {walletError && <div className="dataGuard">Wallet：{walletError}</div>}
     </section>
 
     <section className="warRoom">
       <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div><span>持倉市值</span><strong>{formatNumber(portfolio.value)}U</strong></div>
-        <div><span>成本/損益</span><strong style={{ color: "#facc15" }}>待接幣安</strong></div>
+        <div><span>Wallet持倉</span><strong>{walletData ? `${activeWalletCount}檔` : "讀取中"}</strong></div>
+        <div><span>行情狀態</span><strong>{assets.length > 0 ? `${assets.length}檔` : "讀取中"}</strong></div>
       </div>
       <div style={{ color: "#cbd5e1", fontWeight: 900, textAlign: "center", marginTop: 12 }}>
-        持倉 {portfolio.count} 檔｜成本與損益將改接 Binance 真實資料
+        成本 / 損益 / 總投入：待 Binance 真實交易紀錄串接，暫不顯示
       </div>
     </section>
 
@@ -159,17 +149,17 @@ export default function Home() {
     <section className="sectionTitle"><h2>監控清單</h2><p>買點區預設展開；未到買點預設收合。</p></section>
     {buyList.length > 0 && <section className="list">
       <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 買點區（{buyList.length}）</h3>
-      {buyList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} />)}
+      {buyList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={walletBySymbol.get(asset.symbol)} />)}
     </section>}
 
     <details className="idleGroup" style={{ marginTop: 16 }}>
       <summary>📋 觀察區（{watchList.length}）｜展開未到買點標的</summary>
       <section className="list" style={{ marginTop: 12 }}>
-        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} />)}
+        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={walletBySymbol.get(asset.symbol)} />)}
       </section>
     </details>
 
-    <section className="infoFooter"><h2>V14.5 Hotfix</h2><p>已移除 snapshot、日期、手動投入成本顯示；成本與損益不再假裝完成，下一步接 Binance 真實成本來源。</p></section>
+    <section className="infoFooter"><h2>V14.6 封板前規則</h2><p>所有正式數字必須來自 Binance / BSC 真實資料源。未串接到真實來源前，不顯示成本、損益、總投入。</p></section>
   </main>;
 }
 
@@ -188,20 +178,17 @@ function ProgressBar({ nextBuy }) {
 
 function AssetCard({ asset, holding }) {
   const level = asset.signal?.level || 0;
-  const stats = getStats(asset, holding);
   const nextBuy = getNextBuyPoint(asset);
+  const balance = holding?.balance || holding?.quantity || "0";
+  const balanceStatus = holding?.status || "waiting_wallet";
   return <div className={`card ${level > 0 ? "active" : "idle"}`}>
     <div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div>
     <div className="signal">{level > 0 ? `${ruleColors[level - 1]} ${levelNames[level]}｜建議 ${parseAmount(asset.signal?.amount)}U` : "尚未到買點"}</div>
-    <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>建議投入</span><strong>{parseAmount(asset.signal?.amount)}U</strong></div></div>
+    <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>建議投入</span><strong>{parseAmount(asset.signal?.amount)}U</strong></div></div>
     <div className="nextBuyBox"><ProgressBar nextBuy={nextBuy} /></div>
-    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>我的持倉</summary>
-      <div className="dataGrid" style={{ marginTop: 12 }}>
-        <div><span>持有數量</span><strong>{formatNumber(stats.quantity, 8)}</strong></div>
-        <div><span>目前價值</span><strong>{formatNumber(stats.value)}U</strong></div>
-        <div><span>成本來源</span><strong style={{ color: "#facc15" }}>待接幣安</strong></div>
-        <div><span>損益來源</span><strong style={{ color: "#facc15" }}>待接幣安</strong></div>
-      </div>
+    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>Wallet 持倉餘額</summary>
+      <div className="dataGrid" style={{ marginTop: 12 }}><div><span>BSC Balance</span><strong>{formatNumber(balance, 8)}</strong></div><div><span>狀態</span><strong>{balanceStatus}</strong></div><div><span>Chain</span><strong>{holding?.chainId || 56}</strong></div><div><span>來源</span><strong>balanceOf</strong></div></div>
+      <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>成本 / 損益 / 總投入：待 Binance 真實交易紀錄串接，暫不顯示。</div>
     </details>
   </div>;
 }
