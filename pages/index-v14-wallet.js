@@ -1,0 +1,1 @@
+export default function V14WalletBackup(){return <main style={{padding:20,color:'white',background:'#020617',minHeight:'100vh'}}><h1>DCA 折價獵人 V14 Wallet Beta</h1><p>V14 wallet holdings API 已建立：/api/wallet-holdings?address=你的0x地址</p><p>這是備援頁，正式首頁仍保留 V13.8，下一步再安全合併到 pages/index.js。</p></main>;}
