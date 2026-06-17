@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "14.5-ui-clean";
+const MODEL_VERSION = "14.5-holding-hotfix";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
 const DEFAULT_HOLDINGS = {
-  GOOGLon: { balance: "0.01353", amount: "4.99", cost: "368.8101", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  NVDAon: { balance: "0.02387", amount: "4.99", cost: "209.0490", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  QQQon: { balance: "0.0067441", amount: "4.99", cost: "740.0053", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  TSMon: { balance: "0.011408", amount: "4.99", cost: "437.4123", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  SPCXon: { balance: "0.023336", amount: "4.99", cost: "213.8336", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  AMDon: { balance: "0.0091571", amount: "4.99", cost: "545.0006", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  MRVLon: { balance: "0.016591", amount: "4.99", cost: "300.7655", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  RKLBon: { balance: "0.046432", amount: "4.99", cost: "107.4686", buyDate: "2026/06/16", note: "V14.5 snapshot" },
-  AVGOon: { balance: "0.012659", amount: "4.99", cost: "394.1860", buyDate: "2026/06/16", note: "V14.5 snapshot" }
+  GOOGLon: { balance: "0.01353" },
+  NVDAon: { balance: "0.02387" },
+  QQQon: { balance: "0.0067441" },
+  TSMon: { balance: "0.011408" },
+  SPCXon: { balance: "0.023336" },
+  AMDon: { balance: "0.0091571" },
+  MRVLon: { balance: "0.016591" },
+  RKLBon: { balance: "0.046432" },
+  AVGOon: { balance: "0.012659" }
 };
 
 function parseAmount(value) {
@@ -37,12 +37,8 @@ function formatTime(isoString) {
 function getStats(asset, holding) {
   const quantity = Number(holding?.balance || holding?.quantity || 0);
   const price = Number(asset?.price || 0);
-  const cost = Number(holding?.cost || 0);
-  const invested = Number(holding?.amount || 0) > 0 ? Number(holding.amount) : quantity * cost;
   const value = quantity * price;
-  const pnl = value - invested;
-  const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
-  return { quantity, price, cost, invested, value, pnl, pnlPct, hasPosition: quantity > 0 && price > 0 };
+  return { quantity, price, value, hasPosition: quantity > 0 && price > 0 };
 }
 
 function getNextBuyPoint(asset) {
@@ -58,8 +54,6 @@ function getNextBuyPoint(asset) {
   const progress = Math.min(100, Math.max(0, ((previous - discount) / range) * 100));
   return { currentAmount: `${nextIndex === 0 ? 0 : amounts[nextIndex - 1] || 0}U`, targetAmount: `${amounts[nextIndex] || 0}U`, progress };
 }
-
-const inputStyle = { width: "100%", borderRadius: 10, border: "1px solid #334155", background: "#0f172a", color: "white", padding: 10, boxSizing: "border-box" };
 
 export default function Home() {
   const [assets, setAssets] = useState([]);
@@ -82,18 +76,8 @@ export default function Home() {
     }
   }, []);
 
-  function saveHoldings(next) {
-    setHoldings(next);
-    localStorage.setItem("discountHunterHoldings", JSON.stringify(next));
-    localStorage.setItem("discountHunterModelVersion", MODEL_VERSION);
-  }
-
   function getHolding(symbol) {
     return { ...(DEFAULT_HOLDINGS[symbol] || {}), ...(holdings[symbol] || {}) };
-  }
-
-  function updateHolding(symbol, field, value) {
-    saveHoldings({ ...holdings, [symbol]: { ...getHolding(symbol), [field]: value } });
   }
 
   useEffect(() => {
@@ -129,14 +113,13 @@ export default function Home() {
   const totalAmount = buyList.reduce((sum, asset) => sum + parseAmount(asset.signal?.amount), 0);
   const portfolio = assets.reduce((sum, asset) => {
     const stats = getStats(asset, getHolding(asset.symbol));
-    return { value: sum.value + stats.value, invested: sum.invested + stats.invested, pnl: sum.pnl + stats.pnl, count: sum.count + (stats.hasPosition ? 1 : 0) };
-  }, { value: 0, invested: 0, pnl: 0, count: 0 });
-  const portfolioPct = portfolio.invested > 0 ? (portfolio.pnl / portfolio.invested) * 100 : 0;
+    return { value: sum.value + stats.value, count: sum.count + (stats.hasPosition ? 1 : 0) };
+  }, { value: 0, count: 0 });
 
   return <main className="page">
     <section className="hero compactHero">
       <h1 style={{ fontSize: 34, fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價追蹤</h1>
-      <div className="versionPill">V14.5 UI Clean Beta</div>
+      <div className="versionPill">V14.5 Holding Hotfix</div>
       <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
       <p>真實資料源：Binance xStocks Public API｜持倉數量規則：Balance 餘額。</p>
       <div className="update">更新：{formatTime(updatedAt)}</div>
@@ -148,10 +131,10 @@ export default function Home() {
     <section className="warRoom">
       <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div><span>持倉市值</span><strong>{formatNumber(portfolio.value)}U</strong></div>
-        <div><span>未實現損益</span><strong style={{ color: portfolio.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{formatNumber(portfolio.pnl)}U</strong></div>
+        <div><span>成本/損益</span><strong style={{ color: "#facc15" }}>待接幣安</strong></div>
       </div>
-      <div style={{ color: portfolio.pnl >= 0 ? "#bbf7d0" : "#fecaca", fontWeight: 900, textAlign: "center", marginTop: 12 }}>
-        總投入 {formatNumber(portfolio.invested)}U｜報酬 {portfolioPct.toFixed(2)}%｜持倉 {portfolio.count} 檔
+      <div style={{ color: "#cbd5e1", fontWeight: 900, textAlign: "center", marginTop: 12 }}>
+        持倉 {portfolio.count} 檔｜成本與損益將改接 Binance 真實資料
       </div>
     </section>
 
@@ -176,17 +159,17 @@ export default function Home() {
     <section className="sectionTitle"><h2>監控清單</h2><p>買點區預設展開；未到買點預設收合。</p></section>
     {buyList.length > 0 && <section className="list">
       <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 買點區（{buyList.length}）</h3>
-      {buyList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} updateHolding={updateHolding} />)}
+      {buyList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} />)}
     </section>}
 
     <details className="idleGroup" style={{ marginTop: 16 }}>
       <summary>📋 觀察區（{watchList.length}）｜展開未到買點標的</summary>
       <section className="list" style={{ marginTop: 12 }}>
-        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} updateHolding={updateHolding} />)}
+        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} />)}
       </section>
     </details>
 
-    <section className="infoFooter"><h2>V14.5 產品原則</h2><p>前台不再顯示錢包同步卡；後台持續朝全自動 Binance / BSC 資料管線前進。</p></section>
+    <section className="infoFooter"><h2>V14.5 Hotfix</h2><p>已移除 snapshot、日期、手動投入成本顯示；成本與損益不再假裝完成，下一步接 Binance 真實成本來源。</p></section>
   </main>;
 }
 
@@ -203,7 +186,7 @@ function ProgressBar({ nextBuy }) {
   </div>;
 }
 
-function AssetCard({ asset, holding, updateHolding }) {
+function AssetCard({ asset, holding }) {
   const level = asset.signal?.level || 0;
   const stats = getStats(asset, holding);
   const nextBuy = getNextBuyPoint(asset);
@@ -212,10 +195,13 @@ function AssetCard({ asset, holding, updateHolding }) {
     <div className="signal">{level > 0 ? `${ruleColors[level - 1]} ${levelNames[level]}｜建議 ${parseAmount(asset.signal?.amount)}U` : "尚未到買點"}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>建議投入</span><strong>{parseAmount(asset.signal?.amount)}U</strong></div></div>
     <div className="nextBuyBox"><ProgressBar nextBuy={nextBuy} /></div>
-    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>我的持倉 / 未實現損益</summary>
-      <div className="dataGrid" style={{ marginTop: 12 }}><div><span>持有數量</span><strong>{formatNumber(stats.quantity, 8)}</strong></div><div><span>平均成本</span><strong>{formatNumber(stats.cost)}</strong></div><div><span>投入成本</span><strong>{formatNumber(stats.invested)}U</strong></div><div><span>市值</span><strong>{formatNumber(stats.value)}U</strong></div><div><span>損益</span><strong style={{ color: stats.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{formatNumber(stats.pnl)}U</strong></div><div><span>報酬</span><strong style={{ color: stats.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{stats.hasPosition ? stats.pnlPct.toFixed(2) : "0.00"}%</strong></div></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}><input value={holding?.balance || ""} onChange={(e) => updateHolding(asset.symbol, "balance", e.target.value)} placeholder="持有數量" style={inputStyle} /><input value={holding?.amount || ""} onChange={(e) => updateHolding(asset.symbol, "amount", e.target.value)} placeholder="投入成本U" style={inputStyle} /><input value={holding?.cost || ""} onChange={(e) => updateHolding(asset.symbol, "cost", e.target.value)} placeholder="平均成本" style={inputStyle} /><input value={holding?.buyDate || ""} onChange={(e) => updateHolding(asset.symbol, "buyDate", e.target.value)} placeholder="買入日期" style={inputStyle} /></div>
-      {holding?.note && <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>✏️ {holding.note}</div>}
+    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>我的持倉</summary>
+      <div className="dataGrid" style={{ marginTop: 12 }}>
+        <div><span>持有數量</span><strong>{formatNumber(stats.quantity, 8)}</strong></div>
+        <div><span>目前價值</span><strong>{formatNumber(stats.value)}U</strong></div>
+        <div><span>成本來源</span><strong style={{ color: "#facc15" }}>待接幣安</strong></div>
+        <div><span>損益來源</span><strong style={{ color: "#facc15" }}>待接幣安</strong></div>
+      </div>
     </details>
   </div>;
 }
