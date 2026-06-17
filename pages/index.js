@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "14.0";
+const MODEL_VERSION = "14.5-ui-clean";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
 const DEFAULT_HOLDINGS = {
-  AMDon: { balance: "0.0091571", amount: "4.99", cost: "545.0006", buyDate: "2026/06/16", note: "V13.8 snapshot" },
-  MRVLon: { balance: "0.016591", amount: "4.99", cost: "300.7655", buyDate: "2026/06/16", note: "V13.8 snapshot" },
-  RKLBon: { balance: "0.046432", amount: "4.99", cost: "107.4686", buyDate: "2026/06/16", note: "V13.8 snapshot" },
-  AVGOon: { balance: "0.012659", amount: "4.99", cost: "394.1860", buyDate: "2026/06/16", note: "V13.8 snapshot" },
-  TSMon: { balance: "0.011408", amount: "4.99", cost: "437.4123", buyDate: "2026/06/16", note: "V13.8 snapshot" },
-  SPCXon: { balance: "0.023336", amount: "4.99", cost: "213.8336", buyDate: "2026/06/16", note: "V13.8 snapshot" },
-  NVDAon: { balance: "0.02387", amount: "4.99", cost: "209.0490", buyDate: "2026/06/16", note: "V13.8 snapshot" }
+  GOOGLon: { balance: "0.01353", amount: "4.99", cost: "368.8101", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  NVDAon: { balance: "0.02387", amount: "4.99", cost: "209.0490", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  QQQon: { balance: "0.0067441", amount: "4.99", cost: "740.0053", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  TSMon: { balance: "0.011408", amount: "4.99", cost: "437.4123", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  SPCXon: { balance: "0.023336", amount: "4.99", cost: "213.8336", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  AMDon: { balance: "0.0091571", amount: "4.99", cost: "545.0006", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  MRVLon: { balance: "0.016591", amount: "4.99", cost: "300.7655", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  RKLBon: { balance: "0.046432", amount: "4.99", cost: "107.4686", buyDate: "2026/06/16", note: "V14.5 snapshot" },
+  AVGOon: { balance: "0.012659", amount: "4.99", cost: "394.1860", buyDate: "2026/06/16", note: "V14.5 snapshot" }
 };
 
 function parseAmount(value) {
@@ -30,10 +32,6 @@ function formatTime(isoString) {
   if (!isoString) return "讀取中";
   const d = new Date(isoString);
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-}
-
-function isWalletAddress(value) {
-  return /^0x[a-fA-F0-9]{40}$/.test(String(value || "").trim());
 }
 
 function getStats(asset, holding) {
@@ -62,7 +60,6 @@ function getNextBuyPoint(asset) {
 }
 
 const inputStyle = { width: "100%", borderRadius: 10, border: "1px solid #334155", background: "#0f172a", color: "white", padding: 10, boxSizing: "border-box" };
-const buttonStyle = { width: "100%", borderRadius: 10, border: "1px solid #334155", background: "#2563eb", color: "white", padding: 10, fontWeight: 900 };
 
 export default function Home() {
   const [assets, setAssets] = useState([]);
@@ -71,18 +68,15 @@ export default function Home() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [holdings, setHoldings] = useState({});
-  const [walletAddress, setWalletAddress] = useState("");
-  const [walletStatus, setWalletStatus] = useState("");
-  const [syncingWallet, setSyncingWallet] = useState(false);
 
   useEffect(() => {
     try {
       const storedVersion = localStorage.getItem("discountHunterModelVersion");
       const stored = JSON.parse(localStorage.getItem("discountHunterHoldings") || "{}");
-      setHoldings(storedVersion ? stored : DEFAULT_HOLDINGS);
-      if (!storedVersion) localStorage.setItem("discountHunterHoldings", JSON.stringify(DEFAULT_HOLDINGS));
+      const shouldReset = storedVersion !== MODEL_VERSION;
+      setHoldings(shouldReset ? DEFAULT_HOLDINGS : stored);
+      if (shouldReset) localStorage.setItem("discountHunterHoldings", JSON.stringify(DEFAULT_HOLDINGS));
       localStorage.setItem("discountHunterModelVersion", MODEL_VERSION);
-      setWalletAddress(localStorage.getItem("discountHunterWalletAddress") || "");
     } catch {
       setHoldings(DEFAULT_HOLDINGS);
     }
@@ -100,45 +94,6 @@ export default function Home() {
 
   function updateHolding(symbol, field, value) {
     saveHoldings({ ...holdings, [symbol]: { ...getHolding(symbol), [field]: value } });
-  }
-
-  async function syncWalletHoldings() {
-    const address = walletAddress.trim();
-    if (!isWalletAddress(address)) {
-      setWalletStatus("請輸入正確的 0x 錢包地址");
-      return;
-    }
-    setSyncingWallet(true);
-    setWalletStatus("同步中...");
-    try {
-      const res = await fetch(`/api/wallet-holdings?address=${encodeURIComponent(address)}&t=${Date.now()}`, { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.message || data.error || "wallet sync failed");
-      const next = { ...holdings };
-      (data.holdings || []).forEach((item) => {
-        const qty = Number(item.quantity || item.balance || 0);
-        if (item.symbol && qty > 0) {
-          const old = getHolding(item.symbol);
-          next[item.symbol] = {
-            ...old,
-            balance: String(item.balance || item.quantity),
-            quantity: String(item.quantity || item.balance),
-            note: `鏈上同步｜${item.status}｜chain ${item.chainId}`,
-            walletAddress: address,
-            contractAddress: item.contractAddress,
-            chainId: item.chainId,
-            syncedAt: data.updatedAt
-          };
-        }
-      });
-      saveHoldings(next);
-      localStorage.setItem("discountHunterWalletAddress", address);
-      setWalletStatus(`同步完成：找到 ${data.activeCount || 0} 檔持倉`);
-    } catch (err) {
-      setWalletStatus(`同步失敗：${err.message}`);
-    } finally {
-      setSyncingWallet(false);
-    }
   }
 
   useEffect(() => {
@@ -170,6 +125,7 @@ export default function Home() {
   }), [assets]);
 
   const buyList = sortedAssets.filter((asset) => (asset.signal?.level || 0) > 0);
+  const watchList = sortedAssets.filter((asset) => (asset.signal?.level || 0) === 0);
   const totalAmount = buyList.reduce((sum, asset) => sum + parseAmount(asset.signal?.amount), 0);
   const portfolio = assets.reduce((sum, asset) => {
     const stats = getStats(asset, getHolding(asset.symbol));
@@ -179,10 +135,10 @@ export default function Home() {
 
   return <main className="page">
     <section className="hero compactHero">
-      <h1 style={{ fontSize: 34, fontWeight: 950, margin: "6px 0 4px" }}>DCA折價獵人</h1>
-      <div className="versionPill">V14 Wallet Sync Beta</div>
+      <h1 style={{ fontSize: 34, fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價追蹤</h1>
+      <div className="versionPill">V14.5 UI Clean Beta</div>
       <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
-      <p>真實資料源：Binance xStocks Public API｜Wallet 讀取：BSC balanceOf。</p>
+      <p>真實資料源：Binance xStocks Public API｜持倉數量規則：Balance 餘額。</p>
       <div className="update">更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive">{refreshing ? "自動更新中…" : "LIVE｜每5秒自動更新"}</div>
       {source && <div className="sourcePill">資料源：{source}</div>}
@@ -202,36 +158,35 @@ export default function Home() {
     <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: "2px solid #f59e0b" }}>
       <h2 style={{ fontSize: 20, fontWeight: 900, color: "#f59e0b", margin: "0 0 12px" }}>⚠️ 注意</h2>
       {buyList.length > 0 ? <>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", color: "#94a3b8", fontSize: 13, fontWeight: 800, paddingBottom: 8, borderBottom: "1px solid #334155" }}>
-          <div>標的</div><div style={{ textAlign: "center" }}>買點層級</div><div style={{ textAlign: "right" }}>建議投入</div>
+        <div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}>
+          <div>符合買點：{buyList.length}檔</div>
+          <div>建議投入：<span style={{ color: "#4ade80" }}>{totalAmount}U</span></div>
         </div>
-        {buyList.map((asset) => {
-          const level = asset.signal?.level || 0;
-          return <div key={asset.symbol} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "10px 8px", background: "#0f172a", borderRadius: 10, marginTop: 8 }}>
-            <div style={{ fontWeight: 900 }}>{asset.symbol}</div>
-            <div style={{ textAlign: "center", color: "#fcd34d", fontWeight: 900 }}>{ruleColors[level - 1]} {levelNames[level]}</div>
-            <div style={{ textAlign: "right", color: "#4ade80", fontWeight: 900 }}>{parseAmount(asset.signal?.amount)}U</div>
-          </div>;
-        })}
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", fontWeight: 900 }}><span>今日總投入</span><span style={{ color: "#4ade80" }}>{totalAmount}U</span></div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {buyList.map((asset) => {
+            const level = asset.signal?.level || 0;
+            return <div key={asset.symbol} style={{ padding: "10px 12px", background: "#0f172a", borderRadius: 10, fontWeight: 900, color: "#f8fafc" }}>
+              {ruleColors[level - 1]} {asset.symbol} {levelNames[level]}（{parseAmount(asset.signal?.amount)}U）
+            </div>;
+          })}
+        </div>
       </> : <div style={{ color: "#94a3b8", textAlign: "center" }}>今天無任何標的觸發買點。</div>}
     </section>
 
-    <details className="idleGroup" open style={{ marginTop: 16 }}>
-      <summary>V14 錢包同步</summary>
-      <section style={{ marginTop: 12, display: "grid", gap: 8 }}>
-        <input value={walletAddress} onChange={(e) => setWalletAddress(e.target.value)} placeholder="貼上 Binance Wallet / BSC 0x 地址" style={inputStyle} />
-        <button onClick={syncWalletHoldings} disabled={syncingWallet} style={buttonStyle}>{syncingWallet ? "同步中..." : "同步鏈上持倉"}</button>
-        <div style={{ color: "#cbd5e1", fontSize: 13 }}>{walletStatus || "只讀取公開鏈上餘額，不需要 API Key，不會交易。"}</div>
+    <section className="sectionTitle"><h2>監控清單</h2><p>買點區預設展開；未到買點預設收合。</p></section>
+    {buyList.length > 0 && <section className="list">
+      <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 買點區（{buyList.length}）</h3>
+      {buyList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} updateHolding={updateHolding} />)}
+    </section>}
+
+    <details className="idleGroup" style={{ marginTop: 16 }}>
+      <summary>📋 觀察區（{watchList.length}）｜展開未到買點標的</summary>
+      <section className="list" style={{ marginTop: 12 }}>
+        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} updateHolding={updateHolding} />)}
       </section>
     </details>
 
-    <section className="sectionTitle"><h2>監控清單</h2><p>排序：買點層級優先，其次依回撤幅度。</p></section>
-    <section className="list">
-      {sortedAssets.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={getHolding(asset.symbol)} updateHolding={updateHolding} />)}
-    </section>
-
-    <section className="infoFooter"><h2>V14 產品原則</h2><p>Binance 提供行情與 token metadata；鏈上 balanceOf 讀取真實 wallet 持倉；成本價先保留手動紀錄。</p></section>
+    <section className="infoFooter"><h2>V14.5 產品原則</h2><p>前台不再顯示錢包同步卡；後台持續朝全自動 Binance / BSC 資料管線前進。</p></section>
   </main>;
 }
 
