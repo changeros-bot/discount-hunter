@@ -6,17 +6,18 @@ const levelClasses = ["idle", "level1", "level2", "level3", "level4"];
 const REFRESH_MS = 5000;
 const REALTIME_LIMIT_SEC = 8;
 const DELAYED_LIMIT_SEC = 20;
+const MODEL_VERSION = "13.6";
 
 const SNAPSHOT = {
-  RKLBon: { quantity: 0.04643186, cost: 110.22, amount: 5.11802, buyDate: "2026/06/16", layer: 1 },
-  AVGOon: { quantity: 0.01260827, cost: 393.84, amount: 4.96575, buyDate: "2026/06/16", layer: 1 },
-  MRVLon: { quantity: 0.01656903, cost: 306.68, amount: 5.08161, buyDate: "2026/06/16", layer: 0 },
-  NVDAon: { quantity: 0.02384808, cost: 211.43, amount: 5.0423, buyDate: "2026/06/16", layer: 0 },
-  TSMon: { quantity: 0.01133038, cost: 441.19, amount: 4.99885, buyDate: "2026/06/16", layer: 0 },
-  AMDon: { quantity: 0.00915727, cost: 548.49, amount: 5.02267, buyDate: "2026/06/16", layer: 0 },
-  QQQon: { quantity: 0.00672656, cost: 745.9, amount: 5.01754, buyDate: "2026/06/16", layer: 0 },
-  GOOGLon: { quantity: 0.01350371, cost: 367.97, amount: 4.96886, buyDate: "2026/06/16", layer: 0 },
-  SPCXon: { quantity: 0.02306608, cost: 212.62, amount: 4.90445, buyDate: "2026/06/16", layer: 0 }
+  AMDon: { quantity: 0.0091571, amount: 4.99, buyDate: "2026/06/16", layer: 0 },
+  MRVLon: { quantity: 0.016591, amount: 4.99, buyDate: "2026/06/16", layer: 0 },
+  RKLBon: { quantity: 0.046432, amount: 4.99, buyDate: "2026/06/16", layer: 1 },
+  AVGOon: { quantity: 0.012659, amount: 4.99, buyDate: "2026/06/16", layer: 1 },
+  TSMon: { quantity: 0.011408, amount: 4.99, buyDate: "2026/06/16", layer: 0 },
+  QQQon: { quantity: 0.0067441, amount: 4.99, buyDate: "2026/06/16", layer: 0 },
+  GOOGLon: { quantity: 0.01353, amount: 4.99, buyDate: "2026/06/16", layer: 0 },
+  SPCXon: { quantity: 0.023336, amount: 4.99, buyDate: "2026/06/16", layer: 0 },
+  NVDAon: { quantity: 0.02387, amount: 4.99, buyDate: "2026/06/16", layer: 0 }
 };
 
 function parseAmount(value) {
@@ -47,17 +48,23 @@ function formatUpdateTime(isoString) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
+function buildDefaultHoldings() {
+  return Object.fromEntries(Object.keys(SNAPSHOT).map((symbol) => [symbol, getDefaultHolding(symbol)]));
+}
+
 function getDefaultHolding(symbol) {
   const s = SNAPSHOT[symbol];
-  if (!s) return { quantity: "", cost: "", amount: "", buyDate: "", layer: 0, executedLevels: [], note: "" };
+  if (!s) return { quantity: "", balance: "", cost: "", amount: "", buyDate: "", layer: 0, executedLevels: [], note: "" };
+  const cost = s.quantity > 0 ? s.amount / s.quantity : 0;
   return {
     quantity: String(s.quantity),
-    cost: String(s.cost),
+    balance: String(s.quantity),
+    cost: String(Number(cost.toFixed(6))),
     amount: String(s.amount),
     buyDate: s.buyDate,
     layer: s.layer,
     executedLevels: s.layer > 0 ? [s.layer] : [],
-    note: s.layer > 0 ? "第一買點｜依 Binance 錢包截圖同步" : "DCA｜依 Binance 錢包截圖同步"
+    note: s.layer > 0 ? "第一買點｜依 Binance 錢包餘額同步" : "DCA｜依 Binance 錢包餘額同步"
   };
 }
 
@@ -76,14 +83,14 @@ function getNextBuyPoint(asset) {
   }
 
   const target = rules[nextIndex];
-  const gap = Math.max(0, discount - target);
   const previous = nextIndex === 0 ? 0 : rules[nextIndex - 1];
+  const gap = Math.max(0, discount - target);
   const range = Math.abs(target - previous) || 1;
   const progress = Math.min(100, Math.max(0, ((previous - discount) / range) * 100));
 
   return {
     label: `${levelNames[nextIndex + 1]}買點`,
-    text: `還差 ${gap.toFixed(1)}% 到 ${target}%`,
+    text: `距${levelNames[nextIndex + 1]}買點 ${gap.toFixed(1)}%`,
     amount: `${amounts[nextIndex]}U`,
     progress,
     gapToNextLevel: gap,
@@ -92,14 +99,14 @@ function getNextBuyPoint(asset) {
 }
 
 function getHoldingStats(asset, holding) {
-  const quantity = Number(holding?.quantity || holding?.qty || 0);
+  const quantity = Number(holding?.balance || holding?.quantity || holding?.qty || 0);
   const cost = Number(holding?.cost || 0);
   const price = Number(asset?.price || 0);
-  const invested = quantity * cost;
+  const invested = Number(holding?.amount || 0) > 0 ? Number(holding.amount) : quantity * cost;
   const value = quantity * price;
   const pnl = value - invested;
   const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
-  return { quantity, cost, invested, value, pnl, pnlPct, hasPosition: quantity > 0 && cost > 0 && price > 0 };
+  return { quantity, cost, invested, value, pnl, pnlPct, hasPosition: quantity > 0 && invested > 0 && price > 0 };
 }
 
 export default function IndexV15() {
@@ -114,13 +121,24 @@ export default function IndexV15() {
   const [health, setHealth] = useState(null);
 
   useEffect(() => {
-    try { setHoldings(JSON.parse(localStorage.getItem("discountHunterHoldings") || "{}")); } catch { setHoldings({}); }
+    try {
+      const storedVersion = localStorage.getItem("discountHunterModelVersion");
+      if (storedVersion !== MODEL_VERSION) {
+        const defaults = buildDefaultHoldings();
+        setHoldings(defaults);
+        localStorage.setItem("discountHunterHoldings", JSON.stringify(defaults));
+        localStorage.setItem("discountHunterModelVersion", MODEL_VERSION);
+      } else {
+        setHoldings(JSON.parse(localStorage.getItem("discountHunterHoldings") || "{}"));
+      }
+    } catch { setHoldings(buildDefaultHoldings()); }
     try { setTradeHistory(JSON.parse(localStorage.getItem("discountHunterTradeHistory") || "[]")); } catch { setTradeHistory([]); }
   }, []);
 
   function saveHoldings(next) {
     setHoldings(next);
     localStorage.setItem("discountHunterHoldings", JSON.stringify(next));
+    localStorage.setItem("discountHunterModelVersion", MODEL_VERSION);
   }
 
   function saveHistory(next) {
@@ -128,12 +146,15 @@ export default function IndexV15() {
     localStorage.setItem("discountHunterTradeHistory", JSON.stringify(next));
   }
 
+  function getEffectiveHolding(symbol) {
+    return { ...getDefaultHolding(symbol), ...(holdings[symbol] || {}) };
+  }
+
   function updateHoldingField(symbol, field, value) {
     const next = {
       ...holdings,
       [symbol]: {
-        ...getDefaultHolding(symbol),
-        ...(holdings[symbol] || {}),
+        ...getEffectiveHolding(symbol),
         [field]: value
       }
     };
@@ -141,15 +162,18 @@ export default function IndexV15() {
   }
 
   function toggleExecutedLevel(symbol, level) {
-    const h = { ...getDefaultHolding(symbol), ...(holdings[symbol] || {}) };
+    const h = getEffectiveHolding(symbol);
     const current = h.executedLevels || [];
     const nextLevels = current.includes(level) ? current.filter((l) => l !== level) : [...current, level].sort();
-    updateHoldingField(symbol, "executedLevels", nextLevels);
-    updateHoldingField(symbol, "layer", nextLevels[nextLevels.length - 1] || 0);
+    const next = {
+      ...holdings,
+      [symbol]: { ...h, executedLevels: nextLevels, layer: nextLevels[nextLevels.length - 1] || 0 }
+    };
+    saveHoldings(next);
   }
 
   function recordTrade(asset, level) {
-    const h = { ...getDefaultHolding(asset.symbol), ...(holdings[asset.symbol] || {}) };
+    const h = getEffectiveHolding(asset.symbol);
     const amount = parseAmount(asset.amounts?.[level - 1] || asset.signal?.amount || 0);
     const record = {
       id: `${Date.now()}-${asset.symbol}-${level}`,
@@ -174,28 +198,27 @@ export default function IndexV15() {
   }
 
   function syncSnapshot() {
-    const nextHoldings = { ...holdings };
-    const newHistory = tradeHistory.filter((t) => t.note !== "依 Binance 錢包截圖同步");
+    const nextHoldings = buildDefaultHoldings();
+    const newHistory = tradeHistory.filter((t) => t.note !== "依 Binance 錢包餘額同步");
     Object.entries(SNAPSHOT).forEach(([symbol, s], index) => {
-      nextHoldings[symbol] = getDefaultHolding(symbol);
       newHistory.unshift({
-        id: `snapshot-${index}-${symbol}`,
+        id: `snapshot-${MODEL_VERSION}-${index}-${symbol}`,
         date: s.buyDate,
         symbol,
         level: s.layer,
         levelName: s.layer > 0 ? levelNames[s.layer] : "DCA",
         amount: s.amount,
-        price: s.cost,
-        note: "依 Binance 錢包截圖同步"
+        price: s.quantity > 0 ? s.amount / s.quantity : 0,
+        note: "依 Binance 錢包餘額同步"
       });
     });
     saveHoldings(nextHoldings);
     saveHistory(newHistory);
-    alert("已同步目前 9 檔持倉截圖資料。之後鏈上同步會覆蓋這裡。");
+    alert("已同步目前 9 檔 Binance 錢包餘額資料。之後鏈上同步會覆蓋這裡。");
   }
 
   function exportBackup() {
-    const payload = { version: "13.5", exportDate: new Date().toISOString(), holdings, tradeHistory };
+    const payload = { version: MODEL_VERSION, exportDate: new Date().toISOString(), holdings, tradeHistory };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -279,7 +302,7 @@ export default function IndexV15() {
   const idleList = dataReady ? sortedAssets.filter((a) => !a.signal?.level) : [];
   const totalAmount = buyList.reduce((sum, asset) => sum + parseAmount(asset.signal?.amount), 0);
   const portfolio = assets.reduce((sum, asset) => {
-    const stats = getHoldingStats(asset, holdings[asset.symbol]);
+    const stats = getHoldingStats(asset, getEffectiveHolding(asset.symbol));
     return {
       invested: sum.invested + stats.invested,
       value: sum.value + stats.value,
@@ -293,7 +316,7 @@ export default function IndexV15() {
     <main className="page">
       <section className="hero compactHero">
         <h1 style={{ fontSize: "34px", fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價獵人</h1>
-        <div className="versionPill">V13.5 測試版</div>
+        <div className="versionPill">V13.6 測試版</div>
         <h2 style={{ fontSize: "17px", margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
         <p>真實資料源：Binance xStocks Public API｜以 Binance 52週高點計算回撤。</p>
         <div className="update">更新：{formatUpdateTime(updatedAt)}</div>
@@ -322,15 +345,15 @@ export default function IndexV15() {
 
       <section className="quickRule"><div><span>🟢 第一層</span><strong>5U</strong></div><div><span>🟡 第二層</span><strong>10U</strong></div><div><span>🟠 第三層</span><strong>15U</strong></div><div><span>🔴 第四層</span><strong>20U</strong></div></section>
 
-      {dataReady && <section className="sectionTitle"><h2>監控清單</h2><p>沿用 V13 版型，只保留必要持倉資料模型。</p></section>}
+      {dataReady && <section className="sectionTitle"><h2>監控清單</h2><p>沿用 V13 版型；持倉以 Binance 錢包餘額為準。</p></section>}
       {dataReady && <section className="list">
-        {buyList.map((asset) => <AssetCard asset={asset} holding={holdings[asset.symbol]} key={asset.symbol} />)}
-        {idleList.length > 0 && <details className="idleGroup" style={{ marginTop: 16 }}><summary>尚未到買點｜{idleList.length} 檔</summary><div className="idleList">{idleList.map((asset) => <AssetCard asset={asset} holding={holdings[asset.symbol]} key={asset.symbol} />)}</div></details>}
+        {buyList.map((asset) => <AssetCard asset={asset} holding={getEffectiveHolding(asset.symbol)} key={asset.symbol} />)}
+        {idleList.length > 0 && <details className="idleGroup" style={{ marginTop: 16 }}><summary>尚未到買點｜{idleList.length} 檔</summary><div className="idleList">{idleList.map((asset) => <AssetCard asset={asset} holding={getEffectiveHolding(asset.symbol)} key={asset.symbol} />)}</div></details>}
       </section>}
 
       <details className="idleGroup" style={{ marginTop: 16 }}>
         <summary>持倉管理控制台</summary>
-        <HoldingsManager assets={assets} holdings={holdings} updateHoldingField={updateHoldingField} toggleExecutedLevel={toggleExecutedLevel} recordTrade={recordTrade} syncSnapshot={syncSnapshot} exportBackup={exportBackup} importBackup={importBackup} />
+        <HoldingsManager assets={assets} holdings={holdings} getEffectiveHolding={getEffectiveHolding} updateHoldingField={updateHoldingField} toggleExecutedLevel={toggleExecutedLevel} recordTrade={recordTrade} syncSnapshot={syncSnapshot} exportBackup={exportBackup} importBackup={importBackup} />
       </details>
 
       <details className="idleGroup" style={{ marginTop: 16 }}>
@@ -338,7 +361,7 @@ export default function IndexV15() {
         <TradeJournal tradeHistory={tradeHistory} deleteTrade={deleteTrade} />
       </details>
 
-      <section className="infoFooter"><h2>V13.5 產品原則</h2><p>以 V13 成功版為母版，只新增收合面板與真實持倉資料欄位。鏈上同步另列下一階段。</p></section>
+      <section className="infoFooter"><h2>V13.6 產品原則</h2><p>以 V13 成功版為母版。持倉看餘額，交易日誌看已買入，距離買點用真實數學比例。</p></section>
     </main>
   );
 }
@@ -365,16 +388,16 @@ function AssetCard({ asset, holding }) {
     <div className={`signal ${levelClass}`}>{level > 0 ? `${ruleColors[level - 1]} ${levelNames[level]}｜建議 ${parseAmount(asset.signal?.amount)}U` : "尚未到買點"}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>建議投入</span><strong>{parseAmount(asset.signal?.amount)}U</strong></div></div>
     <div className="nextBuyBox"><div className="nextBuyTop"><span>{nextBuy.label}</span><strong>{nextBuy.amount}</strong></div><p>{nextBuy.text}</p><div className="nextBuyTrack"><div style={{ width: `${nextBuy.progress}%` }} /></div></div>
-    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>我的持倉 / 未實現損益</summary><div className="dataGrid" style={{ marginTop: 12 }}><div><span>數量</span><strong>{formatNumber(stats.quantity, 8)}</strong></div><div><span>平均成本</span><strong>{formatNumber(stats.cost)}</strong></div><div><span>投入成本</span><strong>{formatNumber(stats.invested)}U</strong></div><div><span>市值</span><strong>{formatNumber(stats.value)}U</strong></div><div><span>損益</span><strong style={{ color: stats.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{formatNumber(stats.pnl)}U</strong></div><div><span>報酬</span><strong style={{ color: stats.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{stats.hasPosition ? stats.pnlPct.toFixed(2) : "0.00"}%</strong></div></div>{holding?.buyDate && <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>📅 買入日期：{holding.buyDate}</div>}{executedLevels.length > 0 && <div style={{ marginTop: 8, fontSize: 12, color: "#cbd5e1" }}>已執行：{executedLevels.map((l) => `${ruleColors[l - 1]}${levelNames[l]}`).join("、")}</div>}{holding?.note && <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>✏️ 備註：{holding.note}</div>}</details>
+    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>我的持倉 / 未實現損益</summary><div className="dataGrid" style={{ marginTop: 12 }}><div><span>持有數量</span><strong>{formatNumber(stats.quantity, 8)}</strong></div><div><span>平均成本</span><strong>{formatNumber(stats.cost)}</strong></div><div><span>投入成本</span><strong>{formatNumber(stats.invested)}U</strong></div><div><span>市值</span><strong>{formatNumber(stats.value)}U</strong></div><div><span>損益</span><strong style={{ color: stats.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{formatNumber(stats.pnl)}U</strong></div><div><span>報酬</span><strong style={{ color: stats.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{stats.hasPosition ? stats.pnlPct.toFixed(2) : "0.00"}%</strong></div></div>{holding?.buyDate && <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>📅 買入日期：{holding.buyDate}</div>}{executedLevels.length > 0 && <div style={{ marginTop: 8, fontSize: 12, color: "#cbd5e1" }}>已執行：{executedLevels.map((l) => `${ruleColors[l - 1]}${levelNames[l]}`).join("、")}</div>}{holding?.note && <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>✏️ 備註：{holding.note}</div>}</details>
     <div className="ruleBox"><h4>買點規則</h4>{asset.rules?.map((rule, idx) => <div key={idx} className={level === idx + 1 ? "rule activeRule" : "rule"}><span>{ruleColors[idx]} 第{idx + 1}層</span><strong>{rule}% → {asset.amounts?.[idx]}U</strong></div>)}</div>
   </div>;
 }
 
-function HoldingsManager({ assets, holdings, updateHoldingField, toggleExecutedLevel, recordTrade, syncSnapshot, exportBackup, importBackup }) {
+function HoldingsManager({ assets, getEffectiveHolding, updateHoldingField, toggleExecutedLevel, recordTrade, syncSnapshot, exportBackup, importBackup }) {
   return <section style={{ marginTop: 12 }}>
-    <button onClick={syncSnapshot} style={managerButton("#f59e0b", true)}>📥 同步目前9檔持倉截圖</button>
+    <button onClick={syncSnapshot} style={managerButton("#f59e0b", true)}>📥 同步目前9檔錢包餘額</button>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "10px 0" }}><button onClick={exportBackup} style={managerButton("#16a34a", true)}>⬇️ 匯出JSON</button><label style={{ ...managerButton("#7c3aed", true), textAlign: "center" }}>⬆️ 匯入JSON<input type="file" accept="application/json" onChange={importBackup} style={{ display: "none" }} /></label></div>
-    {assets.map((asset) => { const h = { ...getDefaultHolding(asset.symbol), ...(holdings[asset.symbol] || {}) }; return <div key={asset.symbol} style={{ background: "#0f172a", padding: 12, borderRadius: 12, border: "1px solid #334155", marginBottom: 12 }}><div style={{ fontWeight: 900, marginBottom: 8 }}>{asset.symbol}</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><input value={h.quantity || ""} onChange={(e) => updateHoldingField(asset.symbol, "quantity", e.target.value)} placeholder="quantity 數量" style={managerInput} /><input value={h.cost || ""} onChange={(e) => updateHoldingField(asset.symbol, "cost", e.target.value)} placeholder="cost 平均成本" style={managerInput} /><input value={h.buyDate || ""} onChange={(e) => updateHoldingField(asset.symbol, "buyDate", e.target.value)} placeholder="buyDate 2026/06/16" style={managerInput} /><input value={h.amount || ""} onChange={(e) => updateHoldingField(asset.symbol, "amount", e.target.value)} placeholder="amount 成交金額U" style={managerInput} /></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8 }}>{[1, 2, 3, 4].map((lvl) => <button key={lvl} onClick={() => toggleExecutedLevel(asset.symbol, lvl)} style={managerButton(h.executedLevels?.includes(lvl) ? "#2563eb" : "#1e293b", true)}>{h.executedLevels?.includes(lvl) ? "✅" : "⬜"} {lvl}</button>)}</div><button onClick={() => recordTrade(asset, asset.signal?.level || 1)} style={{ ...managerButton("#0ea5e9", true), marginTop: 8 }}>記錄目前買點</button></div>; })}
+    {assets.map((asset) => { const h = getEffectiveHolding(asset.symbol); return <div key={asset.symbol} style={{ background: "#0f172a", padding: 12, borderRadius: 12, border: "1px solid #334155", marginBottom: 12 }}><div style={{ fontWeight: 900, marginBottom: 8 }}>{asset.symbol}</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><input value={h.balance || h.quantity || ""} onChange={(e) => updateHoldingField(asset.symbol, "balance", e.target.value)} placeholder="balance 餘額/持有數量" style={managerInput} /><input value={h.amount || ""} onChange={(e) => updateHoldingField(asset.symbol, "amount", e.target.value)} placeholder="amount 投入成本U" style={managerInput} /><input value={h.cost || ""} onChange={(e) => updateHoldingField(asset.symbol, "cost", e.target.value)} placeholder="cost 平均成本" style={managerInput} /><input value={h.buyDate || ""} onChange={(e) => updateHoldingField(asset.symbol, "buyDate", e.target.value)} placeholder="buyDate 2026/06/16" style={managerInput} /></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8 }}>{[1, 2, 3, 4].map((lvl) => <button key={lvl} onClick={() => toggleExecutedLevel(asset.symbol, lvl)} style={managerButton(h.executedLevels?.includes(lvl) ? "#2563eb" : "#1e293b", true)}>{h.executedLevels?.includes(lvl) ? "✅" : "⬜"} {lvl}</button>)}</div><button onClick={() => recordTrade(asset, asset.signal?.level || 1)} style={{ ...managerButton("#0ea5e9", true), marginTop: 8 }}>記錄目前買點</button></div>; })}
   </section>;
 }
 
