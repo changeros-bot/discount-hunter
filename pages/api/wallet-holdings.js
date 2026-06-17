@@ -1,4 +1,5 @@
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
+const BSC_RPC_URL = process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org";
 
 const WATCHLIST = ["NVDAon", "TSMon", "AMDon", "AVGOon", "MRVLon", "VRTon", "RKLBon", "LITEon", "SPCXon"];
 
@@ -35,6 +36,53 @@ function isEvmAddress(value) {
   return /^0x[a-fA-F0-9]{40}$/.test(String(value || ""));
 }
 
+function padAddress(address) {
+  return String(address).toLowerCase().replace(/^0x/, "").padStart(64, "0");
+}
+
+function hexToBigInt(hex) {
+  if (!hex || hex === "0x") return 0n;
+  return BigInt(hex);
+}
+
+function formatUnits(value, decimals) {
+  const base = 10n ** BigInt(decimals);
+  const whole = value / base;
+  const fraction = value % base;
+  const text = fraction.toString().padStart(decimals, "0").replace(/0+$/, "");
+  return text ? `${whole}.${text}` : whole.toString();
+}
+
+async function rpcCall(url, to, data) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] })
+  });
+  const json = await response.json();
+  if (json.error) throw new Error(json.error.message || "rpc_error");
+  return json.result;
+}
+
+async function getDecimals(chainId, contractAddress) {
+  if (chainId !== 56) return 18;
+  try {
+    const result = await rpcCall(BSC_RPC_URL, contractAddress, "0x313ce567");
+    const n = Number(hexToBigInt(result));
+    return Number.isFinite(n) && n >= 0 && n <= 36 ? n : 18;
+  } catch {
+    return 18;
+  }
+}
+
+async function getBalance(chainId, contractAddress, walletAddress, decimals) {
+  if (chainId !== 56) throw new Error("unsupported_chain");
+  const data = `0x70a08231${padAddress(walletAddress)}`;
+  const result = await rpcCall(BSC_RPC_URL, contractAddress, data);
+  const raw = hexToBigInt(result);
+  return { rawBalance: raw.toString(), balance: formatUnits(raw, decimals), quantity: Number(formatUnits(raw, decimals)) };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
@@ -51,37 +99,61 @@ export default async function handler(req, res) {
     const tokenList = asArray(json);
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
 
-    const holdings = WATCHLIST.map((symbol) => {
+    const holdings = await Promise.all(WATCHLIST.map(async (symbol) => {
       const meta = bySymbol.get(symbol);
       const chainId = getChainId(meta);
       const contractAddress = getContractAddress(meta);
-      return {
-        symbol,
-        walletAddress,
-        chainId,
-        contractAddress,
-        found: Boolean(meta && contractAddress),
-        balance: "0",
-        quantity: 0,
-        value: 0,
-        source: "Binance xStocks metadata ready; on-chain balance connector pending",
-        status: meta && contractAddress ? "metadata_ready" : "missing_contract"
-      };
-    });
+
+      if (!meta || !contractAddress) {
+        return { symbol, walletAddress, chainId, contractAddress, found: false, balance: "0", quantity: 0, value: 0, status: "missing_contract" };
+      }
+
+      try {
+        const decimals = await getDecimals(chainId, contractAddress);
+        const balanceData = await getBalance(chainId, contractAddress, walletAddress, decimals);
+        return {
+          symbol,
+          walletAddress,
+          chainId,
+          contractAddress,
+          found: true,
+          decimals,
+          ...balanceData,
+          value: 0,
+          source: "Binance xStocks metadata + BSC balanceOf",
+          status: Number(balanceData.quantity) > 0 ? "holding_found" : "zero_balance"
+        };
+      } catch (error) {
+        return {
+          symbol,
+          walletAddress,
+          chainId,
+          contractAddress,
+          found: true,
+          balance: "0",
+          quantity: 0,
+          value: 0,
+          source: "Binance xStocks metadata",
+          status: error.message || "balance_error"
+        };
+      }
+    }));
+
+    const activeHoldings = holdings.filter((h) => Number(h.quantity || 0) > 0);
 
     res.status(200).json({
       ok: true,
-      version: "14.0-wallet-metadata",
+      version: "14.0-wallet-balance-bsc",
       walletAddress,
       updatedAt: new Date().toISOString(),
-      source: "Binance xStocks metadata",
-      note: "V14 first step: wallet address and token contract mapping are ready. BalanceOf sync will be enabled after RPC provider is configured.",
+      source: "Binance xStocks metadata + BSC public RPC balanceOf",
+      note: "V14 beta: BNB Chain balanceOf enabled. Cost basis and market value will be calculated in the next step.",
       count: holdings.length,
-      activeCount: 0,
+      activeCount: activeHoldings.length,
       totalValue: 0,
       holdings
     });
   } catch (error) {
-    res.status(500).json({ ok: false, error: "wallet_holdings_metadata_failed", message: error.message });
+    res.status(500).json({ ok: false, error: "wallet_holdings_balance_failed", message: error.message });
   }
 }
