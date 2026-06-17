@@ -199,7 +199,7 @@ export default function Home() {
 
       {dataReady && (
         <section style={{ margin: "16px 0", padding: "16px", background: "#1e293b", borderRadius: "16px", border: "2px solid #3b82f6", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}>
-          <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#3b82f6", margin: "0 0 12px 0", display: "flex", alignItems: "center", gap: "8px" }}>⚡ 今日執行</h2>
+          <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#3b82f6", margin: "0 0 12px 0", display: "flex", alignItems: "center", gap: "8px" }}>⚡ 注意名單</h2>
           {buyList.length > 0 ? (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "0 8px 8px 8px", borderBottom: "1px solid #334155", color: "#94a3b8", fontSize: "13px", fontWeight: 700 }}>
@@ -221,8 +221,10 @@ export default function Home() {
                 })}
               </div>
               <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 900, fontSize: "16px", color: "#ffffff" }}>
-                <span>今日總投入</span>
-                <span style={{ color: "#4ade80", fontSize: "20px" }}>{totalAmount}U</span>
+                <span>{portfolio.invested > 0 ? "已投入" : "需投入"}</span>
+<span style={{ color: "#4ade80", fontSize: "20px" }}>
+  {portfolio.invested > 0 ? `${formatNumber(portfolio.invested)}U` : `${totalAmount}U`}
+</span>
               </div>
             </div>
           ) : (
