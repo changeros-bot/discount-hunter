@@ -1,5 +1,6 @@
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
 const BSC_RPC_URL = process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org";
+const BSC_CHAIN_ID = 56;
 
 // V14 holding rule: current position quantity must use wallet Balance / ERC20 balanceOf, not Bought.
 // Actual Josh wallet baseline: 9 BSC xStocks currently held in Binance Wallet.
@@ -30,8 +31,9 @@ function getContractAddress(item) {
   return item?.contractAddress || item?.address || item?.tokenAddress || "";
 }
 
-function getChainId(item) {
-  return Number(item?.chainId || item?.chainID || item?.chain?.id || 56);
+function getChainId() {
+  // Binance metadata can return null/empty chainId for xStocks. Josh's current xStocks are all BSC.
+  return BSC_CHAIN_ID;
 }
 
 function isEvmAddress(value) {
@@ -66,8 +68,7 @@ async function rpcCall(url, to, data) {
   return json.result;
 }
 
-async function getDecimals(chainId, contractAddress) {
-  if (chainId !== 56) return 18;
+async function getDecimals(contractAddress) {
   try {
     const result = await rpcCall(BSC_RPC_URL, contractAddress, "0x313ce567");
     const n = Number(hexToBigInt(result));
@@ -77,8 +78,7 @@ async function getDecimals(chainId, contractAddress) {
   }
 }
 
-async function getBalance(chainId, contractAddress, walletAddress, decimals) {
-  if (chainId !== 56) throw new Error("unsupported_chain");
+async function getBalance(contractAddress, walletAddress, decimals) {
   const data = `0x70a08231${padAddress(walletAddress)}`;
   const result = await rpcCall(BSC_RPC_URL, contractAddress, data);
   const raw = hexToBigInt(result);
@@ -112,8 +112,8 @@ export default async function handler(req, res) {
       }
 
       try {
-        const decimals = await getDecimals(chainId, contractAddress);
-        const balanceData = await getBalance(chainId, contractAddress, walletAddress, decimals);
+        const decimals = await getDecimals(contractAddress);
+        const balanceData = await getBalance(contractAddress, walletAddress, decimals);
         return {
           symbol,
           walletAddress,
@@ -137,7 +137,7 @@ export default async function handler(req, res) {
           balance: "0",
           quantity: 0,
           value: 0,
-          source: "Binance xStocks metadata",
+          source: "Binance xStocks metadata + BSC forced chainId",
           holdingQuantitySource: "Balance / ERC20 balanceOf",
           status: error.message || "balance_error"
         };
@@ -148,11 +148,11 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ok: true,
-      version: "14.1-wallet-balance-bsc",
+      version: "14.2-wallet-balance-bsc-forced",
       walletAddress,
       updatedAt: new Date().toISOString(),
       source: "Binance xStocks metadata + BSC public RPC balanceOf",
-      note: "V14.1: current holding quantity uses Balance / ERC20 balanceOf, not Bought. Cost basis is tracked separately.",
+      note: "V14.2: all xStocks forced to BSC chainId 56. Current holding quantity uses Balance / ERC20 balanceOf, not Bought.",
       count: holdings.length,
       activeCount: activeHoldings.length,
       totalValue: 0,
