@@ -1,7 +1,9 @@
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
 const BSC_RPC_URL = process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org";
 
-const WATCHLIST = ["NVDAon", "TSMon", "AMDon", "AVGOon", "MRVLon", "VRTon", "RKLBon", "LITEon", "SPCXon"];
+// V14 holding rule: current position quantity must use wallet Balance / ERC20 balanceOf, not Bought.
+// Actual Josh wallet baseline: 9 BSC xStocks currently held in Binance Wallet.
+const WATCHLIST = ["GOOGLon", "NVDAon", "QQQon", "TSMon", "SPCXon", "AMDon", "MRVLon", "RKLBon", "AVGOon"];
 
 const headers = {
   accept: "application/json, text/plain, */*",
@@ -80,7 +82,8 @@ async function getBalance(chainId, contractAddress, walletAddress, decimals) {
   const data = `0x70a08231${padAddress(walletAddress)}`;
   const result = await rpcCall(BSC_RPC_URL, contractAddress, data);
   const raw = hexToBigInt(result);
-  return { rawBalance: raw.toString(), balance: formatUnits(raw, decimals), quantity: Number(formatUnits(raw, decimals)) };
+  const balance = formatUnits(raw, decimals);
+  return { rawBalance: raw.toString(), balance, quantity: Number(balance) };
 }
 
 export default async function handler(req, res) {
@@ -121,6 +124,7 @@ export default async function handler(req, res) {
           ...balanceData,
           value: 0,
           source: "Binance xStocks metadata + BSC balanceOf",
+          holdingQuantitySource: "Balance / ERC20 balanceOf",
           status: Number(balanceData.quantity) > 0 ? "holding_found" : "zero_balance"
         };
       } catch (error) {
@@ -134,6 +138,7 @@ export default async function handler(req, res) {
           quantity: 0,
           value: 0,
           source: "Binance xStocks metadata",
+          holdingQuantitySource: "Balance / ERC20 balanceOf",
           status: error.message || "balance_error"
         };
       }
@@ -143,11 +148,11 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ok: true,
-      version: "14.0-wallet-balance-bsc",
+      version: "14.1-wallet-balance-bsc",
       walletAddress,
       updatedAt: new Date().toISOString(),
       source: "Binance xStocks metadata + BSC public RPC balanceOf",
-      note: "V14 beta: BNB Chain balanceOf enabled. Cost basis and market value will be calculated in the next step.",
+      note: "V14.1: current holding quantity uses Balance / ERC20 balanceOf, not Bought. Cost basis is tracked separately.",
       count: holdings.length,
       activeCount: activeHoldings.length,
       totalValue: 0,
