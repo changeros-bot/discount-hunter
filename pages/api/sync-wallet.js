@@ -5,7 +5,7 @@ const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/x
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { calculatePnL, summarizePortfolio } = require("../../lib/xstocks/pnl");
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -17,8 +17,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "walletAddress is required" });
     }
 
-    const transfers = await fetchBep20Transfers(walletAddress.trim());
-    const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress.trim());
+    const cleanWalletAddress = walletAddress.trim();
+    const transfers = await fetchBep20Transfers(cleanWalletAddress);
+    const buyRecords = buildBuyRecordsFromTransfers(transfers, cleanWalletAddress);
     const holdings = calculateHoldings(buyRecords);
     const symbols = holdings.map((h) => h.symbol);
 
@@ -36,3 +37,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: error.message || "Unknown error" });
   }
 }
+
+module.exports = handler;
