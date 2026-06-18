@@ -1,6 +1,6 @@
 // DCA折價獵人 V15.0 - Sync Wallet API Route
 
-const { fetchBep20Transfers } = require("../../lib/xstocks/bscscan");
+const { fetchBep20TransfersLegacy } = require("../../lib/xstocks/bscscan-legacy");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { calculatePnL, summarizePortfolio } = require("../../lib/xstocks/pnl");
@@ -18,7 +18,7 @@ async function handler(req, res) {
     }
 
     const cleanWalletAddress = walletAddress.trim();
-    const transfers = await fetchBep20Transfers(cleanWalletAddress);
+    const transfers = await fetchBep20TransfersLegacy(cleanWalletAddress);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, cleanWalletAddress);
     const holdings = calculateHoldings(buyRecords);
     const symbols = holdings.map((h) => h.symbol);
