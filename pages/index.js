@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "14.10-final-candidate";
+const MODEL_VERSION = "15.0-wallet-sync";
 const REFRESH_MS = 5000;
 const CONFIRMED_HELD_SYMBOLS = (process.env.NEXT_PUBLIC_HELD_SYMBOLS || "GOOGLon,NVDAon,QQQon,TSMon,SPCXon,AMDon,MRVLon,RKLBon,AVGOon")
   .split(",")
@@ -21,6 +21,20 @@ function formatNumber(value, digits = 2) {
   return number.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
+function formatCurrency(value, digits = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "--";
+  const sign = number > 0 ? "+" : number < 0 ? "-" : "";
+  return `${sign}$${Math.abs(number).toLocaleString(undefined, { maximumFractionDigits: digits })}`;
+}
+
+function formatPct(value, digits = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "--";
+  const pct = number * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(digits)}%`;
+}
+
 function formatTime(isoString) {
   if (!isoString) return "讀取中";
   const d = new Date(isoString);
@@ -37,7 +51,7 @@ function getCurrentSignalLevel(asset) {
 
 function getCompletedLevel(asset) {
   // V14 only marks the first 5U layer as completed for confirmed holdings.
-  // More layers require V15 Ledger.
+  // V15 Wallet Sync below calculates real cost/PnL from BSC transfers.
   return isHeld(asset.symbol) ? 1 : 0;
 }
 
@@ -81,6 +95,10 @@ export default function Home() {
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletSummary, setWalletSummary] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState("");
 
   useEffect(() => {
     try { localStorage.setItem("discountHunterModelVersion", MODEL_VERSION); } catch {}
@@ -107,6 +125,30 @@ export default function Home() {
     const priceTimer = setInterval(loadPrices, REFRESH_MS);
     return () => clearInterval(priceTimer);
   }, []);
+
+  async function handleWalletSync() {
+    if (!walletAddress.trim()) {
+      setWalletError("請輸入 BSC 錢包地址");
+      return;
+    }
+
+    setWalletLoading(true);
+    setWalletError("");
+    try {
+      const res = await fetch("/api/sync-wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: walletAddress.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "錢包同步失敗");
+      setWalletSummary(data);
+    } catch (err) {
+      setWalletError(err.message || "錢包同步失敗");
+    } finally {
+      setWalletLoading(false);
+    }
+  }
 
   const enhancedAssets = useMemo(() => assets.map((asset) => {
     const completedLevel = getCompletedLevel(asset);
@@ -140,9 +182,9 @@ export default function Home() {
   return <main className="page">
     <section className="hero compactHero">
       <h1 style={{ fontSize: 34, fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價追蹤</h1>
-      <div className="versionPill">V14.10 Final Candidate</div>
+      <div className="versionPill">V15.0 Wallet Sync</div>
       <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
-      <p>V14只做買點監控、已持有標記、LIVE狀態與收合排序。成本 / PnL / Ledger 留到 V15。</p>
+      <p>V15 保留 V14 買點監控，並新增 BSC 錢包同步、成本、目前市值與未實現損益。</p>
       <div className="update">更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive">{refreshing ? "自動更新中…" : "LIVE｜每5秒自動更新"}</div>
       {source && <div className="sourcePill">行情資料源：{source}</div>}
@@ -156,10 +198,19 @@ export default function Home() {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
         <div style={{ padding: 12, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900 }}>Market API</span><strong style={{ display: "block", color: marketOnline ? "#4ade80" : "#f87171", marginTop: 4 }}>{marketOnline ? "🟢 Online" : "🔴 Offline"}</strong></div>
-        <div style={{ padding: 12, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900 }}>Position Source</span><strong style={{ display: "block", color: "#f59e0b", marginTop: 4 }}>🟡 V14標記</strong></div>
+        <div style={{ padding: 12, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900 }}>Position Source</span><strong style={{ display: "block", color: walletSummary ? "#4ade80" : "#f59e0b", marginTop: 4 }}>{walletSummary ? "🟢 BscScan" : "🟡 待同步"}</strong></div>
       </div>
-      <div style={{ color: "#cbd5e1", fontWeight: 900, textAlign: "center", marginTop: 12 }}>成本 / 損益 / 總投入：V15 Ledger 後恢復</div>
+      <div style={{ color: "#cbd5e1", fontWeight: 900, textAlign: "center", marginTop: 12 }}>成本 / 損益 / 總投入：V15 Wallet Sync 已接入</div>
     </section>
+
+    <WalletSyncSection
+      walletAddress={walletAddress}
+      setWalletAddress={setWalletAddress}
+      walletSummary={walletSummary}
+      walletLoading={walletLoading}
+      walletError={walletError}
+      onSync={handleWalletSync}
+    />
 
     <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: "2px solid #f59e0b" }}>
       <h2 style={{ fontSize: 20, fontWeight: 900, color: "#f59e0b", margin: "0 0 12px" }}>⚠️ 注意</h2>
@@ -209,8 +260,75 @@ export default function Home() {
 
     <BuyPointGuide assets={sortedAssets} />
 
-    <section className="infoFooter"><h2>V14.10 封板規則</h2><p>V14只處理買點監控、LIVE狀態、持有標記與排序。Portfolio、Ledger、成本、PnL、自動交易全部留到V15以後。</p></section>
+    <section className="infoFooter"><h2>V15.0 Wallet Sync 說明</h2><p>V15.0 使用 BscScan BEP-20 transfers 計算 xStocks 成本與未實現損益。Token 現價目前為 mock 價格；V15.1 再接真實 token price。</p></section>
   </main>;
+}
+
+function WalletSyncSection({ walletAddress, setWalletAddress, walletSummary, walletLoading, walletError, onSync }) {
+  const pnlColor = walletSummary && walletSummary.portfolioUnrealizedPnL >= 0 ? "#4ade80" : "#f87171";
+
+  return <section style={{ margin: "16px 0", padding: 16, background: "#020617", borderRadius: 16, border: "2px solid #22c55e" }}>
+    <h2 style={{ fontSize: 22, fontWeight: 950, color: "#4ade80", margin: "0 0 8px" }}>V15 錢包同步</h2>
+    <p style={{ color: "#cbd5e1", fontWeight: 800, margin: "0 0 12px" }}>輸入 BSC 錢包地址，從 BscScan 抓取 xStocks transfer，計算真實投入、成本與未實現損益。</p>
+    <input
+      value={walletAddress}
+      onChange={(e) => setWalletAddress(e.target.value)}
+      placeholder="0x... BSC wallet address"
+      style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(148,163,184,.35)", background: "#0f172a", color: "#f8fafc", fontWeight: 850, marginBottom: 10 }}
+    />
+    <button
+      onClick={onSync}
+      disabled={walletLoading}
+      style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: 0, background: walletLoading ? "#334155" : "#2563eb", color: "white", fontWeight: 950, fontSize: 16 }}
+    >{walletLoading ? "同步中…" : "同步錢包持倉"}</button>
+    {walletError && <div style={{ marginTop: 10, padding: 10, background: "rgba(239,68,68,.18)", color: "#fecaca", borderRadius: 10, fontWeight: 900 }}>⚠️ {walletError}</div>}
+
+    {walletSummary && <>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
+        <WalletMetric label="實際投入" value={`$${formatNumber(walletSummary.actualTotalInvested)}`} />
+        <WalletMetric label="已定價成本" value={`$${formatNumber(walletSummary.portfolioTotalCost)}`} />
+        <WalletMetric label="目前市值" value={`$${formatNumber(walletSummary.portfolioMarketValue)}`} />
+        <WalletMetric label="未實現損益" value={formatCurrency(walletSummary.portfolioUnrealizedPnL)} color={pnlColor} />
+        <WalletMetric label="報酬率" value={formatPct(walletSummary.portfolioPnLPct)} color={pnlColor} />
+        <WalletMetric label="未定價成本" value={`$${formatNumber(walletSummary.unpricedCost)}`} color={walletSummary.unpricedCost > 0 ? "#facc15" : "#e2e8f0"} />
+      </div>
+      {walletSummary.unpricedHoldingsCount > 0 && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(250,204,21,.14)", color: "#fde68a", fontWeight: 900 }}>⚠️ {walletSummary.unpricedHoldingsCount} 檔缺少 token 價格，未納入總損益。</div>}
+      <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 10 }}>最後同步：{formatTime(walletSummary.lastSyncTime)}</div>
+      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+        {(walletSummary.holdings || []).map((holding) => <WalletHoldingCard key={holding.symbol} holding={holding} />)}
+      </div>
+    </>}
+  </section>;
+}
+
+function WalletMetric({ label, value, color }) {
+  return <div style={{ padding: 12, background: "#0f172a", borderRadius: 12 }}>
+    <span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span>
+    <strong style={{ display: "block", color: color || "#f8fafc", marginTop: 4, fontSize: 17 }}>{value}</strong>
+  </div>;
+}
+
+function WalletHoldingCard({ holding }) {
+  const pnlColor = holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171";
+  const warning = holding.excludeFromPortfolioPnL ? "價格資料缺失，未納入總損益" : holding.priceWarning;
+
+  return <div style={{ padding: 12, background: "#0f172a", borderRadius: 12, border: "1px solid rgba(148,163,184,.22)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
+      <strong style={{ color: "#f8fafc", fontSize: 18 }}>{holding.symbol}</strong>
+      <strong style={{ color: pnlColor }}>{formatPct(holding.pnlPct, 1)}</strong>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}>
+      <div>持有數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(holding.quantity, 6)}</strong></div>
+      <div>總成本<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.totalCost)}</strong></div>
+      <div>平均成本<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.averageCost)}</strong></div>
+      <div>Token 現價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.tokenPrice)}</strong></div>
+      <div>目前市值<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.currentValue)}</strong></div>
+      <div>未實現損益<br /><strong style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}</strong></div>
+      <div>溢價/折價<br /><strong style={{ color: holding.premiumDiscountPct >= 0 ? "#60a5fa" : "#fb923c" }}>{formatPct(holding.premiumDiscountPct)}</strong></div>
+      <div>買入次數<br /><strong style={{ color: "#f8fafc" }}>{holding.buyCount || 0}</strong></div>
+    </div>
+    {warning && <div style={{ marginTop: 10, padding: 8, background: "rgba(250,204,21,.14)", color: "#fde68a", borderRadius: 8, fontWeight: 850 }}>⚠️ {warning}</div>}
+  </div>;
 }
 
 function ProgressBar({ nextBuy }) {
@@ -245,7 +363,7 @@ function AssetCard({ asset }) {
     <div className="signal">{signalText}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>本層建議</span><strong>{actionAmount}U</strong></div></div>
     <div className="nextBuyBox"><ProgressBar nextBuy={nextBuy} /></div>
-    <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>V14：只標記是否已持有第一層。成本 / 損益 / 總投入留到 V15 Ledger。</div>
+    <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>V15：上方 Wallet Sync 顯示真實成本 / 損益；此卡片維持買點監控。</div>
   </div>;
 }
 
