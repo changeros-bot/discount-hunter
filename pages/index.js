@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "14.7-position-aware";
+const MODEL_VERSION = "14.10-final-candidate";
 const REFRESH_MS = 5000;
-const WALLET_ADDRESS = process.env.NEXT_PUBLIC_WALLET_ADDRESS || "0x657f5cbBC1FBE274299a6be52b5e46C3C6a9AD76";
+const CONFIRMED_HELD_SYMBOLS = (process.env.NEXT_PUBLIC_HELD_SYMBOLS || "GOOGLon,NVDAon,QQQon,TSMon,SPCXon,AMDon,MRVLon,RKLBon,AVGOon")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
@@ -23,18 +27,18 @@ function formatTime(isoString) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
-function hasWalletHolding(holding) {
-  return Number(holding?.quantity || holding?.balance || 0) > 0;
-}
-
-function getCompletedLevel(holding) {
-  // V14.7 rule: if wallet already holds this xStock, the first 5U layer is completed.
-  // Higher completed layers require Binance trade ledger in V15.
-  return hasWalletHolding(holding) ? 1 : 0;
+function isHeld(symbol) {
+  return CONFIRMED_HELD_SYMBOLS.includes(symbol);
 }
 
 function getCurrentSignalLevel(asset) {
   return asset.signal?.level || 0;
+}
+
+function getCompletedLevel(asset) {
+  // V14 only marks the first 5U layer as completed for confirmed holdings.
+  // More layers require V15 Ledger.
+  return isHeld(asset.symbol) ? 1 : 0;
 }
 
 function getActionAmount(asset, completedLevel) {
@@ -52,14 +56,16 @@ function getNextBuyPoint(asset, completedLevel = 0) {
 
   const nextIndex = rules.findIndex((rule, index) => index >= completedLevel && discount > rule);
   if (nextIndex === -1) {
-    const targetIndex = Math.min(completedLevel, amounts.length - 1);
-    const nextTarget = amounts[targetIndex] || amounts[amounts.length - 1] || 0;
+    const targetIndex = Math.min(completedLevel, rules.length - 1);
     const nextRule = rules[targetIndex];
     const prevRule = targetIndex === 0 ? 0 : Number(rules[targetIndex - 1]);
-    if (nextRule == null) return { currentAmount: `${amounts[amounts.length - 1] || 0}U`, targetAmount: "完成", progress: 100 };
     const range = Math.abs(Number(nextRule) - prevRule) || 1;
     const progress = Math.min(100, Math.max(0, ((prevRule - discount) / range) * 100));
-    return { currentAmount: `${completedLevel === 0 ? 0 : amounts[completedLevel - 1] || 0}U`, targetAmount: `${nextTarget}U`, progress };
+    return {
+      currentAmount: `${completedLevel === 0 ? 0 : amounts[completedLevel - 1] || 0}U`,
+      targetAmount: `${amounts[targetIndex] || 0}U`,
+      progress
+    };
   }
 
   const target = Number(rules[nextIndex]);
@@ -75,8 +81,6 @@ export default function Home() {
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [walletData, setWalletData] = useState(null);
-  const [walletError, setWalletError] = useState("");
 
   useEffect(() => {
     try { localStorage.setItem("discountHunterModelVersion", MODEL_VERSION); } catch {}
@@ -99,83 +103,62 @@ export default function Home() {
       }
     }
 
-    async function loadWallet() {
-      try {
-        const res = await fetch(`/api/wallet-holdings?address=${encodeURIComponent(WALLET_ADDRESS)}&t=${Date.now()}`, { cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.message || data.error || "wallet sync failed");
-        setWalletData(data);
-        setWalletError("");
-      } catch (err) {
-        setWalletError(err.message || "wallet balance 讀取失敗");
-      }
-    }
-
     loadPrices();
-    loadWallet();
     const priceTimer = setInterval(loadPrices, REFRESH_MS);
-    const walletTimer = setInterval(loadWallet, REFRESH_MS);
-    return () => { clearInterval(priceTimer); clearInterval(walletTimer); };
+    return () => clearInterval(priceTimer);
   }, []);
 
-  const walletBySymbol = useMemo(() => {
-    const map = new Map();
-    (walletData?.holdings || []).forEach((h) => map.set(h.symbol, h));
-    return map;
-  }, [walletData]);
-
   const enhancedAssets = useMemo(() => assets.map((asset) => {
-    const holding = walletBySymbol.get(asset.symbol);
-    const completedLevel = getCompletedLevel(holding);
+    const completedLevel = getCompletedLevel(asset);
     const signalLevel = getCurrentSignalLevel(asset);
     const actionAmount = getActionAmount(asset, completedLevel);
+    const held = isHeld(asset.symbol);
     return {
       ...asset,
-      holding,
       completedLevel,
       signalLevel,
       actionAmount,
-      hasHolding: hasWalletHolding(holding),
+      hasHolding: held,
       isActionable: signalLevel > completedLevel && actionAmount > 0
     };
-  }), [assets, walletBySymbol]);
+  }), [assets]);
 
   const sortedAssets = useMemo(() => [...enhancedAssets].sort((a, b) => {
     if (a.isActionable !== b.isActionable) return a.isActionable ? -1 : 1;
-    const aLevel = a.signalLevel || 0;
-    const bLevel = b.signalLevel || 0;
-    if (aLevel !== bLevel) return bLevel - aLevel;
+    if (a.hasHolding !== b.hasHolding) return a.hasHolding ? -1 : 1;
+    if ((a.signalLevel || 0) !== (b.signalLevel || 0)) return (b.signalLevel || 0) - (a.signalLevel || 0);
     return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
   }), [enhancedAssets]);
 
   const actionList = sortedAssets.filter((asset) => asset.isActionable);
-  const buyPointHeldList = sortedAssets.filter((asset) => asset.signalLevel > 0 && !asset.isActionable);
+  const heldList = sortedAssets.filter((asset) => asset.hasHolding);
+  const buyPointHeldList = sortedAssets.filter((asset) => asset.signalLevel > 0 && asset.hasHolding && !asset.isActionable);
   const watchList = sortedAssets.filter((asset) => asset.signalLevel === 0);
   const totalAmount = actionList.reduce((sum, asset) => sum + Number(asset.actionAmount || 0), 0);
-  const activeWalletCount = (walletData?.holdings || []).filter((h) => Number(h.quantity || h.balance || 0) > 0).length;
+  const marketOnline = assets.length > 0 && !error;
 
   return <main className="page">
     <section className="hero compactHero">
       <h1 style={{ fontSize: 34, fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價追蹤</h1>
-      <div className="versionPill">V14.7 Position Aware</div>
+      <div className="versionPill">V14.10 Final Candidate</div>
       <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
-      <p>封板規則：只顯示 Binance 行情與 BSC Wallet Balance。已持有標的視為第一層完成，不重複提醒買同一層。</p>
+      <p>V14只做買點監控、已持有標記、LIVE狀態與收合排序。成本 / PnL / Ledger 留到 V15。</p>
       <div className="update">更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive">{refreshing ? "自動更新中…" : "LIVE｜每5秒自動更新"}</div>
       {source && <div className="sourcePill">行情資料源：{source}</div>}
-      {walletData?.updatedAt && <div className="sourcePill">Wallet Balance：{formatTime(walletData.updatedAt)}</div>}
       {error && <div className="dataGuard">{error}</div>}
-      {walletError && <div className="dataGuard">Wallet：{walletError}</div>}
     </section>
 
     <section className="warRoom">
       <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div><span>Wallet持倉</span><strong>{walletData ? `${activeWalletCount}檔` : "讀取中"}</strong></div>
-        <div><span>行情狀態</span><strong>{assets.length > 0 ? `${assets.length}檔` : "讀取中"}</strong></div>
+        <div><span>已確認持有</span><strong>{heldList.length}檔</strong></div>
+        <div><span>行情狀態</span><strong>{marketOnline ? "LIVE" : "異常"}</strong></div>
       </div>
-      <div style={{ color: "#cbd5e1", fontWeight: 900, textAlign: "center", marginTop: 12 }}>
-        成本 / 損益 / 總投入：待 Binance 真實交易紀錄串接，暫不顯示
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div style={{ padding: 12, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900 }}>Market API</span><strong style={{ display: "block", color: marketOnline ? "#4ade80" : "#f87171", marginTop: 4 }}>{marketOnline ? "🟢 Online" : "🔴 Offline"}</strong></div>
+        <div style={{ padding: 12, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900 }}>Position Source</span><strong style={{ display: "block", color: "#f59e0b", marginTop: 4 }}>🟡 V14標記</strong></div>
       </div>
+      <div style={{ color: "#cbd5e1", fontWeight: 900, textAlign: "center", marginTop: 12 }}>成本 / 損益 / 總投入：V15 Ledger 後恢復</div>
     </section>
 
     <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: "2px solid #f59e0b" }}>
@@ -189,35 +172,44 @@ export default function Home() {
           {actionList.map((asset) => {
             const level = asset.signalLevel || 0;
             return <div key={asset.symbol} style={{ padding: "10px 12px", background: "#0f172a", borderRadius: 10, fontWeight: 900, color: "#f8fafc" }}>
-              {ruleColors[level - 1]} {asset.symbol} {levelNames[level]}（{asset.actionAmount}U）
+              {ruleColors[level - 1]} {asset.symbol} {levelNames[level]}（{asset.actionAmount}U）{asset.hasHolding ? "｜加碼" : "｜新買"}
             </div>;
           })}
         </div>
-      </> : <div style={{ color: "#94a3b8", textAlign: "center", fontWeight: 900 }}>目前沒有新的可執行買點。已持有的第一層不重複提醒。</div>}
+      </> : <div style={{ color: "#94a3b8", textAlign: "center", fontWeight: 900 }}>目前沒有新的可執行買點。已持有第一層不重複提醒。</div>}
       {buyPointHeldList.length > 0 && <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(148,163,184,.25)", color: "#cbd5e1", fontWeight: 900 }}>
-        已達買點但已持有：{buyPointHeldList.map((a) => a.symbol).join("、")}
+        已達買點但第一層已完成：{buyPointHeldList.map((a) => a.symbol).join("、")}
       </div>}
+    </section>
+
+    <section style={{ margin: "16px 0", padding: 16, background: "#0f172a", borderRadius: 16, border: "1px solid rgba(148,163,184,.25)" }}>
+      <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f8fafc", margin: "0 0 10px" }}>我的持倉</h2>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {heldList.map((asset) => <span key={asset.symbol} style={{ padding: "8px 10px", borderRadius: 999, background: "#1e293b", color: "#e2e8f0", fontWeight: 900 }}>✓ {asset.symbol}</span>)}
+      </div>
     </section>
 
     <section className="sectionTitle"><h2>監控清單</h2><p>可執行買點優先；已持有標的顯示第一層完成。</p></section>
     {actionList.length > 0 && <section className="list">
       <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 可執行買點（{actionList.length}）</h3>
-      {actionList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={asset.holding} />)}
+      {actionList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}
     </section>}
 
     {buyPointHeldList.length > 0 && <section className="list" style={{ marginTop: 16 }}>
       <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>✅ 已持有買點區（{buyPointHeldList.length}）</h3>
-      {buyPointHeldList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={asset.holding} />)}
+      {buyPointHeldList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}
     </section>}
 
     <details className="idleGroup" style={{ marginTop: 16 }}>
       <summary>📋 觀察區（{watchList.length}）｜展開未到買點標的</summary>
       <section className="list" style={{ marginTop: 12 }}>
-        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} holding={asset.holding} />)}
+        {watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}
       </section>
     </details>
 
-    <section className="infoFooter"><h2>V14.7 封板前規則</h2><p>所有正式數字必須來自 Binance / BSC 真實資料源。已持有標的以 Wallet Balance 判斷第一層完成，避免重複買入。</p></section>
+    <BuyPointGuide assets={sortedAssets} />
+
+    <section className="infoFooter"><h2>V14.10 封板規則</h2><p>V14只處理買點監控、LIVE狀態、持有標記與排序。Portfolio、Ledger、成本、PnL、自動交易全部留到V15以後。</p></section>
   </main>;
 }
 
@@ -234,17 +226,15 @@ function ProgressBar({ nextBuy }) {
   </div>;
 }
 
-function AssetCard({ asset, holding }) {
+function AssetCard({ asset }) {
   const level = asset.signalLevel || asset.signal?.level || 0;
-  const completedLevel = asset.completedLevel || getCompletedLevel(holding);
+  const completedLevel = asset.completedLevel || getCompletedLevel(asset);
   const actionAmount = asset.actionAmount ?? getActionAmount(asset, completedLevel);
   const nextBuy = getNextBuyPoint(asset, completedLevel);
-  const balance = holding?.balance || holding?.quantity || "0";
-  const balanceStatus = holding?.status || "waiting_wallet";
-  const held = hasWalletHolding(holding);
+  const held = asset.hasHolding || isHeld(asset.symbol);
   const signalText = level > 0
     ? actionAmount > 0
-      ? `${ruleColors[level - 1]} ${levelNames[level]}｜建議 ${actionAmount}U`
+      ? `${ruleColors[level - 1]} ${levelNames[level]}｜${held ? "加碼" : "建議"} ${actionAmount}U`
       : `✅ 第一層已持有｜等待下一層`
     : held
       ? `✅ 第一層已持有｜尚未到下一層`
@@ -255,9 +245,21 @@ function AssetCard({ asset, holding }) {
     <div className="signal">{signalText}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>本層建議</span><strong>{actionAmount}U</strong></div></div>
     <div className="nextBuyBox"><ProgressBar nextBuy={nextBuy} /></div>
-    <details className="nextBuyBox"><summary style={{ cursor: "pointer", fontWeight: 900 }}>Wallet 持倉餘額</summary>
-      <div className="dataGrid" style={{ marginTop: 12 }}><div><span>BSC Balance</span><strong>{formatNumber(balance, 8)}</strong></div><div><span>持倉狀態</span><strong>{held ? "第一層完成" : balanceStatus}</strong></div><div><span>Chain</span><strong>{holding?.chainId || 56}</strong></div><div><span>來源</span><strong>balanceOf</strong></div></div>
-      <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>V14.7：持倉數量來自 BSC balanceOf。成本 / 損益 / 總投入待 Binance 真實交易紀錄串接後恢復。</div>
-    </details>
+    <div style={{ marginTop: 8, padding: "6px 10px", background: "#1e293b", borderRadius: 6, fontSize: 12, color: "#cbd5e1", borderLeft: "3px solid #3b82f6" }}>V14：只標記是否已持有第一層。成本 / 損益 / 總投入留到 V15 Ledger。</div>
   </div>;
+}
+
+function BuyPointGuide({ assets }) {
+  return <section className="infoFooter" style={{ marginTop: 18 }}>
+    <h2>個股買點說明</h2>
+    <p>以下買點以「距離52週高點回撤」判斷；SpaceX 若未滿52週，依上市以來高點計算。已持有第一層者，V14不再重複提醒第一層。</p>
+    <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+      {assets.map((asset) => <div key={asset.symbol} style={{ padding: 12, background: "#0f172a", borderRadius: 12, border: "1px solid rgba(148,163,184,.2)" }}>
+        <div style={{ fontWeight: 950, color: "#f8fafc", marginBottom: 6 }}>{asset.symbol}｜{asset.name}</div>
+        <div style={{ display: "grid", gap: 4, color: "#cbd5e1", fontWeight: 850, fontSize: 13 }}>
+          {(asset.rules || []).map((rule, index) => <div key={index}>{ruleColors[index]} {levelNames[index + 1]}：回撤達 {Math.abs(Number(rule))}%｜建議 {asset.amounts?.[index] || 0}U</div>)}
+        </div>
+      </div>)}
+    </div>
+  </section>;
 }
