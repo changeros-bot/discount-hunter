@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.2-live-wallet-home";
+const MODEL_VERSION = "15.2-live-wallet-ui";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
@@ -205,8 +205,8 @@ export default function Home() {
 
     <WalletSyncSection walletSummary={walletSummary} walletLoading={walletLoading} walletError={walletError} onSync={syncWallet} />
 
-    <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: "2px solid #f59e0b" }}>
-      <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 12px" }}>今日決策</h2>
+    <section style={{ margin: "16px 0", padding: 16, background: "#1e293b", borderRadius: 16, border: actionList.length > 0 ? "2px solid #f59e0b" : "1px solid rgba(148,163,184,.25)" }}>
+      <h2 style={{ fontSize: 20, fontWeight: 950, color: actionList.length > 0 ? "#f59e0b" : "#94a3b8", margin: "0 0 12px" }}>今日決策</h2>
       {actionList.length > 0 ? <>
         <div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}>
           <div>可執行買點：{actionList.length}檔</div>
@@ -266,9 +266,12 @@ function WalletSyncSection({ walletSummary, walletLoading, walletError, onSync }
         <WalletMetric label="報酬率" value={formatPct(walletSummary.portfolioPnLPct)} color={pnlColor} />
       </div>
       <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 10 }}>最後同步：{formatTime(walletSummary.lastSyncTime || walletSummary.checkedAt)}</div>
-      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-        {(walletSummary.holdings || []).map((holding) => <WalletHoldingCard key={holding.symbol} holding={holding} />)}
-      </div>
+      <details style={{ marginTop: 12 }}>
+        <summary style={{ color: "#cbd5e1", fontWeight: 950, cursor: "pointer" }}>展開持倉明細（{walletSummary.holdings?.length || 0}）</summary>
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          {(walletSummary.holdings || []).map((holding) => <WalletHoldingCard key={holding.symbol} holding={holding} />)}
+        </div>
+      </details>
     </>}
   </section>;
 }
@@ -287,7 +290,7 @@ function WalletHoldingCard({ holding }) {
   return <div style={{ padding: 12, background: "#0f172a", borderRadius: 12, border: "1px solid rgba(148,163,184,.22)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
       <strong style={{ color: "#f8fafc", fontSize: 18 }}>{holding.symbol}</strong>
-      <strong style={{ color: pnlColor }}>{formatPct(holding.pnlPct, 1)}</strong>
+      <strong style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}｜{formatPct(holding.pnlPct, 1)}</strong>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}>
       <div>數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(holding.quantity, 6)}</strong></div>
@@ -332,6 +335,10 @@ function AssetCard({ asset }) {
     <div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div>
     <div className="signal">{signalText}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>本層建議</span><strong>{actionAmount}U</strong></div></div>
+    {asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}>
+      <div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div>
+      <div>持倉損益<br /><strong style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div>
+    </div>}
     <div className="nextBuyBox"><ProgressBar nextBuy={nextBuy} /></div>
   </div>;
 }
