@@ -251,6 +251,8 @@ function StatusTile({ label, online, onlineText, offlineText }) {
 
 function WalletSyncSection({ walletSummary, walletLoading, walletError, onSync }) {
   const pnlColor = walletSummary && walletSummary.portfolioUnrealizedPnL >= 0 ? "#4ade80" : "#f87171";
+  const tokenSources = walletSummary?.debugCounts?.tokenPriceSources || [];
+  const referenceSources = walletSummary?.debugCounts?.referencePriceSources || [];
 
   return <section style={{ margin: "16px 0", padding: 16, background: "#020617", borderRadius: 16, border: "2px solid #22c55e" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -264,6 +266,10 @@ function WalletSyncSection({ walletSummary, walletLoading, walletError, onSync }
         <WalletMetric label="目前市值" value={`$${formatNumber(walletSummary.portfolioMarketValue)}`} />
         <WalletMetric label="未實現損益" value={formatCurrency(walletSummary.portfolioUnrealizedPnL)} color={pnlColor} />
         <WalletMetric label="報酬率" value={formatPct(walletSummary.portfolioPnLPct)} color={pnlColor} />
+      </div>
+      <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "#0f172a", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
+        PnL價格源：{tokenSources.join("、") || walletSummary.priceSource || "讀取中"}<br />
+        Reference價格源：{referenceSources.join("、") || walletSummary.referencePriceSource || "讀取中"}
       </div>
       <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 10 }}>最後同步：{formatTime(walletSummary.lastSyncTime || walletSummary.checkedAt)}</div>
       <details style={{ marginTop: 12 }}>
