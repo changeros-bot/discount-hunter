@@ -1,4 +1,4 @@
-// DCA折價獵人 V15.1 - Background Wallet Sync API Route
+// DCA Discount Hunter V15.2 - Background Wallet Sync API Route
 // Reads WALLET_ADDRESS from Vercel Environment Variables by default.
 // Optional body.walletAddress is kept only as a development fallback.
 
@@ -45,6 +45,16 @@ async function handler(req, res) {
       ...summary,
       walletAddress: `${cleanWalletAddress.slice(0, 6)}...${cleanWalletAddress.slice(-4)}`,
       positionSource: bodyWalletAddress ? "manual_body" : "env_wallet_address",
+      debugCounts: {
+        walletAddressLength: cleanWalletAddress.length,
+        totalTransfers: transfers.length,
+        buyRecordsCount: buyRecords.length,
+        holdingsCount: holdings.length,
+        tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
+        referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
+        buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => String(r.symbol || "").toUpperCase()))).sort(),
+        holdingSymbols: holdings.map((h) => h.symbol),
+      },
     });
   } catch (error) {
     console.error("sync-wallet error:", error);
