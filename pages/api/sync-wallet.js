@@ -45,6 +45,8 @@ async function handler(req, res) {
       ...summary,
       walletAddress: `${cleanWalletAddress.slice(0, 6)}...${cleanWalletAddress.slice(-4)}`,
       positionSource: bodyWalletAddress ? "manual_body" : "env_wallet_address",
+      priceSource: "binance_xstocks_live",
+      referencePriceSource: "binance_stock_reference_live",
       debugCounts: {
         walletAddressLength: cleanWalletAddress.length,
         totalTransfers: transfers.length,
@@ -52,6 +54,8 @@ async function handler(req, res) {
         holdingsCount: holdings.length,
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
+        tokenPriceSources: Array.from(new Set(Object.values(tokenPrices || {}).map((p) => p.source).filter(Boolean))).sort(),
+        referencePriceSources: Array.from(new Set(Object.values(referencePrices || {}).map((p) => p.source).filter(Boolean))).sort(),
         buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => String(r.symbol || "").toUpperCase()))).sort(),
         holdingSymbols: holdings.map((h) => h.symbol),
       },
