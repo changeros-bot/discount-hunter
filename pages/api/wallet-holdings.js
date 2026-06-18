@@ -9,9 +9,6 @@ const BSC_RPC_URLS = [
   "https://bsc.publicnode.com"
 ].filter(Boolean);
 const BSC_CHAIN_ID = 56;
-
-// V14 holding rule: current position quantity must use wallet Balance / ERC20 balanceOf, not Bought.
-// Actual Josh wallet baseline: 9 BSC xStocks currently held in Binance Wallet.
 const WATCHLIST = ["GOOGLon", "NVDAon", "QQQon", "TSMon", "SPCXon", "AMDon", "MRVLon", "RKLBon", "AVGOon"];
 
 const headers = {
@@ -36,17 +33,58 @@ function getSymbol(item) {
   return item?.symbol || item?.ticker || item?.tokenSymbol || item?.stockSymbol || item?.assetSymbol;
 }
 
-function getContractAddress(item) {
-  return item?.contractAddress || item?.address || item?.tokenAddress || "";
-}
-
-function getChainId() {
-  // Binance metadata can return null/empty chainId for xStocks. Josh's current xStocks are all BSC.
-  return BSC_CHAIN_ID;
-}
-
 function isEvmAddress(value) {
   return /^0x[a-fA-F0-9]{40}$/.test(String(value || ""));
+}
+
+function looksLikeBscContext(path, value) {
+  const text = `${path} ${String(value || "")}`.toLowerCase();
+  return text.includes("bsc") || text.includes("bnb") || text.includes("binance smart chain") || text.includes("binance-smart-chain") || text.includes("56");
+}
+
+function collectEvmContracts(node, path = "root", context = "") {
+  const results = [];
+  if (!node || typeof node !== "object") return results;
+
+  if (Array.isArray(node)) {
+    node.forEach((item, index) => {
+      results.push(...collectEvmContracts(item, `${path}[${index}]`, context));
+    });
+    return results;
+  }
+
+  const localContextParts = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (["chainId", "chainID", "network", "chain", "chainName", "networkName", "blockchain"].includes(key)) {
+      localContextParts.push(`${key}:${typeof value === "object" ? JSON.stringify(value) : String(value)}`);
+    }
+  }
+  const nextContext = `${context} ${localContextParts.join(" ")}`;
+
+  for (const [key, value] of Object.entries(node)) {
+    const currentPath = `${path}.${key}`;
+    if (typeof value === "string" && isEvmAddress(value)) {
+      results.push({ address: value, path: currentPath, context: nextContext, isBscCandidate: looksLikeBscContext(currentPath, nextContext) });
+    } else if (value && typeof value === "object") {
+      results.push(...collectEvmContracts(value, currentPath, nextContext));
+    }
+  }
+  return results;
+}
+
+function selectContract(item) {
+  const directCandidates = [
+    { address: item?.contractAddress, path: "contractAddress", context: "direct" },
+    { address: item?.address, path: "address", context: "direct" },
+    { address: item?.tokenAddress, path: "tokenAddress", context: "direct" }
+  ].filter((x) => isEvmAddress(x.address)).map((x) => ({ ...x, isBscCandidate: looksLikeBscContext(x.path, x.context) }));
+
+  const nestedCandidates = collectEvmContracts(item);
+  const candidates = [...directCandidates, ...nestedCandidates]
+    .filter((x, index, arr) => arr.findIndex((y) => y.address.toLowerCase() === x.address.toLowerCase()) === index);
+
+  const bscCandidate = candidates.find((x) => x.isBscCandidate) || candidates.find((x) => x.context.toLowerCase().includes("chainid:56"));
+  return bscCandidate || candidates[0] || null;
 }
 
 function padAddress(address) {
@@ -133,27 +171,11 @@ export default async function handler(req, res) {
 
     const holdings = await Promise.all(WATCHLIST.map(async (symbol) => {
       const meta = bySymbol.get(symbol);
-      const chainId = getChainId(meta);
-      const contractAddress = getContractAddress(meta);
+      const selected = meta ? selectContract(meta) : null;
+      const contractAddress = selected?.address || "";
 
       if (!meta || !contractAddress) {
-        return { symbol, walletAddress, chainId, contractAddress, found: false, balance: "0", quantity: 0, value: 0, status: "missing_contract" };
-      }
-
-      if (!isEvmAddress(contractAddress)) {
-        return {
-          symbol,
-          walletAddress,
-          chainId,
-          contractAddress,
-          found: true,
-          balance: "0",
-          quantity: 0,
-          value: 0,
-          source: "Binance xStocks metadata",
-          holdingQuantitySource: "skipped_non_evm_contract",
-          status: "unsupported_non_evm_contract"
-        };
+        return { symbol, walletAddress, chainId: BSC_CHAIN_ID, contractAddress, found: Boolean(meta), balance: "0", quantity: 0, value: 0, status: "missing_bsc_evm_contract" };
       }
 
       try {
@@ -162,13 +184,15 @@ export default async function handler(req, res) {
         return {
           symbol,
           walletAddress,
-          chainId,
+          chainId: BSC_CHAIN_ID,
           contractAddress,
+          contractSource: selected.path,
+          contractContext: selected.context,
           found: true,
           decimals: decimalsData.decimals,
           ...balanceData,
           value: 0,
-          source: "Binance xStocks metadata + BSC balanceOf",
+          source: "Binance xStocks metadata nested BSC contract + BSC balanceOf",
           holdingQuantitySource: "Balance / ERC20 balanceOf",
           status: Number(balanceData.quantity) > 0 ? "holding_found" : "zero_balance",
           decimalsRpcUrl: decimalsData.rpcUrl
@@ -177,13 +201,15 @@ export default async function handler(req, res) {
         return {
           symbol,
           walletAddress,
-          chainId,
+          chainId: BSC_CHAIN_ID,
           contractAddress,
+          contractSource: selected.path,
+          contractContext: selected.context,
           found: true,
           balance: "0",
           quantity: 0,
           value: 0,
-          source: "Binance xStocks metadata + BSC forced chainId",
+          source: "Binance xStocks metadata nested BSC contract + BSC balanceOf",
           holdingQuantitySource: "Balance / ERC20 balanceOf",
           status: error.message || "balance_error"
         };
@@ -194,11 +220,11 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ok: true,
-      version: "14.8-wallet-balance-rpc-fallbacks",
+      version: "14.9-wallet-nested-bsc-contracts",
       walletAddress,
       updatedAt: new Date().toISOString(),
-      source: "Binance xStocks metadata + BSC public RPC balanceOf",
-      note: "V14.8: validates EVM contract addresses and uses multiple BSC RPC fallbacks. Current holding quantity uses Balance / ERC20 balanceOf, not Bought.",
+      source: "Binance xStocks metadata + nested BSC/EVM contract discovery + BSC public RPC balanceOf",
+      note: "V14.9: recursively searches Binance xStocks metadata for BSC/EVM contract addresses before calling balanceOf.",
       count: holdings.length,
       activeCount: activeHoldings.length,
       totalValue: 0,
