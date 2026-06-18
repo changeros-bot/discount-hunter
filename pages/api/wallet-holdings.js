@@ -1,5 +1,13 @@
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
-const BSC_RPC_URL = process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org";
+const BSC_RPC_URLS = [
+  process.env.BSC_RPC_URL,
+  "https://bsc-dataseed.binance.org",
+  "https://bsc-dataseed1.binance.org",
+  "https://bsc-dataseed2.binance.org",
+  "https://bsc-dataseed3.binance.org",
+  "https://bsc-dataseed4.binance.org",
+  "https://bsc.publicnode.com"
+].filter(Boolean);
 const BSC_CHAIN_ID = 56;
 
 // V14 holding rule: current position quantity must use wallet Balance / ERC20 balanceOf, not Bought.
@@ -12,7 +20,7 @@ const headers = {
   lang: "en",
   origin: "https://www.binance.com",
   referer: "https://www.binance.com/en/markets/overview/rwa",
-  "user-agent": "discount-hunter-v14"
+  "user-agent": "discount-hunter-v14-wallet-balance"
 };
 
 function asArray(value) {
@@ -20,6 +28,7 @@ function asArray(value) {
   if (Array.isArray(value?.data?.list)) return value.data.list;
   if (Array.isArray(value?.data)) return value.data;
   if (Array.isArray(value?.list)) return value.list;
+  if (Array.isArray(value?.result)) return value.result;
   return [];
 }
 
@@ -57,33 +66,53 @@ function formatUnits(value, decimals) {
   return text ? `${whole}.${text}` : whole.toString();
 }
 
-async function rpcCall(url, to, data) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] })
-  });
-  const json = await response.json();
-  if (json.error) throw new Error(json.error.message || "rpc_error");
-  return json.result;
+async function rpcCallOne(url, to, data) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] })
+    });
+    const json = await response.json();
+    if (json.error) throw new Error(json.error.message || "rpc_error");
+    return json.result;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function rpcCall(to, data) {
+  let lastError = null;
+  for (const url of BSC_RPC_URLS) {
+    try {
+      const result = await rpcCallOne(url, to, data);
+      return { result, rpcUrl: url };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("all_rpc_failed");
 }
 
 async function getDecimals(contractAddress) {
   try {
-    const result = await rpcCall(BSC_RPC_URL, contractAddress, "0x313ce567");
+    const { result, rpcUrl } = await rpcCall(contractAddress, "0x313ce567");
     const n = Number(hexToBigInt(result));
-    return Number.isFinite(n) && n >= 0 && n <= 36 ? n : 18;
+    return { decimals: Number.isFinite(n) && n >= 0 && n <= 36 ? n : 18, rpcUrl };
   } catch {
-    return 18;
+    return { decimals: 18, rpcUrl: "fallback_default_18" };
   }
 }
 
 async function getBalance(contractAddress, walletAddress, decimals) {
   const data = `0x70a08231${padAddress(walletAddress)}`;
-  const result = await rpcCall(BSC_RPC_URL, contractAddress, data);
+  const { result, rpcUrl } = await rpcCall(contractAddress, data);
   const raw = hexToBigInt(result);
   const balance = formatUnits(raw, decimals);
-  return { rawBalance: raw.toString(), balance, quantity: Number(balance) };
+  return { rawBalance: raw.toString(), balance, quantity: Number(balance), rpcUrl };
 }
 
 export default async function handler(req, res) {
@@ -111,21 +140,38 @@ export default async function handler(req, res) {
         return { symbol, walletAddress, chainId, contractAddress, found: false, balance: "0", quantity: 0, value: 0, status: "missing_contract" };
       }
 
-      try {
-        const decimals = await getDecimals(contractAddress);
-        const balanceData = await getBalance(contractAddress, walletAddress, decimals);
+      if (!isEvmAddress(contractAddress)) {
         return {
           symbol,
           walletAddress,
           chainId,
           contractAddress,
           found: true,
-          decimals,
+          balance: "0",
+          quantity: 0,
+          value: 0,
+          source: "Binance xStocks metadata",
+          holdingQuantitySource: "skipped_non_evm_contract",
+          status: "unsupported_non_evm_contract"
+        };
+      }
+
+      try {
+        const decimalsData = await getDecimals(contractAddress);
+        const balanceData = await getBalance(contractAddress, walletAddress, decimalsData.decimals);
+        return {
+          symbol,
+          walletAddress,
+          chainId,
+          contractAddress,
+          found: true,
+          decimals: decimalsData.decimals,
           ...balanceData,
           value: 0,
           source: "Binance xStocks metadata + BSC balanceOf",
           holdingQuantitySource: "Balance / ERC20 balanceOf",
-          status: Number(balanceData.quantity) > 0 ? "holding_found" : "zero_balance"
+          status: Number(balanceData.quantity) > 0 ? "holding_found" : "zero_balance",
+          decimalsRpcUrl: decimalsData.rpcUrl
         };
       } catch (error) {
         return {
@@ -148,11 +194,11 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ok: true,
-      version: "14.2-wallet-balance-bsc-forced",
+      version: "14.8-wallet-balance-rpc-fallbacks",
       walletAddress,
       updatedAt: new Date().toISOString(),
       source: "Binance xStocks metadata + BSC public RPC balanceOf",
-      note: "V14.2: all xStocks forced to BSC chainId 56. Current holding quantity uses Balance / ERC20 balanceOf, not Bought.",
+      note: "V14.8: validates EVM contract addresses and uses multiple BSC RPC fallbacks. Current holding quantity uses Balance / ERC20 balanceOf, not Bought.",
       count: holdings.length,
       activeCount: activeHoldings.length,
       totalValue: 0,
