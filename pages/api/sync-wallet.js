@@ -1,5 +1,6 @@
-// DCA Discount Hunter V15.6 - Homepage Wallet Sync API
+// DCA Discount Hunter V15.7 - Homepage Wallet Sync API
 // Keeps the old /api/sync-wallet endpoint, but now uses the Moralis-first wallet ledger engine.
+// Fix: case-insensitive xStocks price lookup so RKLBon / RKLBON / RKLB can all resolve.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
@@ -16,6 +17,10 @@ function isEvmAddress(value) {
 
 function upper(value) {
   return String(value || "").trim().toUpperCase();
+}
+
+function stripOn(symbol) {
+  return upper(symbol).replace(/ON$/, "");
 }
 
 function safeNumber(value) {
@@ -35,8 +40,21 @@ function uniqueTransfers(transfers) {
   return out;
 }
 
+function normalizePriceMap(prices) {
+  const map = {};
+  for (const [key, value] of Object.entries(prices || {})) {
+    const k = upper(key);
+    map[k] = value;
+    map[stripOn(k)] = value;
+    if (!k.endsWith("ON")) map[`${k}ON`] = value;
+  }
+  return map;
+}
+
 function pickPrice(prices, symbol) {
-  return prices?.[upper(symbol)] || prices?.[symbol] || null;
+  const map = normalizePriceMap(prices);
+  const s = upper(symbol);
+  return map[s] || map[stripOn(s)] || map[`${stripOn(s)}ON`] || null;
 }
 
 function enrichHoldings(holdings, tokenPrices, referencePrices) {
@@ -133,7 +151,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.6-sync-wallet-moralis-ledger",
+      version: "15.7-sync-wallet-price-key-fix",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
@@ -161,6 +179,7 @@ async function handler(req, res) {
         referencePriceSources,
         buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => upper(r.symbol)))).sort(),
         holdingSymbols: holdings.map((h) => h.symbol),
+        holdingPriceDebug: holdings.map((h) => ({ symbol: h.symbol, quantity: h.quantity, tokenPrice: h.tokenPrice, currentValue: h.currentValue, totalCost: h.totalCost, priceSource: h.priceSource })),
       },
     });
   } catch (error) {
