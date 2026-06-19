@@ -98,17 +98,22 @@ function enrichHoldingsWithMarket(holdings, prices) {
     return {
       ...holding,
       symbol,
+      quantity,
+      totalCost,
       marketPrice,
+      tokenPrice: marketPrice,
       marketValue,
       currentValue: marketValue,
       positionValue: marketValue,
       unrealizedPnL,
+      pnlPct: returnPct,
       returnPct,
       returnPctDisplay: returnPct * 100,
       priceSource: priceItem?.source || null,
       priceUpdated: new Date().toISOString(),
       rawTokenPrice: priceItem?.rawTokenPrice || null,
       sharesMultiplier: priceItem?.sharesMultiplier || null,
+      ...(marketPrice > 0 ? {} : { priceWarning: `No live xStocks price found for ${symbol}` }),
     };
   });
 }
@@ -149,12 +154,15 @@ export default async function handler(req, res) {
     const marketValue = holdings.reduce((sum, h) => sum + safeNumber(h.marketValue), 0);
     const unrealizedPnL = marketValue - totalCost;
     const returnPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
+    const priceSources = Array.from(new Set(holdings.map((h) => h.priceSource).filter(Boolean))).sort();
 
     res.status(200).json({
       ok: true,
-      version: "15.6-wallet-ledger-market-pnl",
+      version: "15.6-wallet-ledger-market-pnl-compatible",
       walletAddress,
       updatedAt: new Date().toISOString(),
+      checkedAt: new Date().toISOString(),
+      lastSyncTime: new Date().toISOString(),
       source: hasMoralisKey() ? "Moralis wallet token transfers" : hasMegaNodeKey() ? "MegaNode / NodeReal wallet transfers" : "Legacy fallback",
       configured: {
         moralis: hasMoralisKey(),
@@ -178,6 +186,22 @@ export default async function handler(req, res) {
       unrealizedPnL,
       returnPct,
       returnPctDisplay: returnPct * 100,
+      // Backward-compatible field names consumed by pages/index.js WalletSyncSection.
+      actualTotalInvested: totalCost,
+      portfolioTotalCost: totalCost,
+      portfolioMarketValue: marketValue,
+      portfolioUnrealizedPnL: unrealizedPnL,
+      portfolioPnLPct: returnPct,
+      priceSource: priceSources.join("、") || "binance_xstocks_live",
+      referencePriceSource: "binance_stock_reference_live",
+      debugCounts: {
+        totalTransfers: transfers.length,
+        buyRecordsCount: buyRecords.length,
+        holdingsCount: holdings.length,
+        tokenPriceSymbols: Object.keys(livePrices || {}).sort(),
+        tokenPriceSources: priceSources,
+        holdingSymbols: holdings.map((h) => h.symbol),
+      },
       holdings,
       buyRecords,
       sampleTransfers: transfers.slice(0, Number(req.query.sample || 20)),
