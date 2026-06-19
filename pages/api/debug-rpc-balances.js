@@ -6,6 +6,22 @@ function norm(value) {
   return String(value || "").trim();
 }
 
+function summarizeRaw(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    keys: Object.keys(raw),
+    symbol: raw.symbol,
+    ticker: raw.ticker,
+    chainId: raw.chainId,
+    contractAddress: raw.contractAddress,
+    tokenAddress: raw.tokenAddress,
+    address: raw.address,
+    multiplier: raw.multiplier,
+    rawSymbol: raw.rawSymbol,
+    name: raw.name,
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -35,6 +51,8 @@ module.exports = async function handler(req, res) {
         symbol: m.symbol,
         chainId: m.chainId,
         contractAddress: m.contractAddress,
+        allEvmAddresses: m.allEvmAddresses || [],
+        rawSummary: summarizeRaw(m.raw),
       })),
       checkedBlockNumber: rpc.checkedBlockNumber,
       holdingsCount: rpc.holdings.length,
