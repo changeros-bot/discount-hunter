@@ -1,92 +1,179 @@
-// DCA Discount Hunter V15.4 - Background Wallet Sync API Route
-// Reads WALLET_ADDRESS from Vercel Environment Variables by default.
+// DCA Discount Hunter V15.6 - Homepage Wallet Sync API
+// Keeps the old /api/sync-wallet endpoint, but now uses the Moralis-first wallet ledger engine.
 
-const { WATCHLIST } = require("../../lib/xstocks/constants");
-const { fetchBep20TransfersLegacy } = require("../../lib/xstocks/bscscan-legacy");
-const { fetchWalletTokenTransfers } = require("../../lib/xstocks/transfer-source");
+const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
-const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
-const { calculatePnL, summarizePortfolio } = require("../../lib/xstocks/pnl");
+const { WATCHLIST, toLower } = require("../../lib/xstocks/constants");
 
-async function getHoldingsWithFallback(cleanWalletAddress) {
-  try {
-    const transfers = await fetchWalletTokenTransfers(cleanWalletAddress, fetchBep20TransfersLegacy);
-    const buyRecords = buildBuyRecordsFromTransfers(transfers, cleanWalletAddress);
-    const holdings = calculateHoldings(buyRecords);
+function cleanAddress(value) {
+  return String(value || "").trim();
+}
 
-    return {
-      holdings,
-      transfers,
-      buyRecords,
-      syncSource: "wallet_transfer_ledger",
-      explorerError: null,
-      rpcFallback: null,
-    };
-  } catch (error) {
-    const rpcResult = await fetchWalletBalancesViaRpc(cleanWalletAddress, WATCHLIST);
+function isEvmAddress(value) {
+  return /^0x[a-fA-F0-9]{40}$/.test(cleanAddress(value));
+}
 
-    return {
-      holdings: rpcResult.holdings,
-      transfers: [],
-      buyRecords: [],
-      syncSource: "bsc_rpc_balanceOf_fallback",
-      explorerError: error.message || "Wallet transfer fetch failed",
-      rpcFallback: {
-        checkedBlockNumber: rpcResult.checkedBlockNumber,
-        errors: rpcResult.errors,
-      },
-    };
+function upper(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function safeNumber(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function uniqueTransfers(transfers) {
+  const seen = new Set();
+  const out = [];
+  for (const tx of transfers || []) {
+    const key = [tx.hash, tx.contractAddress, tx.from, tx.to, tx.value].map((v) => String(v || "").toLowerCase()).join("|");
+    if (!tx.hash || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tx);
   }
+  return out;
+}
+
+function pickPrice(prices, symbol) {
+  return prices?.[upper(symbol)] || prices?.[symbol] || null;
+}
+
+function enrichHoldings(holdings, tokenPrices, referencePrices) {
+  return (holdings || []).map((h) => {
+    const symbol = upper(h.symbol);
+    const quantity = safeNumber(h.quantity);
+    const totalCost = safeNumber(h.totalCost);
+    const tokenPriceData = pickPrice(tokenPrices, symbol);
+    const referencePriceData = pickPrice(referencePrices, symbol);
+    const tokenPrice = safeNumber(tokenPriceData?.price);
+    const currentValue = quantity * tokenPrice;
+    const unrealizedPnL = currentValue - totalCost;
+    const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
+    const referenceStockPrice = safeNumber(referencePriceData?.price);
+    const premiumDiscount = tokenPrice - referenceStockPrice;
+    const premiumDiscountPct = referenceStockPrice > 0 ? premiumDiscount / referenceStockPrice : 0;
+
+    return {
+      ...h,
+      symbol,
+      quantity,
+      totalCost,
+      tokenPrice,
+      marketPrice: tokenPrice,
+      currentValue,
+      marketValue: currentValue,
+      positionValue: currentValue,
+      unrealizedPnL,
+      pnlPct,
+      returnPct: pnlPct,
+      referenceStockPrice,
+      premiumDiscount,
+      premiumDiscountPct,
+      priceSource: tokenPriceData?.source || null,
+      referencePriceSource: referencePriceData?.source || null,
+      rawTokenPrice: tokenPriceData?.rawTokenPrice || null,
+      sharesMultiplier: tokenPriceData?.sharesMultiplier || null,
+      ...(tokenPrice > 0 ? {} : { priceWarning: `No token price found for ${symbol}` }),
+    };
+  });
+}
+
+function summarize(holdings) {
+  const portfolioTotalCost = holdings.reduce((sum, h) => sum + safeNumber(h.totalCost), 0);
+  const portfolioMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.currentValue), 0);
+  const portfolioUnrealizedPnL = portfolioMarketValue - portfolioTotalCost;
+  const portfolioPnLPct = portfolioTotalCost > 0 ? portfolioUnrealizedPnL / portfolioTotalCost : 0;
+  return {
+    actualTotalInvested: portfolioTotalCost,
+    portfolioTotalCost,
+    portfolioMarketValue,
+    portfolioUnrealizedPnL,
+    portfolioPnLPct,
+    totalCost: portfolioTotalCost,
+    marketValue: portfolioMarketValue,
+    currentValue: portfolioMarketValue,
+    unrealizedPnL: portfolioUnrealizedPnL,
+    returnPct: portfolioPnLPct,
+  };
 }
 
 async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+
+  if (req.method !== "POST" && req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
     const bodyWalletAddress = req.body && typeof req.body.walletAddress === "string" ? req.body.walletAddress.trim() : "";
+    const queryWalletAddress = req.query && typeof req.query.address === "string" ? req.query.address.trim() : "";
     const envWalletAddress = process.env.WALLET_ADDRESS ? String(process.env.WALLET_ADDRESS).trim() : "";
-    const cleanWalletAddress = bodyWalletAddress || envWalletAddress;
+    const walletAddress = cleanAddress(bodyWalletAddress || queryWalletAddress || envWalletAddress);
 
-    if (!cleanWalletAddress) return res.status(400).json({ error: "WALLET_ADDRESS not found in Vercel environment variables" });
+    if (!isEvmAddress(walletAddress)) {
+      return res.status(400).json({ error: "WALLET_ADDRESS not found or invalid" });
+    }
 
-    const walletData = await getHoldingsWithFallback(cleanWalletAddress);
-    const holdings = walletData.holdings;
-    const symbols = holdings.length > 0 ? holdings.map((h) => h.symbol) : WATCHLIST;
+    const rawTransfers = await fetchWalletTokenTransfers(walletAddress);
+    const transfers = uniqueTransfers(rawTransfers);
+    const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
+    const baseHoldings = calculateHoldings(buyRecords);
+    const symbols = baseHoldings.length > 0 ? baseHoldings.map((h) => upper(h.symbol)) : WATCHLIST;
 
     const [tokenPrices, referencePrices] = await Promise.all([
       fetchTokenPrices(symbols),
       fetchReferenceStockPrices(symbols),
     ]);
 
-    const holdingsWithPnL = calculatePnL(holdings, tokenPrices, referencePrices);
-    const summary = summarizePortfolio(holdingsWithPnL);
+    const holdings = enrichHoldings(baseHoldings, tokenPrices, referencePrices);
+    const summary = summarize(holdings);
+    const tokenPriceSources = Array.from(new Set(Object.values(tokenPrices || {}).map((p) => p.source).filter(Boolean))).sort();
+    const referencePriceSources = Array.from(new Set(Object.values(referencePrices || {}).map((p) => p.source).filter(Boolean))).sort();
 
     return res.status(200).json({
+      ok: true,
+      version: "15.6-sync-wallet-moralis-ledger",
       ...summary,
-      walletAddress: `${cleanWalletAddress.slice(0, 6)}...${cleanWalletAddress.slice(-4)}`,
-      positionSource: bodyWalletAddress ? "manual_body" : "env_wallet_address",
-      walletSyncSource: walletData.syncSource,
-      priceSource: "binance_xstocks_live",
-      referencePriceSource: "binance_stock_reference_live",
-      explorerError: walletData.explorerError,
-      rpcFallback: walletData.rpcFallback,
+      holdings,
+      walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+      fullWalletAddress: walletAddress,
+      positionSource: bodyWalletAddress ? "manual_body" : queryWalletAddress ? "query_address" : "env_wallet_address",
+      walletSyncSource: hasMoralisKey() ? "moralis_wallet_token_transfers" : hasMegaNodeKey() ? "meganode_wallet_token_transfers" : "legacy_fallback",
+      source: hasMoralisKey() ? "Moralis wallet token transfers" : hasMegaNodeKey() ? "MegaNode wallet token transfers" : "Legacy fallback",
+      priceSource: tokenPriceSources.join("、") || "binance_xstocks_live",
+      referencePriceSource: referencePriceSources.join("、") || "binance_stock_reference_live",
+      lastSyncTime: new Date().toISOString(),
+      checkedAt: new Date().toISOString(),
+      configured: {
+        moralis: hasMoralisKey(),
+        megaNode: hasMegaNodeKey(),
+        legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
+      },
       debugCounts: {
-        walletAddressLength: cleanWalletAddress.length,
-        totalTransfers: walletData.transfers.length,
-        buyRecordsCount: walletData.buyRecords.length,
+        walletAddressLength: walletAddress.length,
+        totalTransfers: transfers.length,
+        buyRecordsCount: buyRecords.length,
         holdingsCount: holdings.length,
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
-        tokenPriceSources: Array.from(new Set(Object.values(tokenPrices || {}).map((p) => p.source).filter(Boolean))).sort(),
-        referencePriceSources: Array.from(new Set(Object.values(referencePrices || {}).map((p) => p.source).filter(Boolean))).sort(),
-        buyRecordSymbols: Array.from(new Set(walletData.buyRecords.map((r) => String(r.symbol || "").toUpperCase()))).sort(),
+        tokenPriceSources,
+        referencePriceSources,
+        buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => upper(r.symbol)))).sort(),
         holdingSymbols: holdings.map((h) => h.symbol),
       },
     });
   } catch (error) {
     console.error("sync-wallet error:", error);
-    return res.status(500).json({ error: error.message || "Unknown error" });
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Unknown error",
+      configured: {
+        moralis: hasMoralisKey(),
+        megaNode: hasMegaNodeKey(),
+        legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
+      },
+    });
   }
 }
 
