@@ -1,9 +1,10 @@
-// DCA Discount Hunter V15.5 - Wallet Ledger
+// DCA Discount Hunter V15.6 - Wallet Ledger
 // Source priority: Moralis -> MegaNode -> Legacy fallback.
-// Reconstructs cost basis from wallet-wide BEP-20 transfers.
+// Reconstructs cost basis from wallet-wide BEP-20 transfers and enriches positions with live Binance xStocks prices.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
+const { fetchTokenPrices } = require("../../lib/xstocks/prices");
 const { WATCHLIST, STABLECOINS, toLower } = require("../../lib/xstocks/constants");
 const { XSTOCK_CONTRACTS } = require("../../lib/xstocks/contracts");
 
@@ -13,6 +14,15 @@ function isEvmAddress(value) {
 
 function cleanAddress(value) {
   return String(value || "").trim();
+}
+
+function upper(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function safeNumber(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function uniqueByHashContractDirection(transfers) {
@@ -56,9 +66,9 @@ function buildTrackedTokens() {
     found: true,
   }));
 
-  const knownSymbols = new Set(known.map((item) => String(item.symbol || "").toUpperCase()));
+  const knownSymbols = new Set(known.map((item) => upper(item.symbol)));
   const pending = WATCHLIST
-    .filter((symbol) => !knownSymbols.has(String(symbol || "").toUpperCase()))
+    .filter((symbol) => !knownSymbols.has(upper(symbol)))
     .map((symbol) => ({
       symbol,
       contractAddress: null,
@@ -68,6 +78,39 @@ function buildTrackedTokens() {
     }));
 
   return [...known, ...pending];
+}
+
+function normalizePriceSymbol(symbol) {
+  return upper(symbol);
+}
+
+function enrichHoldingsWithMarket(holdings, prices) {
+  return (holdings || []).map((holding) => {
+    const symbol = normalizePriceSymbol(holding.symbol);
+    const priceItem = prices?.[symbol] || prices?.[holding.symbol] || null;
+    const marketPrice = safeNumber(priceItem?.price);
+    const quantity = safeNumber(holding.quantity);
+    const totalCost = safeNumber(holding.totalCost);
+    const marketValue = quantity * marketPrice;
+    const unrealizedPnL = marketValue - totalCost;
+    const returnPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
+
+    return {
+      ...holding,
+      symbol,
+      marketPrice,
+      marketValue,
+      currentValue: marketValue,
+      positionValue: marketValue,
+      unrealizedPnL,
+      returnPct,
+      returnPctDisplay: returnPct * 100,
+      priceSource: priceItem?.source || null,
+      priceUpdated: new Date().toISOString(),
+      rawTokenPrice: priceItem?.rawTokenPrice || null,
+      sharesMultiplier: priceItem?.sharesMultiplier || null,
+    };
+  });
 }
 
 export default async function handler(req, res) {
@@ -88,14 +131,28 @@ export default async function handler(req, res) {
     const rawTransfers = await fetchWalletTokenTransfers(walletAddress);
     const transfers = uniqueByHashContractDirection(rawTransfers);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
-    const holdings = calculateHoldings(buyRecords);
+    const baseHoldings = calculateHoldings(buyRecords);
+    const priceSymbols = Array.from(new Set(baseHoldings.map((h) => normalizePriceSymbol(h.symbol)).filter(Boolean)));
 
+    let priceError = null;
+    let livePrices = {};
+    try {
+      livePrices = await fetchTokenPrices(priceSymbols);
+    } catch (error) {
+      priceError = error.message;
+    }
+
+    const holdings = enrichHoldingsWithMarket(baseHoldings, livePrices);
     const onlyBuys = buyRecords.filter((r) => r.type === "BUY");
     const transferIns = buyRecords.filter((r) => r.type === "TRANSFER_IN");
+    const totalCost = holdings.reduce((sum, h) => sum + safeNumber(h.totalCost), 0);
+    const marketValue = holdings.reduce((sum, h) => sum + safeNumber(h.marketValue), 0);
+    const unrealizedPnL = marketValue - totalCost;
+    const returnPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
 
     res.status(200).json({
       ok: true,
-      version: "15.5-wallet-ledger-moralis-source",
+      version: "15.6-wallet-ledger-market-pnl",
       walletAddress,
       updatedAt: new Date().toISOString(),
       source: hasMoralisKey() ? "Moralis wallet token transfers" : hasMegaNodeKey() ? "MegaNode / NodeReal wallet transfers" : "Legacy fallback",
@@ -113,7 +170,14 @@ export default async function handler(req, res) {
       buyCount: onlyBuys.length,
       transferInCount: transferIns.length,
       holdingCount: holdings.length,
-      totalCost: holdings.reduce((sum, h) => sum + Number(h.totalCost || 0), 0),
+      priceCount: Object.keys(livePrices || {}).length,
+      priceError,
+      totalCost,
+      marketValue,
+      currentValue: marketValue,
+      unrealizedPnL,
+      returnPct,
+      returnPctDisplay: returnPct * 100,
       holdings,
       buyRecords,
       sampleTransfers: transfers.slice(0, Number(req.query.sample || 20)),
