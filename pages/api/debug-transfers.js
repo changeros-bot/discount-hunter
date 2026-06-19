@@ -1,4 +1,5 @@
 const { fetchBep20TransfersLegacy } = require("../../lib/xstocks/bscscan-legacy");
+const { fetchWalletTokenTransfers } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers } = require("../../lib/xstocks/costBasis");
 
 function norm(value) {
@@ -10,18 +11,13 @@ function upper(value) {
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     const walletAddress = norm(process.env.WALLET_ADDRESS);
+    if (!walletAddress) return res.status(400).json({ error: "WALLET_ADDRESS not found" });
 
-    if (!walletAddress) {
-      return res.status(400).json({ error: "WALLET_ADDRESS not found" });
-    }
-
-    const transfers = await fetchBep20TransfersLegacy(walletAddress);
+    const transfers = await fetchWalletTokenTransfers(walletAddress, fetchBep20TransfersLegacy);
     const records = buildBuyRecordsFromTransfers(transfers, walletAddress);
     const tokenSymbols = Array.from(new Set(transfers.map((t) => upper(t.tokenSymbol)))).sort();
 
