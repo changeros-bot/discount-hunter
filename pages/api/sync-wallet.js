@@ -1,11 +1,12 @@
-// DCA Discount Hunter V15.7 - Homepage Wallet Sync API
-// Keeps the old /api/sync-wallet endpoint, but now uses the Moralis-first wallet ledger engine.
-// Fix: case-insensitive xStocks price lookup so RKLBon / RKLBON / RKLB can all resolve.
+// DCA Discount Hunter V15.10 - Homepage Wallet Sync API
+// Cost basis comes from Moralis transfer history.
+// Official quantities come from live BNB Chain balanceOf(), which should match Binance Web3 Wallet more closely.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
-const { WATCHLIST, toLower } = require("../../lib/xstocks/constants");
+const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
+const { WATCHLIST } = require("../../lib/xstocks/constants");
 
 function cleanAddress(value) {
   return String(value || "").trim();
@@ -32,7 +33,7 @@ function uniqueTransfers(transfers) {
   const seen = new Set();
   const out = [];
   for (const tx of transfers || []) {
-    const key = [tx.hash, tx.contractAddress, tx.from, tx.to, tx.value].map((v) => String(v || "").toLowerCase()).join("|");
+    const key = [tx.hash, tx.contractAddress, tx.from, tx.to, tx.value, tx.valueDecimal].map((v) => String(v || "").toLowerCase()).join("|");
     if (!tx.hash || seen.has(key)) continue;
     seen.add(key);
     out.push(tx);
@@ -57,6 +58,38 @@ function pickPrice(prices, symbol) {
   return map[s] || map[stripOn(s)] || map[`${stripOn(s)}ON`] || null;
 }
 
+function normalizeSymbolMap(items) {
+  const map = new Map();
+  for (const item of items || []) {
+    const s = upper(item.symbol);
+    if (!s) continue;
+    map.set(s, item);
+    map.set(stripOn(s), item);
+    if (!s.endsWith("ON")) map.set(`${s}ON`, item);
+  }
+  return map;
+}
+
+function mergeLiveQuantities(costHoldings, liveHoldings) {
+  const liveMap = normalizeSymbolMap(liveHoldings);
+
+  return (costHoldings || []).map((h) => {
+    const symbol = upper(h.symbol);
+    const live = liveMap.get(symbol) || liveMap.get(stripOn(symbol));
+    const liveQuantity = safeNumber(live?.quantity);
+
+    return {
+      ...h,
+      symbol,
+      costBasisQuantity: safeNumber(h.quantity),
+      quantity: liveQuantity > 0 ? liveQuantity : safeNumber(h.quantity),
+      quantitySource: liveQuantity > 0 ? "bsc_rpc_balanceOf_live" : "moralis_cost_basis_fallback",
+      liveBalanceContractAddress: live?.contractAddress || null,
+      liveBalanceDecimals: live?.decimals ?? null,
+    };
+  });
+}
+
 function enrichHoldings(holdings, tokenPrices, referencePrices) {
   return (holdings || []).map((h) => {
     const symbol = upper(h.symbol);
@@ -77,6 +110,7 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
       symbol,
       quantity,
       totalCost,
+      averageCost: quantity > 0 && totalCost > 0 ? totalCost / quantity : safeNumber(h.averageCost),
       tokenPrice,
       marketPrice: tokenPrice,
       currentValue,
@@ -136,8 +170,17 @@ async function handler(req, res) {
     const rawTransfers = await fetchWalletTokenTransfers(walletAddress);
     const transfers = uniqueTransfers(rawTransfers);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
-    const baseHoldings = calculateHoldings(buyRecords);
-    const symbols = baseHoldings.length > 0 ? baseHoldings.map((h) => upper(h.symbol)) : WATCHLIST;
+    const costHoldings = calculateHoldings(buyRecords);
+    const symbols = costHoldings.length > 0 ? costHoldings.map((h) => upper(h.symbol)) : WATCHLIST;
+
+    let liveBalanceResult = { holdings: [], errors: [] };
+    try {
+      liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, symbols);
+    } catch (error) {
+      liveBalanceResult = { holdings: [], errors: [error.message] };
+    }
+
+    const baseHoldings = mergeLiveQuantities(costHoldings, liveBalanceResult.holdings);
 
     const [tokenPrices, referencePrices] = await Promise.all([
       fetchTokenPrices(symbols),
@@ -151,14 +194,14 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.7-sync-wallet-price-key-fix",
+      version: "15.10-live-balance-quantity",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       positionSource: bodyWalletAddress ? "manual_body" : queryWalletAddress ? "query_address" : "env_wallet_address",
-      walletSyncSource: hasMoralisKey() ? "moralis_wallet_token_transfers" : hasMegaNodeKey() ? "meganode_wallet_token_transfers" : "legacy_fallback",
-      source: hasMoralisKey() ? "Moralis wallet token transfers" : hasMegaNodeKey() ? "MegaNode wallet token transfers" : "Legacy fallback",
+      walletSyncSource: hasMoralisKey() ? "moralis_wallet_token_transfers + bsc_rpc_balanceOf" : hasMegaNodeKey() ? "meganode_wallet_token_transfers + bsc_rpc_balanceOf" : "legacy_fallback + bsc_rpc_balanceOf",
+      source: hasMoralisKey() ? "Moralis cost basis + live RPC balances" : hasMegaNodeKey() ? "MegaNode cost basis + live RPC balances" : "Legacy fallback + live RPC balances",
       priceSource: tokenPriceSources.join("、") || "binance_xstocks_live",
       referencePriceSource: referencePriceSources.join("、") || "binance_stock_reference_live",
       lastSyncTime: new Date().toISOString(),
@@ -167,11 +210,16 @@ async function handler(req, res) {
         moralis: hasMoralisKey(),
         megaNode: hasMegaNodeKey(),
         legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
+        rpcBalance: true,
       },
       debugCounts: {
         walletAddressLength: walletAddress.length,
         totalTransfers: transfers.length,
         buyRecordsCount: buyRecords.length,
+        costHoldingsCount: costHoldings.length,
+        liveBalanceHoldingsCount: liveBalanceResult.holdings?.length || 0,
+        liveBalanceErrors: liveBalanceResult.errors || [],
+        liveBalanceBlockNumber: liveBalanceResult.checkedBlockNumber || null,
         holdingsCount: holdings.length,
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
@@ -179,7 +227,16 @@ async function handler(req, res) {
         referencePriceSources,
         buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => upper(r.symbol)))).sort(),
         holdingSymbols: holdings.map((h) => h.symbol),
-        holdingPriceDebug: holdings.map((h) => ({ symbol: h.symbol, quantity: h.quantity, tokenPrice: h.tokenPrice, currentValue: h.currentValue, totalCost: h.totalCost, priceSource: h.priceSource })),
+        holdingPriceDebug: holdings.map((h) => ({
+          symbol: h.symbol,
+          quantity: h.quantity,
+          costBasisQuantity: h.costBasisQuantity,
+          quantitySource: h.quantitySource,
+          tokenPrice: h.tokenPrice,
+          currentValue: h.currentValue,
+          totalCost: h.totalCost,
+          priceSource: h.priceSource,
+        })),
       },
     });
   } catch (error) {
