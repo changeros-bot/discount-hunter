@@ -1,9 +1,9 @@
-// DCA Discount Hunter V15.2 - Background Wallet Sync API Route
+// DCA Discount Hunter V15.4 - Background Wallet Sync API Route
 // Reads WALLET_ADDRESS from Vercel Environment Variables by default.
-// Optional body.walletAddress is kept only as a development fallback.
 
 const { WATCHLIST } = require("../../lib/xstocks/constants");
 const { fetchBep20TransfersLegacy } = require("../../lib/xstocks/bscscan-legacy");
+const { fetchWalletTokenTransfers } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
@@ -11,7 +11,7 @@ const { calculatePnL, summarizePortfolio } = require("../../lib/xstocks/pnl");
 
 async function getHoldingsWithFallback(cleanWalletAddress) {
   try {
-    const transfers = await fetchBep20TransfersLegacy(cleanWalletAddress);
+    const transfers = await fetchWalletTokenTransfers(cleanWalletAddress, fetchBep20TransfersLegacy);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, cleanWalletAddress);
     const holdings = calculateHoldings(buyRecords);
 
@@ -19,7 +19,7 @@ async function getHoldingsWithFallback(cleanWalletAddress) {
       holdings,
       transfers,
       buyRecords,
-      syncSource: "explorer_transfer_ledger",
+      syncSource: "wallet_transfer_ledger",
       explorerError: null,
       rpcFallback: null,
     };
@@ -31,7 +31,7 @@ async function getHoldingsWithFallback(cleanWalletAddress) {
       transfers: [],
       buyRecords: [],
       syncSource: "bsc_rpc_balanceOf_fallback",
-      explorerError: error.message || "Explorer transfer fetch failed",
+      explorerError: error.message || "Wallet transfer fetch failed",
       rpcFallback: {
         checkedBlockNumber: rpcResult.checkedBlockNumber,
         errors: rpcResult.errors,
@@ -41,25 +41,14 @@ async function getHoldingsWithFallback(cleanWalletAddress) {
 }
 
 async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const bodyWalletAddress = req.body && typeof req.body.walletAddress === "string"
-      ? req.body.walletAddress.trim()
-      : "";
-    const envWalletAddress = process.env.WALLET_ADDRESS
-      ? String(process.env.WALLET_ADDRESS).trim()
-      : "";
-
+    const bodyWalletAddress = req.body && typeof req.body.walletAddress === "string" ? req.body.walletAddress.trim() : "";
+    const envWalletAddress = process.env.WALLET_ADDRESS ? String(process.env.WALLET_ADDRESS).trim() : "";
     const cleanWalletAddress = bodyWalletAddress || envWalletAddress;
 
-    if (!cleanWalletAddress) {
-      return res.status(400).json({
-        error: "WALLET_ADDRESS not found in Vercel environment variables",
-      });
-    }
+    if (!cleanWalletAddress) return res.status(400).json({ error: "WALLET_ADDRESS not found in Vercel environment variables" });
 
     const walletData = await getHoldingsWithFallback(cleanWalletAddress);
     const holdings = walletData.holdings;
