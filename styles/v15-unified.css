@@ -26,6 +26,11 @@ body {
 .page { background: transparent !important; }
 
 .hero.compactHero {
+  min-height: 220px !important;
+  padding: 8px 10px 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   background:
     radial-gradient(circle at 50% 22%, rgba(255, 218, 118, .20), transparent 28%),
     radial-gradient(circle at 12% 42%, rgba(24, 118, 170, .30), transparent 42%),
@@ -50,41 +55,19 @@ body {
   opacity: .72;
 }
 
-.hero.compactHero h1 {
-  position: relative !important;
-  z-index: 1 !important;
-  -webkit-text-fill-color: transparent !important;
-  color: var(--v15-gold) !important;
-  background:
-    linear-gradient(180deg,
-      #fffbe0 0%,
-      #fff0a6 12%,
-      #f7c948 29%,
-      #b87512 49%,
-      #613604 56%,
-      #ffe680 74%,
-      #c88918 100%) !important;
-  -webkit-background-clip: text !important;
-  background-clip: text !important;
-  filter:
-    drop-shadow(0 2px 0 rgba(255,246,189,.40))
-    drop-shadow(0 10px 14px rgba(0,0,0,.55)) !important;
-  text-shadow:
-    0 1px 0 #fff8c7,
-    0 2px 0 #e5b22d,
-    0 3px 0 #b87512,
-    0 4px 0 #8a5208,
-    0 5px 0 #5a3204,
-    0 8px 0 rgba(61,34,3,.62),
-    0 14px 18px rgba(0,0,0,.62),
-    0 0 24px rgba(255,220,110,.24) !important;
+.heroLogoSvg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: min(98%, 430px);
+  height: auto;
+  margin: 0 auto;
+  filter: drop-shadow(0 12px 18px rgba(0,0,0,.48));
 }
 
+.hero.compactHero h1,
 .hero.compactHero h2 {
-  position: relative !important;
-  z-index: 1 !important;
-  color: rgba(248,250,252,.72) !important;
-  text-shadow: 0 2px 8px rgba(0,0,0,.62) !important;
+  display: none !important;
 }
 
 .warRoom,
@@ -146,6 +129,31 @@ section[style*="border: 2px solid rgb(34, 197, 94)"] {
 .page > section:not(.hero) strong { color: var(--v15-text) !important; }
 
 .signal { color: var(--v15-gold-soft) !important; }
+
+.liveLine {
+  color: #cbd5e1 !important;
+}
+
+.liveDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 10px rgba(74, 222, 128, .75);
+  vertical-align: 1px;
+}
+
+.liveDot.loading {
+  background: #facc15;
+  box-shadow: 0 0 10px rgba(250, 204, 21, .65);
+}
+
+.liveText {
+  color: #86efac !important;
+  font-weight: 950;
+}
 
 .syncLive,
 .syncPill.syncLive,
@@ -214,14 +222,6 @@ button[style]:active {
 
 .nextBuyBox { border-color: rgba(243, 186, 47, .18) !important; }
 
-/* Hero line spacing: open the two title lines without increasing hero height. */
-.hero.compactHero h1 br {
-  content: "" !important;
-  display: block !important;
-  margin: 4px 0 !important;
-}
-
-/* Semantic colors by value/class/style. */
 .pnl-positive,
 .positive,
 strong[style*="#4ade80"],
@@ -242,6 +242,5 @@ span[style*="rgb(248, 113, 113)"] {
   text-shadow: 0 0 10px rgba(248, 113, 113, .18) !important;
 }
 
-/* Some inline values are plain white today; this catches rendered currency strings when class is added later. */
 .pnl-value.positive { color: var(--v15-green) !important; }
 .pnl-value.negative { color: var(--v15-red) !important; }
