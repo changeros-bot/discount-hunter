@@ -1,0 +1,136 @@
+/* V15.5c unified gold styling layer
+   UI-only override. No strategy, wallet, sorting, PnL, or buy-rule logic is affected. */
+
+:root {
+  --v15-bg: #030816;
+  --v15-panel: rgba(8, 18, 37, .90);
+  --v15-panel-strong: rgba(6, 12, 28, .88);
+  --v15-gold: #f3ba2f;
+  --v15-gold-soft: #ffe680;
+  --v15-gold-border: rgba(243, 186, 47, .24);
+  --v15-gold-border-strong: rgba(243, 186, 47, .42);
+  --v15-text: #f8fafc;
+  --v15-muted: #aeb8c8;
+}
+
+/* Unify the app shell under the poster look. */
+body {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(243, 186, 47, .10), transparent 34%),
+    linear-gradient(180deg, #061326 0%, #030816 45%, #02030a 100%) !important;
+}
+
+.page {
+  background: transparent !important;
+}
+
+/* Large sections: dark navy glass + subtle gold edge. */
+.warRoom,
+.card,
+.idleGroup,
+.page > section:not(.hero) {
+  background:
+    radial-gradient(circle at top left, rgba(243, 186, 47, .10), transparent 36%),
+    linear-gradient(180deg, rgba(10, 22, 45, .96), rgba(5, 8, 22, .97)) !important;
+  border: 1px solid var(--v15-gold-border) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.03),
+    0 14px 30px rgba(0,0,0,.28) !important;
+}
+
+/* Remove large green visual blocks. Green/red remain available for semantic PnL/progress only. */
+.warRoom,
+section[style*="border: 2px solid #22c55e"],
+section[style*="border: 2px solid rgb(34, 197, 94)"] {
+  border-color: var(--v15-gold-border-strong) !important;
+}
+
+/* Wallet title and section titles align with the gold identity. */
+.page > section:not(.hero) h2,
+.page > section:not(.hero) h3,
+.idleGroup summary,
+.card h2 {
+  color: var(--v15-gold) !important;
+  text-shadow: 0 0 18px rgba(243, 186, 47, .10) !important;
+}
+
+/* Inner metric boxes. */
+.warRoomHeader div,
+.dataGrid div,
+.nextBuyBox,
+.page > section:not(.hero) div[style*="background: #0f172a"],
+.page > section:not(.hero) div[style*="background: rgb(15, 23, 42)"],
+.page > section:not(.hero) div[style*="background: #020617"],
+.page > section:not(.hero) div[style*="background: rgb(2, 6, 23)"] {
+  background: rgba(4, 10, 25, .80) !important;
+  border: 1px solid rgba(243, 186, 47, .14) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025) !important;
+}
+
+/* Text hierarchy. */
+.warRoomHeader span,
+.dataGrid span,
+.card p,
+.page > section:not(.hero) span,
+.page > section:not(.hero) div,
+.idleGroup summary {
+  color: var(--v15-muted) !important;
+}
+
+.warRoomHeader strong,
+.dataGrid strong,
+.page > section:not(.hero) strong {
+  color: var(--v15-text) !important;
+}
+
+/* Signal lines keep gold instead of large green emphasis. */
+.signal {
+  color: var(--v15-gold-soft) !important;
+}
+
+/* Buttons: gold glass instead of blue/green engineering style. */
+button,
+button[style] {
+  background: linear-gradient(180deg, rgba(243,186,47,.24), rgba(126,78,10,.26)) !important;
+  border: 1px solid rgba(243, 186, 47, .46) !important;
+  color: #fff3bf !important;
+  box-shadow: 0 0 18px rgba(243, 186, 47, .12) !important;
+}
+
+/* Badges and pills. */
+.badge,
+.versionPill,
+.sourcePill,
+.syncPill {
+  background: rgba(243, 186, 47, .10) !important;
+  border: 1px solid rgba(243, 186, 47, .28) !important;
+  color: #fff3bf !important;
+}
+
+/* Card active state should feel premium, not neon. */
+.card.active {
+  border-color: rgba(243, 186, 47, .42) !important;
+  background:
+    radial-gradient(circle at top left, rgba(243, 186, 47, .14), transparent 40%),
+    linear-gradient(180deg, rgba(10, 32, 42, .94), rgba(5, 8, 22, .96)) !important;
+}
+
+/* Progress can remain green because it is semantic, but the container is gold/navy. */
+.nextBuyBox {
+  border-color: rgba(243, 186, 47, .18) !important;
+}
+
+/* Keep PnL semantic colors readable. */
+strong[style*="#4ade80"],
+strong[style*="rgb(74, 222, 128)"],
+span[style*="#4ade80"],
+span[style*="rgb(74, 222, 128)"] {
+  color: #4ade80 !important;
+}
+
+strong[style*="#f87171"],
+strong[style*="rgb(248, 113, 113)"],
+span[style*="#f87171"],
+span[style*="rgb(248, 113, 113)"] {
+  color: #f87171 !important;
+}
