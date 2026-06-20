@@ -5,6 +5,18 @@ const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
+const goldenTitleStyle = {
+  fontSize: 34,
+  fontWeight: 1000,
+  margin: "6px 0 4px",
+  letterSpacing: "-1px",
+  lineHeight: 1.1,
+  background: "linear-gradient(180deg, #fff7c2 0%, #ffe680 22%, #f4b400 48%, #b87512 72%, #fff1a8 100%)",
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  textShadow: "0 2px 0 rgba(101, 67, 0, .55), 0 6px 18px rgba(244, 180, 0, .28)",
+};
+
 function normalizeSymbol(symbol) {
   return String(symbol || "").trim().toUpperCase();
 }
@@ -180,9 +192,9 @@ export default function Home() {
 
   return <main className="page">
     <section className="hero compactHero">
-      <h1 style={{ fontSize: 32, fontWeight: 950, margin: "6px 0 4px" }}>美股DCA折價追蹤</h1>
+      <h1 style={goldenTitleStyle}>美股DCA折價追蹤</h1>
       <div className="versionPill">V15.3 UI Cleanup</div>
-      <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 戰情室</h2>
+      <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 財富儀表板</h2>
       <p>鏈上持倉自動同步，首頁只保留 30 秒決策資訊。</p>
       <div className="update">行情更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive">{refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}</div>
