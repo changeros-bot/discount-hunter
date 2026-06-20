@@ -30,43 +30,64 @@ body {
 /* Hero: CSS can improve metallic feel, but real 3D metal still requires image/SVG. */
 .hero.compactHero {
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 214, 100, .14), transparent 30%),
-    radial-gradient(circle at 18% 48%, rgba(43, 130, 188, .18), transparent 42%),
-    linear-gradient(135deg, #071327 0%, #111936 48%, #030816 100%) !important;
-  border-color: rgba(243, 186, 47, .18) !important;
+    radial-gradient(circle at 50% 22%, rgba(255, 218, 118, .20), transparent 28%),
+    radial-gradient(circle at 12% 42%, rgba(24, 118, 170, .30), transparent 42%),
+    radial-gradient(circle at 88% 34%, rgba(243, 186, 47, .08), transparent 34%),
+    linear-gradient(135deg, #06162b 0%, #0a142d 44%, #020611 100%) !important;
+  border-color: rgba(243, 186, 47, .22) !important;
   box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,.05),
-    inset 0 -36px 70px rgba(0,0,0,.36),
-    0 16px 34px rgba(0,0,0,.30) !important;
+    inset 0 0 0 1px rgba(255,255,255,.06),
+    inset 0 -38px 78px rgba(0,0,0,.42),
+    0 18px 38px rgba(0,0,0,.34) !important;
+}
+
+.hero.compactHero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(255,255,255,.045) 48%, transparent 100%),
+    radial-gradient(circle at 18% 72%, rgba(243, 186, 47, .10), transparent 18%),
+    radial-gradient(circle at 82% 20%, rgba(243, 186, 47, .08), transparent 20%);
+  opacity: .72;
 }
 
 .hero.compactHero h1 {
+  position: relative !important;
+  z-index: 1 !important;
   -webkit-text-fill-color: transparent !important;
   color: var(--v15-gold) !important;
   background:
     linear-gradient(180deg,
-      #fff7bd 0%,
-      #ffe27a 17%,
-      #f0b72e 38%,
-      #9b5d07 58%,
-      #ffe680 78%,
-      #b87512 100%) !important;
+      #fffbe0 0%,
+      #fff0a6 12%,
+      #f7c948 29%,
+      #b87512 49%,
+      #613604 56%,
+      #ffe680 74%,
+      #c88918 100%) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
-  filter: drop-shadow(0 8px 14px rgba(0,0,0,.42)) !important;
+  filter:
+    drop-shadow(0 2px 0 rgba(255,246,189,.40))
+    drop-shadow(0 10px 14px rgba(0,0,0,.55)) !important;
   text-shadow:
-    0 1px 0 #fff6bd,
-    0 2px 0 #d9a11d,
+    0 1px 0 #fff8c7,
+    0 2px 0 #e5b22d,
     0 3px 0 #b87512,
-    0 4px 0 #81500b,
-    0 7px 0 rgba(74,42,4,.62),
-    0 12px 18px rgba(0,0,0,.58),
-    0 0 18px rgba(255,220,110,.20) !important;
+    0 4px 0 #8a5208,
+    0 5px 0 #5a3204,
+    0 8px 0 rgba(61,34,3,.62),
+    0 14px 18px rgba(0,0,0,.62),
+    0 0 24px rgba(255,220,110,.24) !important;
 }
 
 .hero.compactHero h2 {
-  color: rgba(248,250,252,.68) !important;
-  text-shadow: 0 2px 8px rgba(0,0,0,.55) !important;
+  position: relative !important;
+  z-index: 1 !important;
+  color: rgba(248,250,252,.72) !important;
+  text-shadow: 0 2px 8px rgba(0,0,0,.62) !important;
 }
 
 /* Large sections: dark navy glass + subtle gold edge. */
@@ -130,18 +151,34 @@ section[style*="border: 2px solid rgb(34, 197, 94)"] {
   color: var(--v15-gold-soft) !important;
 }
 
+/* LIVE status: bright green, independent from the gold brand color. */
+.syncLive,
+.syncPill.syncLive,
+.liveStatus,
+[data-status="live"] {
+  color: #86efac !important;
+  border-color: rgba(74, 222, 128, .52) !important;
+  background: rgba(22, 101, 52, .22) !important;
+  box-shadow: 0 0 16px rgba(74, 222, 128, .18) !important;
+}
+
+.page > section:not(.hero) div[style*="LIVE"],
+.page > section:not(.hero) span[style*="LIVE"] {
+  color: #86efac !important;
+}
+
 /* Buttons: stronger 3D gold glass. */
 button,
 button[style] {
   background:
-    linear-gradient(180deg, rgba(255,239,170,.32) 0%, rgba(243,186,47,.24) 42%, rgba(126,78,10,.34) 100%) !important;
-  border: 1px solid rgba(255, 224, 130, .52) !important;
+    linear-gradient(180deg, rgba(255,239,170,.34) 0%, rgba(243,186,47,.26) 42%, rgba(126,78,10,.38) 100%) !important;
+  border: 1px solid rgba(255, 224, 130, .56) !important;
   color: #fff3bf !important;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.28),
-    inset 0 -2px 0 rgba(80,45,5,.38),
-    0 6px 14px rgba(0,0,0,.32),
-    0 0 18px rgba(243, 186, 47, .14) !important;
+    inset 0 1px 0 rgba(255,255,255,.30),
+    inset 0 -2px 0 rgba(80,45,5,.42),
+    0 7px 16px rgba(0,0,0,.34),
+    0 0 20px rgba(243, 186, 47, .16) !important;
   text-shadow: 0 1px 2px rgba(0,0,0,.55) !important;
 }
 
@@ -165,8 +202,8 @@ button[style]:active {
 .card.active {
   border-color: rgba(243, 186, 47, .42) !important;
   background:
-    radial-gradient(circle at top left, rgba(243, 186, 47, .12), transparent 40%),
-    linear-gradient(180deg, rgba(10, 32, 42, .94), rgba(5, 8, 22, .96)) !important;
+    radial-gradient(circle at top left, rgba(243, 186, 47, .10), transparent 40%),
+    linear-gradient(180deg, rgba(8, 26, 43, .94), rgba(5, 8, 22, .96)) !important;
 }
 
 .nextBuyBox {
