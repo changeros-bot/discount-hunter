@@ -54,6 +54,11 @@ function parseAmount(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function parsePercentValue(value) {
+  const number = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(number) ? number : NaN;
+}
+
 function formatNumber(value, digits = 2) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "--";
@@ -96,7 +101,7 @@ function getRuleRows(asset) {
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
   return rules.map((rule, index) => {
-    const discount = Math.abs(Number(rule));
+    const discount = Math.abs(parsePercentValue(rule));
     const amount = amounts[index] ?? 0;
     return {
       color: ruleColors[index] || "⚪",
@@ -108,12 +113,12 @@ function getRuleRows(asset) {
 }
 
 function getNextBuyPoint(asset, completedLevel = 0) {
-  const currentDepth = Math.abs(Number(asset.discount));
+  const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
   if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
 
-  const ruleDepths = rules.map((rule) => Math.abs(Number(rule))).filter((value) => Number.isFinite(value));
+  const ruleDepths = rules.map((rule) => Math.abs(parsePercentValue(rule))).filter((value) => Number.isFinite(value));
   if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
 
   const targetIndex = Math.min(Math.max(completedLevel, 0), ruleDepths.length - 1);
