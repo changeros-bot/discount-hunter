@@ -7,13 +7,16 @@
   --v15-panel-strong: rgba(6, 12, 28, .88);
   --v15-gold: #f3ba2f;
   --v15-gold-soft: #ffe680;
+  --v15-gold-bright: #fff2a8;
+  --v15-gold-dark: #8a5208;
   --v15-gold-border: rgba(243, 186, 47, .24);
   --v15-gold-border-strong: rgba(243, 186, 47, .42);
   --v15-text: #f8fafc;
   --v15-muted: #aeb8c8;
+  --v15-green: #4ade80;
+  --v15-red: #f87171;
 }
 
-/* Unify the app shell under the poster look. */
 body {
   background:
     radial-gradient(circle at 50% 0%, rgba(243, 186, 47, .10), transparent 34%),
@@ -22,6 +25,48 @@ body {
 
 .page {
   background: transparent !important;
+}
+
+/* Hero: CSS can improve metallic feel, but real 3D metal still requires image/SVG. */
+.hero.compactHero {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 214, 100, .14), transparent 30%),
+    radial-gradient(circle at 18% 48%, rgba(43, 130, 188, .18), transparent 42%),
+    linear-gradient(135deg, #071327 0%, #111936 48%, #030816 100%) !important;
+  border-color: rgba(243, 186, 47, .18) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.05),
+    inset 0 -36px 70px rgba(0,0,0,.36),
+    0 16px 34px rgba(0,0,0,.30) !important;
+}
+
+.hero.compactHero h1 {
+  -webkit-text-fill-color: transparent !important;
+  color: var(--v15-gold) !important;
+  background:
+    linear-gradient(180deg,
+      #fff7bd 0%,
+      #ffe27a 17%,
+      #f0b72e 38%,
+      #9b5d07 58%,
+      #ffe680 78%,
+      #b87512 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  filter: drop-shadow(0 8px 14px rgba(0,0,0,.42)) !important;
+  text-shadow:
+    0 1px 0 #fff6bd,
+    0 2px 0 #d9a11d,
+    0 3px 0 #b87512,
+    0 4px 0 #81500b,
+    0 7px 0 rgba(74,42,4,.62),
+    0 12px 18px rgba(0,0,0,.58),
+    0 0 18px rgba(255,220,110,.20) !important;
+}
+
+.hero.compactHero h2 {
+  color: rgba(248,250,252,.68) !important;
+  text-shadow: 0 2px 8px rgba(0,0,0,.55) !important;
 }
 
 /* Large sections: dark navy glass + subtle gold edge. */
@@ -38,14 +83,12 @@ body {
     0 14px 30px rgba(0,0,0,.28) !important;
 }
 
-/* Remove large green visual blocks. Green/red remain available for semantic PnL/progress only. */
 .warRoom,
 section[style*="border: 2px solid #22c55e"],
 section[style*="border: 2px solid rgb(34, 197, 94)"] {
   border-color: var(--v15-gold-border-strong) !important;
 }
 
-/* Wallet title and section titles align with the gold identity. */
 .page > section:not(.hero) h2,
 .page > section:not(.hero) h3,
 .idleGroup summary,
@@ -83,21 +126,33 @@ section[style*="border: 2px solid rgb(34, 197, 94)"] {
   color: var(--v15-text) !important;
 }
 
-/* Signal lines keep gold instead of large green emphasis. */
 .signal {
   color: var(--v15-gold-soft) !important;
 }
 
-/* Buttons: gold glass instead of blue/green engineering style. */
+/* Buttons: stronger 3D gold glass. */
 button,
 button[style] {
-  background: linear-gradient(180deg, rgba(243,186,47,.24), rgba(126,78,10,.26)) !important;
-  border: 1px solid rgba(243, 186, 47, .46) !important;
+  background:
+    linear-gradient(180deg, rgba(255,239,170,.32) 0%, rgba(243,186,47,.24) 42%, rgba(126,78,10,.34) 100%) !important;
+  border: 1px solid rgba(255, 224, 130, .52) !important;
   color: #fff3bf !important;
-  box-shadow: 0 0 18px rgba(243, 186, 47, .12) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 -2px 0 rgba(80,45,5,.38),
+    0 6px 14px rgba(0,0,0,.32),
+    0 0 18px rgba(243, 186, 47, .14) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.55) !important;
 }
 
-/* Badges and pills. */
+button:active,
+button[style]:active {
+  transform: translateY(1px) !important;
+  box-shadow:
+    inset 0 2px 4px rgba(0,0,0,.35),
+    0 2px 8px rgba(0,0,0,.28) !important;
+}
+
 .badge,
 .versionPill,
 .sourcePill,
@@ -107,30 +162,30 @@ button[style] {
   color: #fff3bf !important;
 }
 
-/* Card active state should feel premium, not neon. */
 .card.active {
   border-color: rgba(243, 186, 47, .42) !important;
   background:
-    radial-gradient(circle at top left, rgba(243, 186, 47, .14), transparent 40%),
+    radial-gradient(circle at top left, rgba(243, 186, 47, .12), transparent 40%),
     linear-gradient(180deg, rgba(10, 32, 42, .94), rgba(5, 8, 22, .96)) !important;
 }
 
-/* Progress can remain green because it is semantic, but the container is gold/navy. */
 .nextBuyBox {
   border-color: rgba(243, 186, 47, .18) !important;
 }
 
-/* Keep PnL semantic colors readable. */
+/* Explicit semantic PnL colors. */
 strong[style*="#4ade80"],
 strong[style*="rgb(74, 222, 128)"],
 span[style*="#4ade80"],
 span[style*="rgb(74, 222, 128)"] {
-  color: #4ade80 !important;
+  color: var(--v15-green) !important;
+  text-shadow: 0 0 10px rgba(74, 222, 128, .14) !important;
 }
 
 strong[style*="#f87171"],
 strong[style*="rgb(248, 113, 113)"],
 span[style*="#f87171"],
 span[style*="rgb(248, 113, 113)"] {
-  color: #f87171 !important;
+  color: var(--v15-red) !important;
+  text-shadow: 0 0 10px rgba(248, 113, 113, .14) !important;
 }
