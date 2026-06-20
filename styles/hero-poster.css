@@ -47,27 +47,26 @@ body {
 
 .hero.compactHero h1 {
   width: 100% !important;
-  margin: 0 0 20px !important;
-  font-size: clamp(82px, 23vw, 128px) !important;
-  line-height: .82 !important;
-  letter-spacing: -7px !important;
+  margin: 0 0 24px !important;
+  font-size: clamp(64px, 18vw, 92px) !important;
+  line-height: .96 !important;
+  letter-spacing: -3px !important;
   text-align: center !important;
-  transform: scaleX(1.08) !important;
+  transform: none !important;
   transform-origin: center !important;
   background: linear-gradient(180deg, #fff9c9 0%, #ffe577 18%, #f4bd35 42%, #b86d08 76%, #fff0a3 100%) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
-  filter: drop-shadow(0 16px 24px rgba(0,0,0,.62)) !important;
+  filter: drop-shadow(0 12px 18px rgba(0,0,0,.56)) !important;
   text-shadow:
     0 1px 0 #fff0ad,
     0 2px 0 #d8a52a,
     0 3px 0 #c08c18,
     0 4px 0 #a97810,
-    0 5px 0 #875907,
-    0 8px 14px rgba(0,0,0,.70),
-    0 18px 30px rgba(0,0,0,.52),
-    0 0 34px rgba(243,186,47,.26) !important;
+    0 6px 12px rgba(0,0,0,.62),
+    0 14px 26px rgba(0,0,0,.46),
+    0 0 28px rgba(243,186,47,.22) !important;
 }
 
 .hero.compactHero h2 {
@@ -179,13 +178,14 @@ button[style] {
 
 @media (max-width: 420px) {
   .hero.compactHero {
-    min-height: 480px !important;
-    padding: 48px 10px 38px !important;
+    min-height: 470px !important;
+    padding: 46px 12px 36px !important;
   }
 
   .hero.compactHero h1 {
-    font-size: clamp(74px, 22vw, 104px) !important;
-    letter-spacing: -6px !important;
+    font-size: clamp(58px, 17vw, 78px) !important;
+    line-height: .98 !important;
+    letter-spacing: -2px !important;
   }
 
   .hero.compactHero h2 {
