@@ -1,22 +1,44 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.5-ui-buy-rules";
+const MODEL_VERSION = "15.5a-hero-ui";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
 const goldenTitleStyle = {
   display: "block",
-  fontSize: "clamp(52px, 14vw, 70px)",
+  fontSize: "clamp(58px, 15vw, 82px)",
   fontWeight: 1000,
-  margin: "4px auto 10px",
-  letterSpacing: "-3px",
-  lineHeight: 0.92,
+  margin: "0",
+  letterSpacing: "-4px",
+  lineHeight: 0.86,
   fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
-  background: "linear-gradient(180deg, #fff8c7 0%, #ffe98a 18%, #f7b733 42%, #c57912 68%, #fff1a8 100%)",
+  background: "linear-gradient(180deg, #fff8c7 0%, #ffe680 18%, #f7b733 42%, #b56b00 68%, #fff0a3 100%)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
-  textShadow: "0 2px 0 rgba(87, 53, 0, .9), 0 5px 0 rgba(92, 54, 0, .45), 0 12px 22px rgba(244, 180, 0, .38)",
+  filter: "drop-shadow(0 3px 0 rgba(92,52,0,.85)) drop-shadow(0 10px 18px rgba(245,158,11,.26))",
+  textShadow: "0 1px 0 #fff4b8, 0 4px 0 rgba(117,67,0,.9), 0 8px 18px rgba(245,158,11,.28)",
+};
+
+const heroPanelStyle = {
+  position: "relative",
+  textAlign: "left",
+  padding: "36px 28px 26px",
+  overflow: "hidden",
+};
+
+const versionMiniStyle = {
+  position: "absolute",
+  top: 16,
+  right: 18,
+  padding: "4px 8px",
+  borderRadius: 999,
+  border: "1px solid rgba(34,197,94,.35)",
+  background: "rgba(15,118,110,.16)",
+  color: "rgba(187,247,208,.78)",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".2px",
 };
 
 function normalizeSymbol(symbol) {
@@ -208,13 +230,13 @@ export default function Home() {
   const holdingsCount = walletSummary?.holdings?.length || 0;
 
   return <main className="page">
-    <section className="hero compactHero">
+    <section className="hero compactHero" style={heroPanelStyle}>
+      <div style={versionMiniStyle}>v15.5</div>
       <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
-      <div className="versionPill" style={{ display: "inline-flex", fontSize: 11, padding: "4px 9px", borderRadius: 999, opacity: .72, margin: "0 0 10px" }}>V15.5</div>
-      <h2 style={{ fontSize: 17, margin: "10px 0 6px", color: "#cbd5e1" }}>Binance xStocks 財富儀表板</h2>
-      <p>鏈上持倉自動同步，首頁只保留 30 秒決策資訊。</p>
-      <div className="update">行情更新：{formatTime(updatedAt)}</div>
-      <div className="syncPill syncLive">{refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}</div>
+      <h2 style={{ fontSize: 17, margin: "18px 0 6px", color: "#e2e8f0", textAlign: "center", fontWeight: 950 }}>Binance xStocks 財富儀表板</h2>
+      <p style={{ textAlign: "center", margin: "0 0 16px", color: "#94a3b8", fontWeight: 800 }}>30秒完成今日決策</p>
+      <div className="update" style={{ textAlign: "center" }}>行情更新：{formatTime(updatedAt)}</div>
+      <div className="syncPill syncLive" style={{ marginLeft: "auto", marginRight: "auto" }}>{refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}</div>
       {error && <div className="dataGuard">{error}</div>}
     </section>
 
