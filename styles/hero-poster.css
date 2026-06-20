@@ -26,9 +26,9 @@ body {
 }
 
 .hero.compactHero {
-  min-height: 330px !important;
+  min-height: 430px !important;
   margin: 0 0 18px !important;
-  padding: 28px 14px 24px !important;
+  padding: 64px 24px 42px !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -38,43 +38,50 @@ body {
   background:
     radial-gradient(circle at 50% 22%, rgba(255, 226, 120, .18), transparent 42%),
     radial-gradient(circle at 82% 20%, rgba(243,186,47,.12), transparent 24%),
-    linear-gradient(135deg, #071a32 0%, #050816 58%, #02030a 100%) !important;
+    linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%) !important;
   box-shadow:
     inset 0 0 0 1px rgba(255,255,255,.04),
-    inset 0 -38px 70px rgba(0,0,0,.34),
+    inset 0 -44px 80px rgba(0,0,0,.34),
     0 18px 38px rgba(0,0,0,.28) !important;
 }
 
 .hero.compactHero h1 {
   width: 100% !important;
-  margin: 0 0 12px !important;
-  font-size: clamp(60px, 17vw, 84px) !important;
-  line-height: .9 !important;
-  letter-spacing: -3px !important;
+  margin: 0 0 30px !important;
+  font-size: clamp(68px, 18vw, 96px) !important;
+  line-height: .88 !important;
+  letter-spacing: -4px !important;
   text-align: center !important;
   transform: none !important;
   transform-origin: center !important;
-  background: linear-gradient(180deg, #fff9c9 0%, #ffe577 18%, #f4bd35 42%, #b86d08 76%, #fff0a3 100%) !important;
-  -webkit-background-clip: text !important;
-  background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-  filter: drop-shadow(0 10px 16px rgba(0,0,0,.54)) !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  -webkit-text-fill-color: #d4af37 !important;
+  color: #d4af37 !important;
+  filter: none !important;
   text-shadow:
-    0 1px 0 #fff0ad,
-    0 2px 0 #d8a52a,
-    0 3px 0 #c08c18,
-    0 4px 0 #a97810,
-    0 6px 12px rgba(0,0,0,.58),
-    0 12px 22px rgba(0,0,0,.42),
-    0 0 24px rgba(243,186,47,.20) !important;
+    0 1px 0 #c9a227,
+    0 2px 0 #b8941f,
+    0 3px 0 #a78617,
+    0 4px 0 #96780f,
+    0 5px 0 #856a07,
+    0 6px 1px rgba(0,0,0,.1),
+    0 0 5px rgba(0,0,0,.1),
+    0 1px 3px rgba(0,0,0,.3),
+    0 3px 5px rgba(0,0,0,.2),
+    0 5px 10px rgba(0,0,0,.25),
+    0 10px 10px rgba(0,0,0,.2),
+    0 20px 20px rgba(0,0,0,.15) !important;
 }
 
 .hero.compactHero h2 {
   margin: 0 0 12px !important;
-  font-size: 17px !important;
-  font-weight: 900 !important;
-  color: rgba(248,250,252,.76) !important;
-  opacity: .78 !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  letter-spacing: .5px !important;
+  color: #ffffff !important;
+  opacity: .5 !important;
 }
 
 .hero.compactHero p {
@@ -83,18 +90,18 @@ body {
 
 .hero.compactHero .update {
   margin-top: 0 !important;
-  font-size: 12px !important;
-  color: rgba(203,213,225,.78) !important;
+  font-size: 11px !important;
+  color: rgba(203,213,225,.62) !important;
 }
 
 .hero.compactHero .syncPill {
   margin-top: 8px !important;
-  padding: 5px 10px !important;
-  font-size: 11px !important;
-  background: rgba(243, 186, 47, .10) !important;
-  border: 1px solid rgba(243, 186, 47, .36) !important;
-  color: #fff3bf !important;
-  box-shadow: 0 0 18px rgba(243, 186, 47, .10) !important;
+  padding: 4px 9px !important;
+  font-size: 10px !important;
+  background: rgba(243, 186, 47, .08) !important;
+  border: 1px solid rgba(243, 186, 47, .24) !important;
+  color: rgba(255,243,191,.78) !important;
+  box-shadow: none !important;
 }
 
 .warRoom,
@@ -180,18 +187,19 @@ button[style] {
 
 @media (max-width: 420px) {
   .hero.compactHero {
-    min-height: 320px !important;
-    padding: 26px 10px 22px !important;
+    min-height: 360px !important;
+    padding: 44px 18px 32px !important;
   }
 
   .hero.compactHero h1 {
-    font-size: clamp(52px, 16vw, 70px) !important;
-    line-height: .92 !important;
-    letter-spacing: -2px !important;
+    font-size: clamp(56px, 17vw, 76px) !important;
+    line-height: .9 !important;
+    letter-spacing: -3px !important;
+    margin-bottom: 22px !important;
   }
 
   .hero.compactHero h2 {
-    font-size: 16px !important;
+    font-size: 14px !important;
     margin-bottom: 10px !important;
   }
 }
