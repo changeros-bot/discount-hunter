@@ -259,7 +259,7 @@ export default function Home() {
 
     <section className="warRoom" style={{ margin: "12px 0", padding: 12 }}>
       <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div><span>鏈上持倉</span><strong>{walletLoading ? "同步中" : `${holdingsCount}檔`}</strong></div>
+        <div><span>持倉檔數</span><strong>{walletLoading ? "同步中" : `${holdingsCount}檔`}</strong></div>
         <div><span>今日買點</span><strong>{actionList.length}檔</strong></div>
       </div>
     </section>
