@@ -7,38 +7,41 @@ const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
 const goldenTitleStyle = {
   display: "block",
-  fontSize: "clamp(58px, 15vw, 82px)",
+  fontSize: "clamp(68px, 18vw, 96px)",
   fontWeight: 1000,
   margin: "0",
   letterSpacing: "-4px",
-  lineHeight: 0.86,
+  lineHeight: 0.88,
   fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
-  background: "linear-gradient(180deg, #fff8c7 0%, #ffe680 18%, #f7b733 42%, #b56b00 68%, #fff0a3 100%)",
+  background: "linear-gradient(180deg, #fff2a3 0%, #ffd700 45%, #b8860b 100%)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
-  filter: "drop-shadow(0 3px 0 rgba(92,52,0,.85)) drop-shadow(0 10px 18px rgba(245,158,11,.26))",
-  textShadow: "0 1px 0 #fff4b8, 0 4px 0 rgba(117,67,0,.9), 0 8px 18px rgba(245,158,11,.28)",
+  filter: "drop-shadow(0 12px 24px rgba(0,0,0,.45))",
+  textShadow: "0 1px 0 #996515, 0 2px 0 #8a5a12, 0 3px 0 #7b4f10, 0 4px 0 #6c440d, 0 5px 0 #5d390a, 0 8px 16px rgba(0,0,0,.60), 0 16px 32px rgba(0,0,0,.40)",
 };
 
 const heroPanelStyle = {
   position: "relative",
-  textAlign: "left",
-  padding: "36px 28px 26px",
+  textAlign: "center",
+  padding: "42px 24px 28px",
   overflow: "hidden",
 };
 
 const versionMiniStyle = {
   position: "absolute",
-  top: 16,
-  right: 18,
+  top: 10,
+  right: 10,
   padding: "4px 8px",
   borderRadius: 999,
-  border: "1px solid rgba(34,197,94,.35)",
-  background: "rgba(15,118,110,.16)",
-  color: "rgba(187,247,208,.78)",
+  border: "1px solid rgba(243,186,47,.16)",
+  background: "rgba(243,186,47,.06)",
+  color: "rgba(243,186,47,.62)",
   fontSize: 10,
   fontWeight: 900,
-  letterSpacing: ".2px",
+  letterSpacing: "1px",
+  textTransform: "uppercase",
+  transform: "scale(0.5)",
+  transformOrigin: "top right",
 };
 
 function normalizeSymbol(symbol) {
@@ -232,9 +235,9 @@ export default function Home() {
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
       <div style={versionMiniStyle}>v15.5</div>
+      <h2 style={{ fontSize: 14, margin: "0 0 14px", color: "#f3ba2f", textAlign: "center", fontWeight: 900, letterSpacing: ".22em", opacity: 0.75 }}>Binance xStocks 財富儀表板</h2>
       <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
-      <h2 style={{ fontSize: 17, margin: "18px 0 6px", color: "#e2e8f0", textAlign: "center", fontWeight: 950 }}>Binance xStocks 財富儀表板</h2>
-      <p style={{ textAlign: "center", margin: "0 0 16px", color: "#94a3b8", fontWeight: 800 }}>30秒完成今日決策</p>
+      <p style={{ display: "inline-block", textAlign: "center", margin: "28px 0 16px", color: "#94a3b8", fontWeight: 850, letterSpacing: ".14em", background: "rgba(15,23,42,.55)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 999, padding: "8px 18px" }}>30秒完成今日決策</p>
       <div className="update" style={{ textAlign: "center" }}>行情更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive" style={{ marginLeft: "auto", marginRight: "auto" }}>{refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}</div>
       {error && <div className="dataGuard">{error}</div>}
