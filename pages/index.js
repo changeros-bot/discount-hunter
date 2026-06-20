@@ -5,11 +5,45 @@ const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
+const goldenTitleStyle = {
+  display: "block",
+  fontSize: "clamp(76px, 20vw, 112px)",
+  fontWeight: 1000,
+  margin: "0 auto 22px",
+  letterSpacing: "-5px",
+  lineHeight: 0.86,
+  fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
+  background: "linear-gradient(180deg, #fff6b7 0%, #ffd700 42%, #b8860b 100%)",
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  filter: "drop-shadow(0 14px 26px rgba(0,0,0,.58))",
+  textShadow: "0 1px 0 #fff1a6, 0 2px 0 #c9a227, 0 3px 0 #b8941f, 0 4px 0 #a78617, 0 5px 0 #96780f, 0 6px 0 #856a07, 0 8px 16px rgba(0,0,0,.68), 0 16px 32px rgba(0,0,0,.48), 0 0 28px rgba(243,186,47,.18)",
+};
 
+const heroPanelStyle = {
+  position: "relative",
+  textAlign: "center",
+  padding: "46px 18px 34px",
+  overflow: "hidden",
+  background: "radial-gradient(circle at 50% 18%, rgba(243,186,47,.10) 0%, rgba(10,14,39,0) 36%), linear-gradient(135deg, rgba(10,14,39,.92) 0%, rgba(3,7,18,.92) 100%)",
+};
 
-
-
-
+const versionMiniStyle = {
+  position: "absolute",
+  top: 10,
+  right: 10,
+  padding: "4px 8px",
+  borderRadius: 999,
+  border: "1px solid rgba(243,186,47,.16)",
+  background: "rgba(243,186,47,.06)",
+  color: "rgba(243,186,47,.62)",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: "1px",
+  textTransform: "uppercase",
+  transform: "scale(0.5)",
+  transformOrigin: "top right",
+};
 
 function normalizeSymbol(symbol) {
   return String(symbol || "").trim().toUpperCase();
@@ -82,44 +116,28 @@ function getNextBuyPoint(asset, completedLevel = 0) {
   const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
-
-  if (!Number.isFinite(currentDepth) || rules.length === 0) {
-    return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
-  }
+  if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
 
   const ruleDepths = rules
     .map((rule) => Math.abs(parsePercentValue(rule)))
-    .filter((v) => Number.isFinite(v));
+    .filter((value) => Number.isFinite(value));
 
-  if (ruleDepths.length === 0) {
-    return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
-  }
+  if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
 
   let targetIndex = ruleDepths.findIndex((depth) => currentDepth < depth);
-
-  if (targetIndex === -1) {
-    targetIndex = ruleDepths.length - 1;
-  }
-
-  targetIndex = Math.max(targetIndex, Math.min(completedLevel, ruleDepths.length - 1));
+  if (targetIndex === -1) targetIndex = ruleDepths.length - 1;
 
   const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
   const targetDepth = ruleDepths[targetIndex];
   const range = Math.max(1, targetDepth - previousDepth);
-
-  const effectiveCurrentDepth = Math.max(currentDepth, previousDepth);
-
-  const progress = Math.min(
-    100,
-    Math.max(0, ((effectiveCurrentDepth - previousDepth) / range) * 100)
-  );
+  const rawProgress = ((currentDepth - previousDepth) / range) * 100;
+  const progress = currentDepth >= targetDepth ? 100 : Math.min(100, Math.max(0, rawProgress));
 
   return {
     currentAmount: `${targetIndex === 0 ? 0 : amounts[targetIndex - 1] || 0}U`,
     targetAmount: `${amounts[targetIndex] || 0}U`,
     progress,
   };
-};
 }
 
 export default function Home() {
@@ -210,7 +228,7 @@ export default function Home() {
     if (a.isActionable !== b.isActionable) return a.isActionable ? -1 : 1;
     if ((a.signalLevel || 0) !== (b.signalLevel || 0)) return (b.signalLevel || 0) - (a.signalLevel || 0);
     if (a.hasHolding !== b.hasHolding) return a.hasHolding ? -1 : 1;
-    return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
+    return Math.abs(parsePercentValue(b.discount || 0)) - Math.abs(parsePercentValue(a.discount || 0));
   }), [enhancedAssets]);
 
   const actionList = sortedAssets.filter((asset) => asset.isActionable);
@@ -222,22 +240,13 @@ export default function Home() {
   const holdingsCount = walletSummary?.holdings?.length || 0;
 
   return <main className="page">
-    <section className="hero compactHero">
-      <div className="version-badge">v15.5</div>
-
-      <h1 className="hero-title">
-        <span className="hero-title-line">美股DCA</span>
-        <span className="hero-title-line">折價追蹤</span>
-      </h1>
-
-      <p className="hero-subtitle">Binance xStocks 財富儀表板</p>
-      <p className="hero-description">30秒完成今日決策</p>
-
-      <div className="update">行情更新：{formatTime(updatedAt)}</div>
-      <div className="syncPill syncLive">
-        {refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}
-      </div>
-
+    <section className="hero compactHero" style={heroPanelStyle}>
+      <div style={versionMiniStyle}>v15.5</div>
+      <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
+      <h2 style={{ fontSize: 18, margin: "0 0 8px", color: "rgba(248,250,252,.72)", textAlign: "center", fontWeight: 850, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
+      <p style={{ textAlign: "center", margin: "0 0 18px", color: "rgba(248,250,252,.92)", fontWeight: 900, fontSize: 20, letterSpacing: ".08em" }}>30秒完成今日決策</p>
+      <div className="update" style={{ textAlign: "center" }}>行情更新：{formatTime(updatedAt)}</div>
+      <div className="syncPill syncLive" style={{ marginLeft: "auto", marginRight: "auto" }}>{refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}</div>
       {error && <div className="dataGuard">{error}</div>}
     </section>
 
