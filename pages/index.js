@@ -223,23 +223,23 @@ export default function Home() {
 
   return <main className="page">
     <section className="hero compactHero">
-      <div className="version-badge">v15.5</div>
+  <div className="version-badge">v15.5</div>
 
-      <h1 className="hero-title">
-        <span className="hero-title-line">美股DCA</span>
-        <span className="hero-title-line">折價追蹤</span>
-      </h1>
+  <h1 className="hero-title">
+    <span className="hero-title-line">美股DCA</span>
+    <span className="hero-title-line">折價追蹤</span>
+  </h1>
 
-      <p className="hero-subtitle">Binance xStocks 財富儀表板</p>
-      <p className="hero-description">30秒完成今日決策</p>
+  <p className="hero-subtitle">Binance xStocks 財富儀表板</p>
+  <p className="hero-description">30秒完成今日決策</p>
 
-      <div className="update">行情更新：{formatTime(updatedAt)}</div>
-      <div className="syncPill syncLive">
-        {refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}
-      </div>
+  <div className="update">行情更新：{formatTime(updatedAt)}</div>
+  <div className="syncPill syncLive">
+    {refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}
+  </div>
 
-      {error && <div className="dataGuard">{error}</div>}
-    </section>
+  {error && <div className="dataGuard">{error}</div>}
+</section>
 
     <section className="warRoom">
       <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
