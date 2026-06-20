@@ -108,19 +108,19 @@ function getRuleRows(asset) {
 }
 
 function getNextBuyPoint(asset, completedLevel = 0) {
-  const discountDepth = Math.abs(Number(asset.discount));
+  const currentDepth = Math.abs(Number(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
-  if (!Number.isFinite(discountDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
+  if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
 
-  const ruleDepths = rules.map((rule) => Math.abs(Number(rule)));
-  const startIndex = Math.min(Math.max(completedLevel, 0), ruleDepths.length - 1);
-  const nextIndex = ruleDepths.findIndex((depth, index) => index >= startIndex && discountDepth < depth);
-  const targetIndex = nextIndex === -1 ? ruleDepths.length - 1 : nextIndex;
+  const ruleDepths = rules.map((rule) => Math.abs(Number(rule))).filter((value) => Number.isFinite(value));
+  if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
+
+  const targetIndex = Math.min(Math.max(completedLevel, 0), ruleDepths.length - 1);
   const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
   const targetDepth = ruleDepths[targetIndex];
-  const range = Math.max(targetDepth - previousDepth, 1);
-  const progress = Math.min(100, Math.max(0, ((discountDepth - previousDepth) / range) * 100));
+  const range = Math.max(1, targetDepth - previousDepth);
+  const progress = Math.min(100, Math.max(0, ((currentDepth - previousDepth) / range) * 100));
 
   return {
     currentAmount: `${targetIndex === 0 ? 0 : amounts[targetIndex - 1] || 0}U`,
