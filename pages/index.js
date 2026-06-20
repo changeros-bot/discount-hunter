@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.5e-css-hero";
+const MODEL_VERSION = "15.5f-status-sort";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
@@ -148,6 +148,10 @@ function getNextBuyPoint(asset, completedLevel = 0) {
   };
 }
 
+function getProgressScore(asset) {
+  return Number(getNextBuyPoint(asset, asset.completedLevel || 0).progress || 0);
+}
+
 export default function Home() {
   const [assets, setAssets] = useState([]);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -241,7 +245,9 @@ export default function Home() {
 
   const actionList = sortedAssets.filter((asset) => asset.isActionable);
   const heldSignalList = sortedAssets.filter((asset) => asset.signalLevel > 0 && asset.hasHolding && !asset.isActionable);
-  const watchList = sortedAssets.filter((asset) => !asset.isActionable && !heldSignalList.includes(asset));
+  const watchList = useMemo(() => sortedAssets
+    .filter((asset) => !asset.isActionable && !heldSignalList.includes(asset))
+    .sort((a, b) => getProgressScore(b) - getProgressScore(a)), [sortedAssets, heldSignalList]);
   const totalAmount = actionList.reduce((sum, asset) => sum + Number(asset.actionAmount || 0), 0);
   const marketOnline = assets.length > 0 && !error;
   const walletOnline = !!walletSummary && !walletError;
@@ -315,10 +321,15 @@ function DecisionSection({ actionList, totalAmount, updatedAt, refreshing }) {
 }
 
 function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walletSummary }) {
+  const marketClass = source ? (marketOnline ? "status-live" : "status-error") : "status-loading";
+  const marketText = source ? (marketOnline ? "LIVE" : "ERROR") : "LOADING";
+  const walletClass = walletLoading ? "status-loading" : walletOnline ? "status-live" : "status-error";
+  const walletText = walletLoading ? "LOADING" : walletOnline ? "LIVE" : "ERROR";
+
   return <section style={{ margin: "18px 0 8px", padding: 12, background: "#020617", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-      <span style={{ color: marketOnline ? "#4ade80" : "#f87171" }}>● Market API {marketOnline ? "LIVE" : "異常"}</span>
-      <span style={{ color: walletOnline ? "#4ade80" : walletLoading ? "#f59e0b" : "#94a3b8" }}>● Wallet {walletOnline ? "鏈上同步" : walletLoading ? "同步中" : "待同步"}</span>
+      <span className={marketClass}>● Market API {marketText}</span>
+      <span className={walletClass}>● Wallet {walletText}</span>
     </div>
     <div style={{ marginTop: 8 }}>行情資料源：{source || "讀取中"}</div>
     {walletSummary?.debugCounts && <div style={{ marginTop: 6 }}>
