@@ -1,29 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.5c-first-screen";
+const MODEL_VERSION = "15.5d-svg-hero";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
-const goldenTitleStyle = {
-  display: "block",
-  fontSize: "clamp(56px, 16vw, 84px)",
-  fontWeight: 1000,
-  margin: "0 auto 10px",
-  letterSpacing: "-3px",
-  lineHeight: 0.9,
-  fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
-  background: "linear-gradient(180deg, #fff6b7 0%, #ffd700 42%, #b8860b 100%)",
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  filter: "drop-shadow(0 10px 18px rgba(0,0,0,.52))",
-  textShadow: "0 1px 0 #fff1a6, 0 2px 0 #c9a227, 0 3px 0 #b8941f, 0 4px 0 #a78617, 0 8px 16px rgba(0,0,0,.58), 0 0 22px rgba(243,186,47,.16)",
-};
-
 const heroPanelStyle = {
   position: "relative",
   textAlign: "center",
-  padding: "18px 12px 10px",
+  padding: "14px 12px 8px",
   minHeight: "220px",
   overflow: "hidden",
   background: "radial-gradient(circle at 50% 18%, rgba(243,186,47,.08) 0%, rgba(10,14,39,0) 30%), linear-gradient(135deg, rgba(10,14,39,.96) 0%, rgba(3,7,18,.96) 100%)",
@@ -85,6 +70,13 @@ function formatTime(isoString) {
   if (!isoString) return "讀取中";
   const d = new Date(isoString);
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+}
+
+function valueClass(value) {
+  const text = String(value ?? "").trim();
+  if (text.startsWith("-")) return "pnl-value negative";
+  if (text.startsWith("+")) return "pnl-value positive";
+  return "pnl-value";
 }
 
 function getCurrentSignalLevel(asset) {
@@ -243,8 +235,7 @@ export default function Home() {
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
       <div style={versionMiniStyle}>v15.5</div>
-      <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
-      <h2 style={{ fontSize: 14, margin: "0", color: "rgba(248,250,252,.68)", textAlign: "center", fontWeight: 750, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
+      <img className="heroLogoSvg" src="/hero-logo.svg" alt="美股DCA 折價追蹤" />
       {error && <div className="dataGuard">{error}</div>}
     </section>
 
@@ -282,14 +273,15 @@ export default function Home() {
 
 function DecisionSection({ actionList, totalAmount, updatedAt, refreshing }) {
   return <section style={{ margin: "12px 0 16px", padding: 16, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: actionList.length > 0 ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
-    <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "right", marginBottom: 8, fontWeight: 850 }}>
-      {refreshing ? "行情更新中…" : "LIVE"}｜{formatTime(updatedAt)}
+    <div className="liveLine" style={{ fontSize: 12, textAlign: "right", marginBottom: 8, fontWeight: 850 }}>
+      <span className={refreshing ? "liveDot loading" : "liveDot"} />
+      <span className="liveText">{refreshing ? "行情更新中" : "LIVE"}</span>｜{formatTime(updatedAt)}
     </div>
     <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 12px" }}>今日決策</h2>
     {actionList.length > 0 ? <>
       <div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}>
         <div>可執行買點：{actionList.length}檔</div>
-        <div>建議投入：<span style={{ color: "#4ade80" }}>{totalAmount}U</span></div>
+        <div>建議投入：<span className="pnl-value positive">{totalAmount}U</span></div>
       </div>
       <div style={{ display: "grid", gap: 8 }}>
         {actionList.map((asset) => {
@@ -355,7 +347,7 @@ function WalletSyncSection({ walletSummary, walletLoading, walletError, onSync }
 function WalletMetric({ label, value, color }) {
   return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}>
     <span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span>
-    <strong style={{ display: "block", color: color || "#f8fafc", marginTop: 4, fontSize: 16 }}>{value}</strong>
+    <strong className={valueClass(value)} style={{ display: "block", color: color || undefined, marginTop: 4, fontSize: 16 }}>{value}</strong>
   </div>;
 }
 
@@ -366,7 +358,7 @@ function WalletHoldingCard({ holding }) {
   return <div style={{ padding: 12, background: "#0f172a", borderRadius: 12, border: "1px solid rgba(148,163,184,.22)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
       <strong style={{ color: "#f8fafc", fontSize: 18 }}>{holding.symbol}</strong>
-      <strong style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}｜{formatPct(holding.pnlPct, 1)}</strong>
+      <strong className={holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}｜{formatPct(holding.pnlPct, 1)}</strong>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}>
       <div>數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(holding.quantity, 6)}</strong></div>
@@ -374,7 +366,7 @@ function WalletHoldingCard({ holding }) {
       <div>均價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.averageCost)}</strong></div>
       <div>現價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.tokenPrice)}</strong></div>
       <div>市值<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.currentValue)}</strong></div>
-      <div>損益<br /><strong style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}</strong></div>
+      <div>損益<br /><strong className={holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}</strong></div>
     </div>
     {warning && <div style={{ marginTop: 10, padding: 8, background: "rgba(250,204,21,.14)", color: "#fde68a", borderRadius: 8, fontWeight: 850 }}>⚠️ {warning}</div>}
   </div>;
@@ -421,7 +413,7 @@ function AssetCard({ asset }) {
     </details>
     {asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}>
       <div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div>
-      <div>持倉損益<br /><strong style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div>
+      <div>持倉損益<br /><strong className={asset.holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div>
     </div>}
     <div className="nextBuyBox">
       <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>
