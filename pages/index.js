@@ -108,30 +108,25 @@ function getRuleRows(asset) {
 }
 
 function getNextBuyPoint(asset, completedLevel = 0) {
-  const discount = Number(asset.discount);
+  const discountDepth = Math.abs(Number(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
-  if (!Number.isFinite(discount) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
+  if (!Number.isFinite(discountDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
 
-  const nextIndex = rules.findIndex((rule, index) => index >= completedLevel && discount > rule);
-  if (nextIndex === -1) {
-    const targetIndex = Math.min(completedLevel, rules.length - 1);
-    const nextRule = rules[targetIndex];
-    const prevRule = targetIndex === 0 ? 0 : Number(rules[targetIndex - 1]);
-    const range = Math.abs(Number(nextRule) - prevRule) || 1;
-    const progress = Math.min(100, Math.max(0, ((prevRule - discount) / range) * 100));
-    return {
-      currentAmount: `${completedLevel === 0 ? 0 : amounts[completedLevel - 1] || 0}U`,
-      targetAmount: `${amounts[targetIndex] || 0}U`,
-      progress,
-    };
-  }
+  const ruleDepths = rules.map((rule) => Math.abs(Number(rule)));
+  const startIndex = Math.min(Math.max(completedLevel, 0), ruleDepths.length - 1);
+  const nextIndex = ruleDepths.findIndex((depth, index) => index >= startIndex && discountDepth < depth);
+  const targetIndex = nextIndex === -1 ? ruleDepths.length - 1 : nextIndex;
+  const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
+  const targetDepth = ruleDepths[targetIndex];
+  const range = Math.max(targetDepth - previousDepth, 1);
+  const progress = Math.min(100, Math.max(0, ((discountDepth - previousDepth) / range) * 100));
 
-  const target = Number(rules[nextIndex]);
-  const previous = nextIndex === 0 ? 0 : Number(rules[nextIndex - 1]);
-  const range = Math.abs(target - previous) || 1;
-  const progress = Math.min(100, Math.max(0, ((previous - discount) / range) * 100));
-  return { currentAmount: `${nextIndex === 0 ? 0 : amounts[nextIndex - 1] || 0}U`, targetAmount: `${amounts[nextIndex] || 0}U`, progress };
+  return {
+    currentAmount: `${targetIndex === 0 ? 0 : amounts[targetIndex - 1] || 0}U`,
+    targetAmount: `${amounts[targetIndex] || 0}U`,
+    progress,
+  };
 }
 
 export default function Home() {
