@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.5d-svg-hero";
+const MODEL_VERSION = "15.5e-css-hero";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
+const goldenTitleStyle = {
+  display: "block",
+  fontSize: "clamp(56px, 16vw, 84px)",
+  fontWeight: 1000,
+  margin: "0 auto 10px",
+  letterSpacing: "-3px",
+  lineHeight: 0.9,
+  fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
+  background: "linear-gradient(180deg, #fff6b7 0%, #ffd700 42%, #b8860b 100%)",
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  filter: "drop-shadow(0 10px 18px rgba(0,0,0,.52))",
+  textShadow: "0 1px 0 #fff1a6, 0 2px 0 #c9a227, 0 3px 0 #b8941f, 0 4px 0 #a78617, 0 8px 16px rgba(0,0,0,.58), 0 0 22px rgba(243,186,47,.16)",
+};
+
 const heroPanelStyle = {
   position: "relative",
   textAlign: "center",
-  padding: "14px 12px 8px",
+  padding: "18px 12px 10px",
   minHeight: "220px",
   overflow: "hidden",
   background: "radial-gradient(circle at 50% 18%, rgba(243,186,47,.08) 0%, rgba(10,14,39,0) 30%), linear-gradient(135deg, rgba(10,14,39,.96) 0%, rgba(3,7,18,.96) 100%)",
@@ -235,9 +250,12 @@ export default function Home() {
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
       <div style={versionMiniStyle}>v15.5</div>
-      <img className="heroLogoSvg" src="/hero-logo.svg" alt="美股DCA 折價追蹤" />
+      <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
+      <h2 style={{ fontSize: 14, margin: "0", color: "rgba(248,250,252,.68)", textAlign: "center", fontWeight: 750, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
       {error && <div className="dataGuard">{error}</div>}
     </section>
+
+    <DecisionSection actionList={actionList} totalAmount={totalAmount} updatedAt={updatedAt} refreshing={refreshing} />
 
     <section className="warRoom" style={{ margin: "12px 0", padding: 12 }}>
       <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -245,8 +263,6 @@ export default function Home() {
         <div><span>今日買點</span><strong>{actionList.length}檔</strong></div>
       </div>
     </section>
-
-    <DecisionSection actionList={actionList} totalAmount={totalAmount} updatedAt={updatedAt} refreshing={refreshing} />
 
     <WalletSyncSection walletSummary={walletSummary} walletLoading={walletLoading} walletError={walletError} onSync={syncWallet} />
 
@@ -272,12 +288,12 @@ export default function Home() {
 }
 
 function DecisionSection({ actionList, totalAmount, updatedAt, refreshing }) {
-  return <section style={{ margin: "12px 0 16px", padding: 16, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: actionList.length > 0 ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
-    <div className="liveLine" style={{ fontSize: 12, textAlign: "right", marginBottom: 8, fontWeight: 850 }}>
+  return <section style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: actionList.length > 0 ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
+    <div className="liveLine" style={{ fontSize: 12, textAlign: "right", marginBottom: 6, fontWeight: 850 }}>
       <span className={refreshing ? "liveDot loading" : "liveDot"} />
       <span className="liveText">{refreshing ? "行情更新中" : "LIVE"}</span>｜{formatTime(updatedAt)}
     </div>
-    <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 12px" }}>今日決策</h2>
+    <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 10px" }}>今日決策</h2>
     {actionList.length > 0 ? <>
       <div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}>
         <div>可執行買點：{actionList.length}檔</div>
@@ -291,7 +307,7 @@ function DecisionSection({ actionList, totalAmount, updatedAt, refreshing }) {
           </div>;
         })}
       </div>
-    </> : <div style={{ textAlign: "center", padding: "12px 0 14px" }}>
+    </> : <div style={{ textAlign: "center", padding: "6px 0 10px" }}>
       <div style={{ fontSize: 30, fontWeight: 1000, color: "#f8fafc", lineHeight: 1.1 }}>暫無買點</div>
       <div style={{ marginTop: 8, color: "#94a3b8", fontWeight: 850 }}>等待下一層</div>
     </div>}
