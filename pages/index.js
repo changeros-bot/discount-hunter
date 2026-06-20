@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.5f-status-sort";
+const MODEL_VERSION = "15.6-index-deployment";
 const REFRESH_MS = 5000;
+const MONTHLY_BUDGET_MIN_TWD = 1500;
+const MONTHLY_BUDGET_MAX_TWD = 3000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
@@ -252,10 +254,12 @@ export default function Home() {
   const marketOnline = assets.length > 0 && !error;
   const walletOnline = !!walletSummary && !walletError;
   const holdingsCount = walletSummary?.holdings?.length || 0;
+  const deploymentTargetUsd = Number(walletSummary?.deploymentTargetUsd || walletSummary?.targetPoolUsd || walletSummary?.monthlyBudgetUsd || 0);
+  const deploymentRate = deploymentTargetUsd > 0 ? Number(walletSummary?.actualTotalInvested || 0) / deploymentTargetUsd : NaN;
 
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
-      <div style={versionMiniStyle}>v15.5</div>
+      <div style={versionMiniStyle}>v15.6</div>
       <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
       <h2 style={{ fontSize: 14, margin: "0", color: "rgba(248,250,252,.68)", textAlign: "center", fontWeight: 750, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
       {error && <div className="dataGuard">{error}</div>}
@@ -263,12 +267,14 @@ export default function Home() {
 
     <DecisionSection actionList={actionList} totalAmount={totalAmount} updatedAt={updatedAt} refreshing={refreshing} />
 
-    <section className="warRoom" style={{ margin: "12px 0", padding: 12 }}>
-      <div className="warRoomHeader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div><span>持倉檔數</span><strong>{walletLoading ? "同步中" : `${holdingsCount}檔`}</strong></div>
-        <div><span>今日買點</span><strong>{actionList.length}檔</strong></div>
-      </div>
-    </section>
+    <DeploymentSection
+      walletSummary={walletSummary}
+      walletLoading={walletLoading}
+      holdingsCount={holdingsCount}
+      actionCount={actionList.length}
+      deploymentTargetUsd={deploymentTargetUsd}
+      deploymentRate={deploymentRate}
+    />
 
     <WalletSyncSection walletSummary={walletSummary} walletLoading={walletLoading} walletError={walletError} onSync={syncWallet} />
 
@@ -317,6 +323,38 @@ function DecisionSection({ actionList, totalAmount, updatedAt, refreshing }) {
       <div style={{ fontSize: 30, fontWeight: 1000, color: "#f8fafc", lineHeight: 1.1 }}>暫無買點</div>
       <div style={{ marginTop: 8, color: "#94a3b8", fontWeight: 850 }}>等待下一層</div>
     </div>}
+  </section>;
+}
+
+function DeploymentSection({ walletSummary, walletLoading, holdingsCount, actionCount, deploymentTargetUsd, deploymentRate }) {
+  const pnlColor = walletSummary && walletSummary.portfolioUnrealizedPnL >= 0 ? "#4ade80" : "#f87171";
+  const hasTarget = Number.isFinite(deploymentRate);
+  const deployedText = walletLoading && !walletSummary ? "同步中" : `$${formatNumber(walletSummary?.actualTotalInvested)}`;
+  const marketValueText = walletLoading && !walletSummary ? "同步中" : `$${formatNumber(walletSummary?.portfolioMarketValue)}`;
+  const targetText = deploymentTargetUsd > 0 ? `$${formatNumber(deploymentTargetUsd)}` : "待設定目標池";
+
+  return <section className="warRoom" style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(2,6,23,.96), rgba(15,23,42,.96))", borderRadius: 18, border: "1px solid rgba(56,189,248,.35)" }}>
+    <div style={{ textAlign: "center", marginBottom: 12 }}>
+      <div style={{ color: "#38bdf8", fontSize: 13, fontWeight: 950, letterSpacing: ".08em" }}>中央戰情室</div>
+      <div style={{ color: "#f8fafc", fontSize: 24, fontWeight: 1000, marginTop: 4 }}>目前部署率</div>
+      <div style={{ color: hasTarget ? "#f59e0b" : "#94a3b8", fontSize: 34, fontWeight: 1000, lineHeight: 1.1, marginTop: 4 }}>
+        {hasTarget ? formatPct(deploymentRate, 1) : "待設定"}
+      </div>
+      <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 4 }}>已投入 / 目標池：{deployedText} / {targetText}</div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <WalletMetric label="已投入" value={deployedText} />
+      <WalletMetric label="目前市值" value={marketValueText} />
+      <WalletMetric label="未實現損益" value={formatCurrency(walletSummary?.portfolioUnrealizedPnL)} color={pnlColor} />
+      <WalletMetric label="報酬率" value={formatPct(walletSummary?.portfolioPnLPct)} color={pnlColor} />
+      <WalletMetric label="持倉檔數" value={walletLoading ? "同步中" : `${holdingsCount}檔`} />
+      <WalletMetric label="今日買點" value={`${actionCount}檔`} />
+    </div>
+
+    <div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(15,23,42,.78)", color: "#94a3b8", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}>
+      心理提示：部署率只看實際投入，不代表今天一定要買。月預算參考 NT${MONTHLY_BUDGET_MIN_TWD.toLocaleString()}–NT${MONTHLY_BUDGET_MAX_TWD.toLocaleString()}；未設定 USD 目標池前，不硬算假百分比。
+    </div>
   </section>;
 }
 
