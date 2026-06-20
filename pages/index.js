@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.3-ui-cleanup";
+const MODEL_VERSION = "15.4-compact-buy-rules";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
@@ -62,6 +62,15 @@ function getActionAmount(asset, completedLevel) {
   if (level <= completedLevel) return 0;
   const amounts = asset.amounts || [];
   return Number(amounts[level - 1] || parseAmount(asset.signal?.amount) || 0);
+}
+
+function getRuleSummary(asset) {
+  const rules = asset.rules || [];
+  const amounts = asset.amounts || [];
+  return {
+    rulesText: rules.map((rule) => `${Math.abs(Number(rule))}%`).join(" / "),
+    amountsText: amounts.map((amount) => `${amount}U`).join(" / "),
+  };
 }
 
 function getNextBuyPoint(asset, completedLevel = 0) {
@@ -193,7 +202,7 @@ export default function Home() {
   return <main className="page">
     <section className="hero compactHero">
       <h1 style={goldenTitleStyle}>美股DCA折價追蹤</h1>
-      <div className="versionPill">V15.3 UI Cleanup</div>
+      <div className="versionPill">V15.4 Buy Rules</div>
       <h2 style={{ fontSize: 17, margin: "12px 0 6px", color: "#cbd5e1" }}>Binance xStocks 財富儀表板</h2>
       <p>鏈上持倉自動同步，首頁只保留 30 秒決策資訊。</p>
       <div className="update">行情更新：{formatTime(updatedAt)}</div>
@@ -347,6 +356,7 @@ function AssetCard({ asset }) {
   const completedLevel = asset.completedLevel || 0;
   const actionAmount = asset.actionAmount ?? getActionAmount(asset, completedLevel);
   const nextBuy = getNextBuyPoint(asset, completedLevel);
+  const ruleSummary = getRuleSummary(asset);
   const held = asset.hasHolding;
   const signalText = level > 0
     ? actionAmount > 0
@@ -360,6 +370,9 @@ function AssetCard({ asset }) {
     <div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div>
     <div className="signal">{signalText}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>本層建議</span><strong>{actionAmount}U</strong></div></div>
+    <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(15,23,42,.72)", border: "1px solid rgba(251,191,36,.22)", color: "#fef3c7", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}>
+      買點：{ruleSummary.rulesText}<br />金額：{ruleSummary.amountsText}
+    </div>
     {asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}>
       <div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div>
       <div>持倉損益<br /><strong style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div>
