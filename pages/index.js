@@ -7,24 +7,25 @@ const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
 const goldenTitleStyle = {
   display: "block",
-  fontSize: "clamp(68px, 18vw, 96px)",
+  fontSize: "clamp(76px, 20vw, 112px)",
   fontWeight: 1000,
-  margin: "0",
-  letterSpacing: "-4px",
-  lineHeight: 0.88,
+  margin: "0 auto 22px",
+  letterSpacing: "-5px",
+  lineHeight: 0.86,
   fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
-  background: "linear-gradient(180deg, #fff2a3 0%, #ffd700 45%, #b8860b 100%)",
+  background: "linear-gradient(180deg, #fff6b7 0%, #ffd700 42%, #b8860b 100%)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
-  filter: "drop-shadow(0 12px 24px rgba(0,0,0,.45))",
-  textShadow: "0 1px 0 #996515, 0 2px 0 #8a5a12, 0 3px 0 #7b4f10, 0 4px 0 #6c440d, 0 5px 0 #5d390a, 0 8px 16px rgba(0,0,0,.60), 0 16px 32px rgba(0,0,0,.40)",
+  filter: "drop-shadow(0 14px 26px rgba(0,0,0,.58))",
+  textShadow: "0 1px 0 #fff1a6, 0 2px 0 #c9a227, 0 3px 0 #b8941f, 0 4px 0 #a78617, 0 5px 0 #96780f, 0 6px 0 #856a07, 0 8px 16px rgba(0,0,0,.68), 0 16px 32px rgba(0,0,0,.48), 0 0 28px rgba(243,186,47,.18)",
 };
 
 const heroPanelStyle = {
   position: "relative",
   textAlign: "center",
-  padding: "42px 24px 28px",
+  padding: "46px 18px 34px",
   overflow: "hidden",
+  background: "radial-gradient(circle at 50% 18%, rgba(243,186,47,.10) 0%, rgba(10,14,39,0) 36%), linear-gradient(135deg, rgba(10,14,39,.92) 0%, rgba(3,7,18,.92) 100%)",
 };
 
 const versionMiniStyle = {
@@ -235,9 +236,9 @@ export default function Home() {
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
       <div style={versionMiniStyle}>v15.5</div>
-      <h2 style={{ fontSize: 14, margin: "0 0 14px", color: "#f3ba2f", textAlign: "center", fontWeight: 900, letterSpacing: ".22em", opacity: 0.75 }}>Binance xStocks 財富儀表板</h2>
       <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
-      <p style={{ display: "inline-block", textAlign: "center", margin: "28px 0 16px", color: "#94a3b8", fontWeight: 850, letterSpacing: ".14em", background: "rgba(15,23,42,.55)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 999, padding: "8px 18px" }}>30秒完成今日決策</p>
+      <h2 style={{ fontSize: 18, margin: "0 0 8px", color: "rgba(248,250,252,.72)", textAlign: "center", fontWeight: 850, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
+      <p style={{ textAlign: "center", margin: "0 0 18px", color: "rgba(248,250,252,.92)", fontWeight: 900, fontSize: 20, letterSpacing: ".08em" }}>30秒完成今日決策</p>
       <div className="update" style={{ textAlign: "center" }}>行情更新：{formatTime(updatedAt)}</div>
       <div className="syncPill syncLive" style={{ marginLeft: "auto", marginRight: "auto" }}>{refreshing ? "行情更新中…" : "LIVE｜每5秒行情更新"}</div>
       {error && <div className="dataGuard">{error}</div>}
