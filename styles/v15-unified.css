@@ -23,11 +23,8 @@ body {
     linear-gradient(180deg, #061326 0%, #030816 45%, #02030a 100%) !important;
 }
 
-.page {
-  background: transparent !important;
-}
+.page { background: transparent !important; }
 
-/* Hero: CSS can improve metallic feel, but real 3D metal still requires image/SVG. */
 .hero.compactHero {
   background:
     radial-gradient(circle at 50% 22%, rgba(255, 218, 118, .20), transparent 28%),
@@ -90,13 +87,13 @@ body {
   text-shadow: 0 2px 8px rgba(0,0,0,.62) !important;
 }
 
-/* Large sections: dark navy glass + subtle gold edge. */
 .warRoom,
 .card,
 .idleGroup,
 .page > section:not(.hero) {
   background:
-    radial-gradient(circle at top left, rgba(243, 186, 47, .10), transparent 36%),
+    radial-gradient(circle at top left, rgba(42, 208, 139, .12), transparent 26%),
+    radial-gradient(circle at top left, rgba(243, 186, 47, .11), transparent 44%),
     linear-gradient(180deg, rgba(10, 22, 45, .96), rgba(5, 8, 22, .97)) !important;
   border: 1px solid var(--v15-gold-border) !important;
   box-shadow:
@@ -118,7 +115,6 @@ section[style*="border: 2px solid rgb(34, 197, 94)"] {
   text-shadow: 0 0 18px rgba(243, 186, 47, .10) !important;
 }
 
-/* Inner metric boxes. */
 .warRoomHeader div,
 .dataGrid div,
 .nextBuyBox,
@@ -131,27 +127,26 @@ section[style*="border: 2px solid rgb(34, 197, 94)"] {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.025) !important;
 }
 
-/* Text hierarchy. */
+.warRoomHeader div {
+  min-height: 96px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+}
+
 .warRoomHeader span,
 .dataGrid span,
 .card p,
 .page > section:not(.hero) span,
 .page > section:not(.hero) div,
-.idleGroup summary {
-  color: var(--v15-muted) !important;
-}
+.idleGroup summary { color: var(--v15-muted) !important; }
 
 .warRoomHeader strong,
 .dataGrid strong,
-.page > section:not(.hero) strong {
-  color: var(--v15-text) !important;
-}
+.page > section:not(.hero) strong { color: var(--v15-text) !important; }
 
-.signal {
-  color: var(--v15-gold-soft) !important;
-}
+.signal { color: var(--v15-gold-soft) !important; }
 
-/* LIVE status: bright green, independent from the gold brand color. */
 .syncLive,
 .syncPill.syncLive,
 .liveStatus,
@@ -162,12 +157,6 @@ section[style*="border: 2px solid rgb(34, 197, 94)"] {
   box-shadow: 0 0 16px rgba(74, 222, 128, .18) !important;
 }
 
-.page > section:not(.hero) div[style*="LIVE"],
-.page > section:not(.hero) span[style*="LIVE"] {
-  color: #86efac !important;
-}
-
-/* Buttons: stronger 3D gold glass. */
 button,
 button[style] {
   background:
@@ -202,27 +191,57 @@ button[style]:active {
 .card.active {
   border-color: rgba(243, 186, 47, .42) !important;
   background:
-    radial-gradient(circle at top left, rgba(243, 186, 47, .10), transparent 40%),
+    radial-gradient(circle at 0% 7%, rgba(42, 208, 139, .24), transparent 25%),
+    radial-gradient(circle at top left, rgba(243, 186, 47, .10), transparent 44%),
     linear-gradient(180deg, rgba(8, 26, 43, .94), rgba(5, 8, 22, .96)) !important;
 }
 
-.nextBuyBox {
-  border-color: rgba(243, 186, 47, .18) !important;
+.card.active::before,
+.card.idle::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 48px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(34,197,94,.22), rgba(34,197,94,0)) !important;
+  opacity: .95;
 }
 
-/* Explicit semantic PnL colors. */
+.card {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.nextBuyBox { border-color: rgba(243, 186, 47, .18) !important; }
+
+/* Hero line spacing: open the two title lines without increasing hero height. */
+.hero.compactHero h1 br {
+  content: "" !important;
+  display: block !important;
+  margin: 4px 0 !important;
+}
+
+/* Semantic colors by value/class/style. */
+.pnl-positive,
+.positive,
 strong[style*="#4ade80"],
 strong[style*="rgb(74, 222, 128)"],
 span[style*="#4ade80"],
 span[style*="rgb(74, 222, 128)"] {
   color: var(--v15-green) !important;
-  text-shadow: 0 0 10px rgba(74, 222, 128, .14) !important;
+  text-shadow: 0 0 10px rgba(74, 222, 128, .18) !important;
 }
 
+.pnl-negative,
+.negative,
 strong[style*="#f87171"],
 strong[style*="rgb(248, 113, 113)"],
 span[style*="#f87171"],
 span[style*="rgb(248, 113, 113)"] {
   color: var(--v15-red) !important;
-  text-shadow: 0 0 10px rgba(248, 113, 113, .14) !important;
+  text-shadow: 0 0 10px rgba(248, 113, 113, .18) !important;
 }
+
+/* Some inline values are plain white today; this catches rendered currency strings when class is added later. */
+.pnl-value.positive { color: var(--v15-green) !important; }
+.pnl-value.negative { color: var(--v15-red) !important; }
