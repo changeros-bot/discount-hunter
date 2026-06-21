@@ -68,6 +68,23 @@
   text-shadow:0 0 10px rgba(248,113,113,.18) !important;
 }
 
-.status-live { color:#4ade80 !important; }
-.status-loading { color:#facc15 !important; }
-.status-error { color:#f87171 !important; }
+.status-live,
+.page .status-live {
+  color:#4ade80 !important;
+  -webkit-text-fill-color:#4ade80 !important;
+  text-shadow:0 0 10px rgba(74,222,128,.35) !important;
+}
+
+.status-loading,
+.page .status-loading {
+  color:#facc15 !important;
+  -webkit-text-fill-color:#facc15 !important;
+  text-shadow:0 0 10px rgba(250,204,21,.32) !important;
+}
+
+.status-error,
+.page .status-error {
+  color:#f87171 !important;
+  -webkit-text-fill-color:#f87171 !important;
+  text-shadow:0 0 10px rgba(248,113,113,.32) !important;
+}
