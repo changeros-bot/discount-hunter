@@ -113,7 +113,8 @@
 .card,
 .idleGroup,
 .changelogBox,
-.holdingsChartBox {
+.holdingsChartBox,
+.historyBox {
   margin-left: auto !important;
   margin-right: auto !important;
   max-width: 720px !important;
@@ -198,7 +199,8 @@ details[open] > summary {
 }
 
 .changelogBox,
-.holdingsChartBox {
+.holdingsChartBox,
+.historyBox {
   margin-top: 14px !important;
   margin-bottom: 28px !important;
   padding: 12px !important;
@@ -211,14 +213,16 @@ details[open] > summary {
 }
 
 .changelogBox summary,
-.holdingsChartBox summary {
+.holdingsChartBox summary,
+.historyBox summary {
   color: #f8fafc !important;
   font-weight: 950 !important;
   cursor: pointer !important;
 }
 
 .changelogContent,
-.holdingsChartContent {
+.holdingsChartContent,
+.historyContent {
   display: grid !important;
   gap: 10px !important;
   margin-top: 10px !important;
@@ -293,6 +297,45 @@ details[open] > summary {
   height: 100% !important;
   border-radius: 999px !important;
   background: linear-gradient(90deg, #22c55e, #facc15) !important;
+}
+
+.historyGrid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+.historyGrid div,
+.historyNote {
+  padding: 10px !important;
+  border-radius: 12px !important;
+  background: rgba(15,23,42,.78) !important;
+  border: 1px solid rgba(148,163,184,.16) !important;
+}
+
+.historyGrid span,
+.historyNote strong {
+  display: block !important;
+  color: #cbd5e1 !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  margin-bottom: 4px !important;
+}
+
+.historyGrid strong {
+  display: block !important;
+  color: #f8fafc !important;
+  font-size: 15px !important;
+  font-weight: 1000 !important;
+  line-height: 1.25 !important;
+}
+
+.historyNote p {
+  margin: 0 !important;
+  color: #f8fafc !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+  font-weight: 850 !important;
 }
 
 @media (max-width: 420px) {
