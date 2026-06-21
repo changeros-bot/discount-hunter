@@ -166,8 +166,8 @@
 
 .page section[style*="rgba(34,197,94,.75)"] > div[style*="grid-template-columns: 1fr 1fr"] strong {
   margin-top: 7px !important;
-  font-size: clamp(20px, 5.2vw, 30px) !important;
-  line-height: 1.05 !important;
+  font-size: clamp(24px, 6.4vw, 36px) !important;
+  line-height: 1.03 !important;
   font-weight: 1000 !important;
 }
 
@@ -279,8 +279,8 @@ details[open] > summary {
   }
 
   .page section[style*="rgba(34,197,94,.75)"] > div[style*="grid-template-columns: 1fr 1fr"] > div {
-    min-height: 78px !important;
-    padding: 13px 10px !important;
+    min-height: 82px !important;
+    padding: 14px 10px !important;
   }
 
   button,
