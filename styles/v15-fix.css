@@ -152,6 +152,26 @@ button {
   touch-action: manipulation !important;
 }
 
+button:focus-visible,
+summary:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid rgba(56,189,248,.95) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 5px rgba(56,189,248,.18) !important;
+}
+
+summary {
+  min-height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  touch-action: manipulation !important;
+}
+
+details[open] > summary {
+  margin-bottom: 4px !important;
+}
+
 @media (max-width: 420px) {
   .page {
     padding-left: 10px !important;
@@ -184,5 +204,10 @@ button {
 
   .dataGrid strong {
     font-size: 15px !important;
+  }
+
+  button,
+  summary {
+    min-height: 42px !important;
   }
 }
