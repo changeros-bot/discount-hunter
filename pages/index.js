@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.6-index-deployment";
+const MODEL_VERSION = "15.7-clean-home";
 const REFRESH_MS = 5000;
 const MONTHLY_BUDGET_MIN_TWD = 1500;
 const MONTHLY_BUDGET_MAX_TWD = 3000;
@@ -325,6 +325,7 @@ function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walle
   const marketText = source ? (marketOnline ? "LIVE" : "ERROR") : "LOADING";
   const walletClass = walletLoading ? "status-loading" : walletOnline ? "status-live" : "status-error";
   const walletText = walletLoading ? "LOADING" : walletOnline ? "LIVE" : "ERROR";
+  const lastSyncTime = walletSummary?.lastSyncTime || walletSummary?.checkedAt;
 
   return <section style={{ margin: "18px 0 8px", padding: 12, background: "#020617", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -332,6 +333,7 @@ function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walle
       <span className={walletClass}>● Wallet {walletText}</span>
     </div>
     <div style={{ marginTop: 8 }}>行情資料源：{source || "讀取中"}</div>
+    <div style={{ marginTop: 6 }}>版本：V15.7｜最後同步：{formatTime(lastSyncTime)}</div>
     {walletSummary?.debugCounts && <div style={{ marginTop: 6 }}>
       Transfers {walletSummary.debugCounts.totalTransfers}｜Ledger {walletSummary.debugCounts.buyRecordsCount}｜Holdings {walletSummary.debugCounts.holdingsCount}
     </div>}
