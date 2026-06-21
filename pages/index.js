@@ -10,7 +10,6 @@ const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
 
 
 
-
 function normalizeSymbol(symbol) {
   return String(symbol || "").trim().toUpperCase();
 }
@@ -119,7 +118,6 @@ function getNextBuyPoint(asset, completedLevel = 0) {
     targetAmount: `${amounts[targetIndex] || 0}U`,
     progress,
   };
-};
 }
 
 export default function Home() {
