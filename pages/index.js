@@ -163,6 +163,7 @@ export default function Home() {
   const [walletSummary, setWalletSummary] = useState(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState("");
+  const [walletToast, setWalletToast] = useState(null);
 
   useEffect(() => {
     try { localStorage.setItem("discountHunterModelVersion", MODEL_VERSION); } catch {}
@@ -184,9 +185,11 @@ export default function Home() {
     }
   }
 
-  async function syncWallet() {
+  async function syncWallet(showToast = false) {
+    if (walletLoading) return;
     setWalletLoading(true);
     setWalletError("");
+    if (showToast) setWalletToast(null);
     try {
       const res = await fetch("/api/sync-wallet", {
         method: "POST",
@@ -196,8 +199,11 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "錢包同步失敗");
       setWalletSummary(data);
+      if (showToast) setWalletToast({ type: "success", message: "鏈上持倉同步完成" });
     } catch (err) {
-      setWalletError(err.message || "錢包同步失敗");
+      const message = err.message || "錢包同步失敗";
+      setWalletError(message);
+      if (showToast) setWalletToast({ type: "error", message });
     } finally {
       setWalletLoading(false);
     }
@@ -276,7 +282,7 @@ export default function Home() {
       deploymentRate={deploymentRate}
     />
 
-    <WalletSyncSection walletSummary={walletSummary} walletLoading={walletLoading} walletError={walletError} onSync={syncWallet} />
+    <WalletSyncSection walletSummary={walletSummary} walletLoading={walletLoading} walletError={walletError} walletToast={walletToast} onSync={() => syncWallet(true)} />
 
     {actionList.length > 0 && <section className="list">
       <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 可執行買點</h3>
@@ -376,16 +382,27 @@ function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walle
   </section>;
 }
 
-function WalletSyncSection({ walletSummary, walletLoading, walletError, onSync }) {
+function WalletSyncSection({ walletSummary, walletLoading, walletError, walletToast, onSync }) {
   const pnlColor = walletSummary && walletSummary.portfolioUnrealizedPnL >= 0 ? "#4ade80" : "#f87171";
   const tokenSources = walletSummary?.debugCounts?.tokenPriceSources || [];
   const referenceSources = walletSummary?.debugCounts?.referencePriceSources || [];
+  const toastColor = walletToast?.type === "success" ? "#86efac" : "#fecaca";
+  const toastBg = walletToast?.type === "success" ? "rgba(34,197,94,.16)" : "rgba(239,68,68,.18)";
 
   return <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
       <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2>
-      <button onClick={onSync} disabled={walletLoading} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: walletLoading ? "#334155" : "#2563eb", color: "white", fontWeight: 950 }}>{walletLoading ? "同步中…" : "重新同步"}</button>
+      <button
+        onClick={onSync}
+        disabled={walletLoading}
+        aria-label={walletLoading ? "鏈上持倉同步中" : "重新同步鏈上持倉"}
+        style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: walletLoading ? "#334155" : "#2563eb", color: "white", fontWeight: 950, display: "inline-flex", alignItems: "center", gap: 6, opacity: walletLoading ? .78 : 1 }}
+      >
+        {walletLoading && <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 999, border: "2px solid rgba(255,255,255,.45)", borderTopColor: "#fff", display: "inline-block", animation: "walletSpin .8s linear infinite" }} />}
+        {walletLoading ? "同步中…" : "重新同步"}
+      </button>
     </div>
+    {walletToast && <div role="status" aria-live="polite" style={{ marginTop: 10, padding: 10, background: toastBg, color: toastColor, borderRadius: 10, fontWeight: 900 }}>{walletToast.type === "success" ? "✓" : "⚠️"} {walletToast.message}</div>}
     {walletError && <div style={{ marginTop: 10, padding: 10, background: "rgba(239,68,68,.18)", color: "#fecaca", borderRadius: 10, fontWeight: 900 }}>⚠️ {walletError}</div>}
     {walletSummary && <>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
