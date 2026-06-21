@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import BuyPointAlertPortal from "../components/BuyPointAlertPortal";
 import "../styles/globals.css";
 import "../styles/v10.css";
 import "../styles/title-gold.css";
@@ -161,6 +162,7 @@ export default function App({ Component, pageProps }) {
       <meta name="twitter:description" content="手機版追蹤儀表板，快速查看狀態與更新。" />
     </Head>
     <Component {...pageProps} />
+    <BuyPointAlertPortal />
     <Changelog />
     <HoldingsDistribution />
     <HistorySummary />
