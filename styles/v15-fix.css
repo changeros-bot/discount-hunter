@@ -112,7 +112,8 @@
 .page section,
 .card,
 .idleGroup,
-.changelogBox {
+.changelogBox,
+.holdingsChartBox {
   margin-left: auto !important;
   margin-right: auto !important;
   max-width: 720px !important;
@@ -196,7 +197,8 @@ details[open] > summary {
   margin-bottom: 4px !important;
 }
 
-.changelogBox {
+.changelogBox,
+.holdingsChartBox {
   margin-top: 14px !important;
   margin-bottom: 28px !important;
   padding: 12px !important;
@@ -208,13 +210,15 @@ details[open] > summary {
   font-weight: 850 !important;
 }
 
-.changelogBox summary {
+.changelogBox summary,
+.holdingsChartBox summary {
   color: #f8fafc !important;
   font-weight: 950 !important;
   cursor: pointer !important;
 }
 
-.changelogContent {
+.changelogContent,
+.holdingsChartContent {
   display: grid !important;
   gap: 10px !important;
   margin-top: 10px !important;
@@ -238,6 +242,57 @@ details[open] > summary {
   margin: 0 !important;
   color: #cbd5e1 !important;
   line-height: 1.55 !important;
+}
+
+.chartMessage {
+  padding: 10px !important;
+  border-radius: 10px !important;
+  background: rgba(15,23,42,.78) !important;
+  color: #cbd5e1 !important;
+  font-weight: 900 !important;
+}
+
+.holdingBarRow {
+  display: grid !important;
+  gap: 6px !important;
+  padding: 10px !important;
+  border-radius: 12px !important;
+  background: rgba(15,23,42,.78) !important;
+  border: 1px solid rgba(148,163,184,.16) !important;
+}
+
+.holdingBarMeta {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 10px !important;
+  color: #cbd5e1 !important;
+}
+
+.holdingBarMeta strong {
+  color: #f8fafc !important;
+  font-size: 13px !important;
+  font-weight: 1000 !important;
+}
+
+.holdingBarMeta span {
+  color: #cbd5e1 !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+
+.holdingBarTrack {
+  width: 100% !important;
+  height: 10px !important;
+  border-radius: 999px !important;
+  background: rgba(148,163,184,.22) !important;
+  overflow: hidden !important;
+}
+
+.holdingBarFill {
+  height: 100% !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg, #22c55e, #facc15) !important;
 }
 
 @media (max-width: 420px) {
