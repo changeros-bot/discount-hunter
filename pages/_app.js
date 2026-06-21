@@ -7,6 +7,24 @@ import "../styles/v15-unified.css";
 import "../styles/v15-fix.css";
 import Head from "next/head";
 
+function formatTime(isoString) {
+  if (!isoString) return "讀取中";
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return "讀取中";
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+}
+
+async function fetchWalletSummary() {
+  const res = await fetch("/api/sync-wallet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "錢包資料讀取失敗");
+  return data;
+}
+
 function Changelog() {
   return <details className="changelogBox">
     <summary>📜 更新紀錄</summary>
@@ -35,14 +53,8 @@ function HoldingsDistribution() {
     let active = true;
     async function loadDistribution() {
       try {
-        const res = await fetch("/api/sync-wallet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        const data = await res.json();
+        const data = await fetchWalletSummary();
         if (!active) return;
-        if (!res.ok) throw new Error(data.error || "持倉分布讀取失敗");
         setSummary(data);
       } catch (err) {
         if (!active) return;
@@ -88,6 +100,54 @@ function HoldingsDistribution() {
   </details>;
 }
 
+function HistorySummary() {
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadHistory() {
+      try {
+        const data = await fetchWalletSummary();
+        if (!active) return;
+        setSummary(data);
+      } catch (err) {
+        if (!active) return;
+        setError(err.message || "歷史紀錄讀取失敗");
+      }
+    }
+    loadHistory();
+    return () => { active = false; };
+  }, []);
+
+  const counts = summary?.debugCounts || {};
+  const holdingSymbols = Array.isArray(counts.holdingSymbols) ? counts.holdingSymbols : [];
+
+  return <details className="historyBox">
+    <summary>📒 歷史紀錄</summary>
+    <div className="historyContent">
+      {error && <div className="chartMessage">⚠️ {error}</div>}
+      {!error && !summary && <div className="chartMessage">讀取歷史摘要中…</div>}
+      {summary && <>
+        <div className="historyGrid">
+          <div><span>Transfers</span><strong>{counts.totalTransfers ?? 0}</strong></div>
+          <div><span>Ledger</span><strong>{counts.buyRecordsCount ?? 0}</strong></div>
+          <div><span>Holdings</span><strong>{counts.holdingsCount ?? 0}</strong></div>
+          <div><span>最後同步</span><strong>{formatTime(summary.lastSyncTime || summary.checkedAt)}</strong></div>
+        </div>
+        <div className="historyNote">
+          <strong>資料來源</strong>
+          <p>{summary.source || "讀取中"}</p>
+        </div>
+        {holdingSymbols.length > 0 && <div className="historyNote">
+          <strong>持倉標的</strong>
+          <p>{holdingSymbols.join("、")}</p>
+        </div>}
+      </>}
+    </div>
+  </details>;
+}
+
 export default function App({ Component, pageProps }) {
   return <>
     <Head>
@@ -103,5 +163,6 @@ export default function App({ Component, pageProps }) {
     <Component {...pageProps} />
     <Changelog />
     <HoldingsDistribution />
+    <HistorySummary />
   </>;
 }
