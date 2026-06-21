@@ -111,7 +111,8 @@
 
 .page section,
 .card,
-.idleGroup {
+.idleGroup,
+.changelogBox {
   margin-left: auto !important;
   margin-right: auto !important;
   max-width: 720px !important;
@@ -170,6 +171,50 @@ summary {
 
 details[open] > summary {
   margin-bottom: 4px !important;
+}
+
+.changelogBox {
+  margin-top: 14px !important;
+  margin-bottom: 28px !important;
+  padding: 12px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(148,163,184,.22) !important;
+  background: linear-gradient(135deg, rgba(2,6,23,.96), rgba(15,23,42,.94)) !important;
+  color: #cbd5e1 !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+}
+
+.changelogBox summary {
+  color: #f8fafc !important;
+  font-weight: 950 !important;
+  cursor: pointer !important;
+}
+
+.changelogContent {
+  display: grid !important;
+  gap: 10px !important;
+  margin-top: 10px !important;
+}
+
+.changelogContent section {
+  padding: 10px !important;
+  border-radius: 12px !important;
+  background: rgba(15,23,42,.78) !important;
+  border: 1px solid rgba(148,163,184,.16) !important;
+}
+
+.changelogContent strong {
+  display: block !important;
+  margin-bottom: 4px !important;
+  color: #facc15 !important;
+  font-size: 13px !important;
+}
+
+.changelogContent p {
+  margin: 0 !important;
+  color: #cbd5e1 !important;
+  line-height: 1.55 !important;
 }
 
 @media (max-width: 420px) {
