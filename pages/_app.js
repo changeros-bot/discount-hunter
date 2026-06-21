@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import "../styles/globals.css";
 import "../styles/v10.css";
 import "../styles/title-gold.css";
@@ -26,6 +27,67 @@ function Changelog() {
   </details>;
 }
 
+function HoldingsDistribution() {
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadDistribution() {
+      try {
+        const res = await fetch("/api/sync-wallet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (!active) return;
+        if (!res.ok) throw new Error(data.error || "持倉分布讀取失敗");
+        setSummary(data);
+      } catch (err) {
+        if (!active) return;
+        setError(err.message || "持倉分布讀取失敗");
+      }
+    }
+    loadDistribution();
+    return () => { active = false; };
+  }, []);
+
+  const rows = useMemo(() => {
+    const holdings = summary?.holdings || [];
+    const total = holdings.reduce((sum, holding) => sum + Number(holding.currentValue || 0), 0);
+    if (!total) return [];
+    return holdings
+      .map((holding) => {
+        const value = Number(holding.currentValue || 0);
+        return {
+          symbol: holding.symbol,
+          value,
+          pct: (value / total) * 100,
+        };
+      })
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [summary]);
+
+  return <details className="holdingsChartBox">
+    <summary>📊 持倉分布</summary>
+    <div className="holdingsChartContent">
+      {error && <div className="chartMessage">⚠️ {error}</div>}
+      {!error && rows.length === 0 && <div className="chartMessage">讀取持倉分布中…</div>}
+      {rows.map((row) => <div className="holdingBarRow" key={row.symbol}>
+        <div className="holdingBarMeta">
+          <strong>{row.symbol}</strong>
+          <span>${row.value.toFixed(2)}｜{row.pct.toFixed(1)}%</span>
+        </div>
+        <div className="holdingBarTrack">
+          <div className="holdingBarFill" style={{ width: `${Math.max(3, Math.min(100, row.pct))}%` }} />
+        </div>
+      </div>)}
+    </div>
+  </details>;
+}
+
 export default function App({ Component, pageProps }) {
   return <>
     <Head>
@@ -40,5 +102,6 @@ export default function App({ Component, pageProps }) {
     </Head>
     <Component {...pageProps} />
     <Changelog />
+    <HoldingsDistribution />
   </>;
 }
