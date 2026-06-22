@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.8-live-holding-ui";
+const MODEL_VERSION = "15.19-wallet-label-clarity";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
@@ -256,7 +256,7 @@ export default function Home() {
 
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
-      <div style={versionMiniStyle}>v15.8</div>
+      <div style={versionMiniStyle}>v15.19</div>
       <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
       <h2 style={{ fontSize: 14, margin: "0", color: "rgba(248,250,252,.68)", textAlign: "center", fontWeight: 750, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
       {error && <div className="dataGuard">{error}</div>}
@@ -304,7 +304,7 @@ function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walle
   return <section style={{ margin: "18px 0 8px", padding: 12, background: "#020617", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}><span className={marketClass}>● Market API {marketText}</span><span className={walletClass}>● Wallet {walletText}</span></div>
     <div style={{ marginTop: 8 }}>行情資料源：{source || "讀取中"}</div>
-    <div style={{ marginTop: 6 }}>版本：V15.8｜最後同步：{formatTime(lastSyncTime)}</div>
+    <div style={{ marginTop: 6 }}>版本：V15.19｜最後同步：{formatTime(lastSyncTime)}</div>
     {walletSummary?.debugCounts && <div style={{ marginTop: 6 }}>Transfers {walletSummary.debugCounts.totalTransfers}｜Ledger {walletSummary.debugCounts.buyRecordsCount}｜Live Holdings {liveWallet.liveHoldings.length}</div>}
   </section>;
 }
@@ -318,7 +318,7 @@ function WalletSyncSection({ walletSummary, walletLoading, walletError, walletTo
     {walletToast && <div role="status" aria-live="polite" style={{ marginTop: 10, padding: 10, background: toastBg, color: toastColor, borderRadius: 10, fontWeight: 900 }}>{walletToast.type === "success" ? "✓" : "⚠️"} {walletToast.message}</div>}
     {walletError && <div style={{ marginTop: 10, padding: 10, background: "rgba(239,68,68,.18)", color: "#fecaca", borderRadius: 10, fontWeight: 900 }}>⚠️ {walletError}</div>}
     {walletSummary && <>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><WalletMetric label="總投入" value={`$${formatNumber(liveWallet.totalCost)}`} /><WalletMetric label="目前市值" value={`$${formatNumber(liveWallet.marketValue)}`} /><WalletMetric label="未實現損益" value={formatCurrency(liveWallet.pnl)} color={pnlColor} /><WalletMetric label="報酬率" value={formatPct(liveWallet.pnlPct)} color={pnlColor} /></div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><WalletMetric label="持倉成本" value={`$${formatNumber(liveWallet.totalCost)}`} /><WalletMetric label="持倉市值" value={`$${formatNumber(liveWallet.marketValue)}`} /><WalletMetric label="未實現損益" value={formatCurrency(liveWallet.pnl)} color={pnlColor} /><WalletMetric label="報酬率" value={formatPct(liveWallet.pnlPct)} color={pnlColor} /></div>
       <details style={{ marginTop: 10 }}><summary style={{ color: "#cbd5e1", fontWeight: 950, cursor: "pointer" }}>同步資料與持倉明細（{liveWallet.liveHoldings.length}）</summary><div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "#0f172a", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>只顯示 live RPC balanceOf 持倉<br />最後同步：{formatTime(walletSummary.lastSyncTime || walletSummary.checkedAt)}</div><div style={{ display: "grid", gap: 10, marginTop: 12 }}>{liveWallet.liveHoldings.map((holding) => <WalletHoldingCard key={holding.symbol} holding={holding} />)}</div></details>
     </>}
   </section>;
@@ -347,5 +347,7 @@ function AssetCard({ asset }) {
   const held = asset.hasHolding;
   const depthText = Math.abs(parsePercentValue(asset.discount));
   const signalText = level > 0 ? (actionAmount > 0 ? `${ruleColors[level - 1]} ${levelNames[level]}｜${held ? "加碼" : "建議"} ${actionAmount}U` : "✅ 鏈上已持有｜等待下一層") : (held ? "✅ 鏈上已持有｜觀察中" : "尚未到買點");
-  return <div className={`card ${level > 0 ? "active" : "idle"}`}><div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div><div className="signal">{signalText}</div><div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>本層建議</span><strong>{actionAmount}U</strong></div></div><details style={{ marginTop: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(15,23,42,.72)", border: "1px solid rgba(251,191,36,.22)", color: "#fef3c7", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}><summary style={{ cursor: "pointer", fontWeight: 950 }}>買點規則 ▼</summary><div style={{ display: "grid", gap: 4, marginTop: 8 }}>{ruleRows.map((row) => <div key={`${asset.symbol}-${row.levelName}`}>{row.color} {row.levelName} {row.discountText}｜{row.amountText}</div>)}</div></details>{asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}><div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div><div>持倉損益<br /><strong className={asset.holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div></div>}<div className="nextBuyBox"><div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>深度 {Number.isFinite(depthText) ? `${depthText.toFixed(1)}%` : "--"}｜進度 {Number(nextBuy.progress || 0).toFixed(0)}%</div><ProgressBar nextBuy={nextBuy} /></div></div>;
+  const layerLabel = actionAmount > 0 ? "本層建議" : held ? "本層已完成" : "本層建議";
+  const layerValue = actionAmount > 0 ? `${actionAmount}U` : held ? "不需加碼" : "0U";
+  return <div className={`card ${level > 0 ? "active" : "idle"}`}><div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div><div className="signal">{signalText}</div><div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>{layerLabel}</span><strong>{layerValue}</strong></div></div><details style={{ marginTop: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(15,23,42,.72)", border: "1px solid rgba(251,191,36,.22)", color: "#fef3c7", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}><summary style={{ cursor: "pointer", fontWeight: 950 }}>買點規則 ▼</summary><div style={{ display: "grid", gap: 4, marginTop: 8 }}>{ruleRows.map((row) => <div key={`${asset.symbol}-${row.levelName}`}>{row.color} {row.levelName} {row.discountText}｜{row.amountText}</div>)}</div></details>{asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}><div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div><div>持倉損益<br /><strong className={asset.holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div></div>}<div className="nextBuyBox"><div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>深度 {Number.isFinite(depthText) ? `${depthText.toFixed(1)}%` : "--"}｜進度 {Number(nextBuy.progress || 0).toFixed(0)}%</div><ProgressBar nextBuy={nextBuy} /></div></div>;
 }
