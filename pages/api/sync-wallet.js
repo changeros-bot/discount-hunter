@@ -1,10 +1,9 @@
-// DCA Discount Hunter V15.12 - Homepage Wallet Sync API
-// Cost basis comes from Moralis transfer history.
-// Current holding status comes ONLY from live BNB Chain balanceOf().
-// Moralis cost basis is used for cost/PnL only, never as fallback quantity.
+// DCA Discount Hunter V15.15 - Homepage Wallet Sync API
+// Source of truth for current holdings is live BNB Chain balanceOf().
+// Moralis transfer history is used for cost/PnL and contract hints only.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
-const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
+const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
 const { WATCHLIST } = require("../../lib/xstocks/constants");
@@ -25,6 +24,12 @@ function stripOn(symbol) {
   return upper(symbol).replace(/ON$/, "");
 }
 
+function normalizeOnSymbol(symbol) {
+  const s = upper(symbol);
+  if (!s) return "";
+  return s.endsWith("ON") ? s : `${s}ON`;
+}
+
 function safeNumber(value) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
@@ -40,6 +45,26 @@ function uniqueTransfers(transfers) {
     out.push(tx);
   }
   return out;
+}
+
+function buildContractHints(transfers) {
+  const map = new Map();
+  for (const tx of transfers || []) {
+    const symbol = normalizeOnSymbol(getXStockSymbol(tx));
+    const contractAddress = cleanAddress(tx.contractAddress).toLowerCase();
+    if (!symbol || !isEvmAddress(contractAddress)) continue;
+    const key = `${symbol}:${contractAddress}`;
+    if (map.has(key)) continue;
+    map.set(key, {
+      symbol,
+      contractAddress,
+      decimals: Number(tx.tokenDecimal || 18) || 18,
+      tokenSymbol: tx.tokenSymbol || null,
+      tokenName: tx.tokenName || null,
+      source: "moralis_transfer_contract_hint",
+    });
+  }
+  return [...map.values()];
 }
 
 function normalizePriceMap(prices) {
@@ -102,6 +127,7 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
       quantitySource: "bsc_rpc_balanceOf_live",
       liveBalanceContractAddress: live.contractAddress || null,
       liveBalanceDecimals: live.decimals ?? null,
+      liveBalanceSource: live.source || null,
     });
   }
 
@@ -189,17 +215,21 @@ async function handler(req, res) {
     const transfers = uniqueTransfers(rawTransfers);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
     const costHoldings = calculateHoldings(buyRecords);
-    const symbols = costHoldings.length > 0 ? costHoldings.map((h) => upper(h.symbol)) : WATCHLIST;
+    const contractHints = buildContractHints(transfers);
 
-    let liveBalanceResult = { holdings: [], errors: [] };
+    // V15.15: RPC must scan the full watchlist independently of Moralis cost holdings.
+    // Transfer contract hints are used only to improve the contract address source.
+    const liveScanSymbols = WATCHLIST;
+
+    let liveBalanceResult = { holdings: [], errors: [], tokenMetadata: [] };
     try {
-      liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, symbols);
+      liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, liveScanSymbols, contractHints);
     } catch (error) {
-      liveBalanceResult = { holdings: [], errors: [error.message] };
+      liveBalanceResult = { holdings: [], errors: [error.message], tokenMetadata: [] };
     }
 
     const baseHoldings = mergeLiveQuantities(costHoldings, liveBalanceResult.holdings);
-    const priceSymbols = baseHoldings.length > 0 ? baseHoldings.map((h) => upper(h.symbol)) : symbols;
+    const priceSymbols = baseHoldings.length > 0 ? baseHoldings.map((h) => upper(h.symbol)) : liveScanSymbols;
 
     const [tokenPrices, referencePrices] = await Promise.all([
       fetchTokenPrices(priceSymbols),
@@ -213,14 +243,14 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.12-live-balance-source-of-truth",
+      version: "15.15-full-watchlist-live-balance-source-of-truth",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       positionSource: bodyWalletAddress ? "manual_body" : queryWalletAddress ? "query_address" : "env_wallet_address",
-      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + bsc_rpc_balanceOf_source_of_truth" : hasMegaNodeKey() ? "meganode_cost_basis + bsc_rpc_balanceOf_source_of_truth" : "legacy_cost_basis + bsc_rpc_balanceOf_source_of_truth",
-      source: hasMoralisKey() ? "Moralis cost basis + live RPC balances as holding source" : hasMegaNodeKey() ? "MegaNode cost basis + live RPC balances as holding source" : "Legacy cost basis + live RPC balances as holding source",
+      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + full_watchlist_bsc_rpc_balanceOf_source_of_truth" : hasMegaNodeKey() ? "meganode_cost_basis + full_watchlist_bsc_rpc_balanceOf_source_of_truth" : "legacy_cost_basis + full_watchlist_bsc_rpc_balanceOf_source_of_truth",
+      source: hasMoralisKey() ? "Moralis cost basis + full watchlist live RPC balances as holding source" : hasMegaNodeKey() ? "MegaNode cost basis + full watchlist live RPC balances as holding source" : "Legacy cost basis + full watchlist live RPC balances as holding source",
       priceSource: tokenPriceSources.join("、") || "binance_xstocks_live",
       referencePriceSource: referencePriceSources.join("、") || "binance_stock_reference_live",
       lastSyncTime: new Date().toISOString(),
@@ -236,6 +266,9 @@ async function handler(req, res) {
         totalTransfers: transfers.length,
         buyRecordsCount: buyRecords.length,
         costHoldingsCount: costHoldings.length,
+        contractHintsCount: contractHints.length,
+        contractHintSymbols: Array.from(new Set(contractHints.map((h) => upper(h.symbol)))).sort(),
+        liveScanSymbols,
         liveBalanceHoldingsCount: liveBalanceResult.holdings?.length || 0,
         liveBalanceErrors: liveBalanceResult.errors || [],
         liveBalanceBlockNumber: liveBalanceResult.checkedBlockNumber || null,
@@ -248,11 +281,14 @@ async function handler(req, res) {
         costHoldingSymbols: costHoldings.map((h) => h.symbol),
         liveBalanceSymbols: (liveBalanceResult.holdings || []).map((h) => upper(h.symbol)),
         holdingSymbols: holdings.map((h) => h.symbol),
+        liveTokenMetadata: (liveBalanceResult.tokenMetadata || []).map((t) => ({ symbol: t.symbol, contractAddress: t.contractAddress, source: t.source })),
         holdingPriceDebug: holdings.map((h) => ({
           symbol: h.symbol,
           quantity: h.quantity,
           costBasisQuantity: h.costBasisQuantity,
           quantitySource: h.quantitySource,
+          liveBalanceSource: h.liveBalanceSource,
+          liveBalanceContractAddress: h.liveBalanceContractAddress,
           tokenPrice: h.tokenPrice,
           currentValue: h.currentValue,
           totalCost: h.totalCost,
