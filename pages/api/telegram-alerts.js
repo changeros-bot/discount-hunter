@@ -5,59 +5,79 @@ function parsePercentValue(value) {
   return Number.isFinite(number) ? number : NaN;
 }
 
-function getNextBuyPoint(asset) {
+function safeNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getTriggeredBuyPoint(asset) {
   const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
-  const ruleDepths = rules
-    .map((rule) => Math.abs(parsePercentValue(rule)))
-    .filter(Number.isFinite);
+  const ruleDepths = rules.map((rule) => Math.abs(parsePercentValue(rule))).filter(Number.isFinite);
 
   if (!Number.isFinite(currentDepth) || ruleDepths.length === 0) return null;
 
-  let targetIndex = ruleDepths.findIndex((depth) => currentDepth < depth);
-  if (targetIndex === -1) targetIndex = ruleDepths.length - 1;
+  let triggeredIndex = -1;
+  for (let i = 0; i < ruleDepths.length; i += 1) {
+    if (currentDepth >= ruleDepths[i]) triggeredIndex = i;
+  }
 
-  const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
-  const targetDepth = ruleDepths[targetIndex];
+  if (triggeredIndex >= 0) {
+    return {
+      type: "triggered",
+      currentDepth,
+      targetDepth: ruleDepths[triggeredIndex],
+      remaining: 0,
+      progress: 100,
+      targetAmount: safeNumber(amounts[triggeredIndex]),
+      level: triggeredIndex + 1,
+      label: "🚨 已觸發買點",
+    };
+  }
+
+  const nextIndex = ruleDepths.findIndex((depth) => currentDepth < depth);
+  if (nextIndex < 0) return null;
+
+  const previousDepth = nextIndex === 0 ? 0 : ruleDepths[nextIndex - 1];
+  const targetDepth = ruleDepths[nextIndex];
   const range = Math.max(1, targetDepth - previousDepth);
   const rawProgress = ((currentDepth - previousDepth) / range) * 100;
-  const progress = currentDepth >= targetDepth ? 100 : Math.min(100, Math.max(0, rawProgress));
+  const progress = Math.min(100, Math.max(0, rawProgress));
   const remaining = Math.max(0, targetDepth - currentDepth);
 
   return {
+    type: "near",
     currentDepth,
     targetDepth,
     remaining,
     progress,
-    targetAmount: amounts[targetIndex] || 0,
-    level: targetIndex + 1,
+    targetAmount: safeNumber(amounts[nextIndex]),
+    level: nextIndex + 1,
+    label: remaining <= 1 ? "🟢 即將觸發" : "🟡 接近買點",
   };
-}
-
-function getAlertLabel(remaining) {
-  if (remaining <= 1) return "🟢 即將觸發";
-  if (remaining <= 5) return "🟡 接近買點";
-  return "⚪ 觀察";
 }
 
 function buildAlertRows(assets) {
   return (assets || [])
     .map((asset) => {
-      const next = getNextBuyPoint(asset);
-      if (!next) return null;
+      const point = getTriggeredBuyPoint(asset);
+      if (!point) return null;
       return {
         symbol: asset.symbol,
         name: asset.name,
         price: asset.price,
         discount: asset.discount,
-        ...next,
-        label: getAlertLabel(next.remaining),
+        ...point,
       };
     })
     .filter(Boolean)
-    .filter((row) => row.remaining <= 5)
-    .sort((a, b) => a.remaining - b.remaining);
+    .filter((row) => row.type === "triggered" || row.remaining <= 5)
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === "triggered" ? -1 : 1;
+      if (a.level !== b.level) return b.level - a.level;
+      return a.remaining - b.remaining;
+    });
 }
 
 function formatMessage(rows, updatedAt) {
@@ -65,7 +85,7 @@ function formatMessage(rows, updatedAt) {
     return [
       "🔔 DCA折價獵人",
       "",
-      "目前無即將觸發買點。",
+      "目前無已觸發或即將觸發買點。",
       `檢查時間：${new Date(updatedAt || Date.now()).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}`,
     ].join("\n");
   }
@@ -81,10 +101,11 @@ function formatMessage(rows, updatedAt) {
   rows.forEach((row, index) => {
     lines.push(`${index + 1}. ${row.label} ${row.symbol}`);
     lines.push(`目前深度：${row.currentDepth.toFixed(1)}%`);
-    lines.push(`下一層：${row.targetDepth.toFixed(1)}%`);
-    lines.push(`還差：${row.remaining.toFixed(1)}%`);
+    lines.push(`觸發層級：第${row.level}層`);
+    lines.push(`門檻：-${row.targetDepth.toFixed(1)}%`);
+    if (row.type === "near") lines.push(`還差：${row.remaining.toFixed(1)}%`);
     lines.push(`進度：${row.progress.toFixed(0)}%`);
-    lines.push(`建議：${row.targetAmount}U`);
+    lines.push(`本層建議：${row.targetAmount}U`);
     lines.push("");
   });
 
@@ -121,7 +142,13 @@ async function handler(req, res) {
       return res.status(500).json({ ok: false, alertCount: rows.length, telegram: sent });
     }
 
-    return res.status(200).json({ ok: true, sent: true, alertCount: rows.length, alerts: rows.map((row) => ({ symbol: row.symbol, remaining: row.remaining, progress: row.progress })) });
+    return res.status(200).json({
+      ok: true,
+      version: "15.13-triggered-buy-alerts",
+      sent: true,
+      alertCount: rows.length,
+      alerts: rows.map((row) => ({ symbol: row.symbol, type: row.type, level: row.level, targetAmount: row.targetAmount, remaining: row.remaining, progress: row.progress })),
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Telegram alert failed" });
   }
