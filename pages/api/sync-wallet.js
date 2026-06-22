@@ -1,7 +1,7 @@
-// DCA Discount Hunter V15.17 - Homepage Wallet Sync API
+// DCA Discount Hunter V15.18 - Homepage Wallet Sync API
 // Source of truth for current holdings is live BNB Chain balanceOf().
 // Moralis transfer history is used for cost/PnL and contract hints only.
-// Cost basis is never scaled by live RPC quantity because xStocks may use different display/multiplier units.
+// If one symbol has multiple live contracts, select the contract whose estimated value is closest to cost basis.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
@@ -97,6 +97,69 @@ function normalizeSymbolMap(items) {
   return map;
 }
 
+function detailValue(detail, tokenPrice) {
+  return safeNumber(detail?.quantity) * safeNumber(tokenPrice);
+}
+
+function selectBestLiveContracts(liveHoldings, costHoldings, tokenPrices) {
+  const costMap = normalizeSymbolMap(costHoldings);
+  const selected = [];
+  const excluded = [];
+
+  for (const live of liveHoldings || []) {
+    const symbol = upper(live.symbol);
+    const details = Array.isArray(live.details) && live.details.length > 0 ? live.details : [live];
+    const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
+    const totalCost = safeNumber(cost.totalCost);
+    const tokenPrice = safeNumber(pickPrice(tokenPrices, symbol)?.price);
+
+    const enrichedDetails = details.map((detail) => ({
+      ...detail,
+      symbol,
+      quantity: safeNumber(detail.quantity),
+      estimatedValueUSD: detailValue(detail, tokenPrice),
+      tokenPrice,
+      distanceToCost: totalCost > 0 && tokenPrice > 0 ? Math.abs(detailValue(detail, tokenPrice) - totalCost) : null,
+    })).filter((detail) => detail.quantity > 0);
+
+    if (enrichedDetails.length === 0) continue;
+
+    if (enrichedDetails.length === 1 || totalCost <= 0 || tokenPrice <= 0) {
+      const only = enrichedDetails[0];
+      selected.push({
+        ...live,
+        quantity: only.quantity,
+        contractAddress: only.contractAddress || live.contractAddress || null,
+        contractAddresses: [only.contractAddress || live.contractAddress].filter(Boolean),
+        details: [only],
+        selectionReason: enrichedDetails.length === 1 ? "single_live_contract" : "no_cost_or_price_for_contract_selection",
+      });
+      continue;
+    }
+
+    const sorted = [...enrichedDetails].sort((a, b) => a.distanceToCost - b.distanceToCost);
+    const best = sorted[0];
+    const rejected = sorted.slice(1).map((detail) => ({
+      ...detail,
+      excludedReason: "estimated_value_farther_from_cost_basis_than_selected_contract",
+      selectedContractAddress: best.contractAddress || null,
+    }));
+
+    selected.push({
+      ...live,
+      quantity: best.quantity,
+      contractAddress: best.contractAddress || live.contractAddress || null,
+      contractAddresses: [best.contractAddress || live.contractAddress].filter(Boolean),
+      details: [best],
+      excludedDetails: rejected,
+      selectionReason: "selected_contract_value_closest_to_cost_basis",
+    });
+    excluded.push(...rejected.map((detail) => ({ symbol, ...detail })));
+  }
+
+  return { selected, excluded };
+}
+
 function mergeLiveQuantities(costHoldings, liveHoldings) {
   const costMap = normalizeSymbolMap(costHoldings);
   const merged = [];
@@ -129,33 +192,14 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
       liveBalanceContractAddress: live.contractAddress || null,
       liveBalanceContractAddresses: live.contractAddresses || (live.contractAddress ? [live.contractAddress] : []),
       liveBalanceDetails: live.details || [],
+      excludedLiveBalanceDetails: live.excludedDetails || [],
       liveBalanceDecimals: live.decimals ?? null,
       liveBalanceSource: live.source || null,
+      liveContractSelectionReason: live.selectionReason || null,
     });
   }
 
   return merged;
-}
-
-function guardMarketValue({ quantity, tokenPrice, totalCost }) {
-  const rawCurrentValue = quantity * tokenPrice;
-  if (totalCost > 0 && rawCurrentValue > Math.max(totalCost * 20, totalCost + 1000)) {
-    return {
-      currentValue: totalCost,
-      rawCurrentValue,
-      valuationQuantity: tokenPrice > 0 ? totalCost / tokenPrice : 0,
-      valuationGuardApplied: true,
-      valuationWarning: "Live RPC quantity and token price appear to use incompatible units; market value temporarily capped to cost basis until multiplier is verified.",
-    };
-  }
-
-  return {
-    currentValue: rawCurrentValue,
-    rawCurrentValue,
-    valuationQuantity: quantity,
-    valuationGuardApplied: false,
-    valuationWarning: null,
-  };
 }
 
 function enrichHoldings(holdings, tokenPrices, referencePrices) {
@@ -166,8 +210,7 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
     const tokenPriceData = pickPrice(tokenPrices, symbol);
     const referencePriceData = pickPrice(referencePrices, symbol);
     const tokenPrice = safeNumber(tokenPriceData?.price);
-    const valuation = guardMarketValue({ quantity, tokenPrice, totalCost });
-    const currentValue = valuation.currentValue;
+    const currentValue = quantity * tokenPrice;
     const unrealizedPnL = currentValue - totalCost;
     const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
     const referenceStockPrice = safeNumber(referencePriceData?.price);
@@ -178,13 +221,13 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
       ...h,
       symbol,
       quantity,
-      valuationQuantity: valuation.valuationQuantity,
+      valuationQuantity: quantity,
       totalCost,
       averageCost: quantity > 0 && totalCost > 0 ? totalCost / quantity : safeNumber(h.averageCost),
       tokenPrice,
       marketPrice: tokenPrice,
       currentValue,
-      rawCurrentValue: valuation.rawCurrentValue,
+      rawCurrentValue: currentValue,
       marketValue: currentValue,
       positionValue: currentValue,
       unrealizedPnL,
@@ -193,8 +236,8 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
       referenceStockPrice,
       premiumDiscount,
       premiumDiscountPct,
-      valuationGuardApplied: valuation.valuationGuardApplied,
-      valuationWarning: valuation.valuationWarning,
+      valuationGuardApplied: false,
+      valuationWarning: null,
       priceSource: tokenPriceData?.source || null,
       referencePriceSource: referencePriceData?.source || null,
       rawTokenPrice: tokenPriceData?.rawTokenPrice || null,
@@ -248,7 +291,6 @@ async function handler(req, res) {
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
     const costHoldings = calculateHoldings(buyRecords);
     const contractHints = buildContractHints(transfers);
-
     const liveScanSymbols = WATCHLIST;
 
     let liveBalanceResult = { holdings: [], errors: [], tokenMetadata: [], contractHoldings: [] };
@@ -258,14 +300,14 @@ async function handler(req, res) {
       liveBalanceResult = { holdings: [], errors: [error.message], tokenMetadata: [], contractHoldings: [] };
     }
 
-    const baseHoldings = mergeLiveQuantities(costHoldings, liveBalanceResult.holdings);
-    const priceSymbols = baseHoldings.length > 0 ? baseHoldings.map((h) => upper(h.symbol)) : liveScanSymbols;
-
+    const prePriceSymbols = liveBalanceResult.holdings?.length > 0 ? liveBalanceResult.holdings.map((h) => upper(h.symbol)) : liveScanSymbols;
     const [tokenPrices, referencePrices] = await Promise.all([
-      fetchTokenPrices(priceSymbols),
-      fetchReferenceStockPrices(priceSymbols),
+      fetchTokenPrices(prePriceSymbols),
+      fetchReferenceStockPrices(prePriceSymbols),
     ]);
 
+    const liveSelection = selectBestLiveContracts(liveBalanceResult.holdings, costHoldings, tokenPrices);
+    const baseHoldings = mergeLiveQuantities(costHoldings, liveSelection.selected);
     const holdings = enrichHoldings(baseHoldings, tokenPrices, referencePrices);
     const summary = summarize(holdings);
     const tokenPriceSources = Array.from(new Set(Object.values(tokenPrices || {}).map((p) => p.source).filter(Boolean))).sort();
@@ -273,7 +315,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.17-cost-basis-unit-guard",
+      version: "15.18-select-best-live-contract-by-cost-basis",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
@@ -300,11 +342,14 @@ async function handler(req, res) {
         contractHintSymbols: Array.from(new Set(contractHints.map((h) => upper(h.symbol)))).sort(),
         liveScanSymbols,
         liveBalanceHoldingsCount: liveBalanceResult.holdings?.length || 0,
+        selectedLiveBalanceHoldingsCount: liveSelection.selected.length,
+        excludedLiveBalanceDetailsCount: liveSelection.excluded.length,
+        excludedLiveBalanceDetails: liveSelection.excluded,
         liveContractHoldingsCount: liveBalanceResult.contractHoldings?.length || 0,
         liveBalanceErrors: liveBalanceResult.errors || [],
         liveBalanceBlockNumber: liveBalanceResult.checkedBlockNumber || null,
         holdingsCount: holdings.length,
-        valuationGuardCount: holdings.filter((h) => h.valuationGuardApplied).length,
+        valuationGuardCount: 0,
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
         tokenPriceSources,
@@ -312,6 +357,7 @@ async function handler(req, res) {
         buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => upper(r.symbol)))).sort(),
         costHoldingSymbols: costHoldings.map((h) => h.symbol),
         liveBalanceSymbols: (liveBalanceResult.holdings || []).map((h) => upper(h.symbol)),
+        selectedLiveBalanceSymbols: liveSelection.selected.map((h) => upper(h.symbol)),
         holdingSymbols: holdings.map((h) => h.symbol),
         liveTokenMetadata: (liveBalanceResult.tokenMetadata || []).map((t) => ({ symbol: t.symbol, contractAddress: t.contractAddress, source: t.source })),
         holdingPriceDebug: holdings.map((h) => ({
@@ -324,6 +370,7 @@ async function handler(req, res) {
           liveBalanceContractAddress: h.liveBalanceContractAddress,
           liveBalanceContractAddresses: h.liveBalanceContractAddresses,
           liveBalanceDetails: h.liveBalanceDetails,
+          excludedLiveBalanceDetails: h.excludedLiveBalanceDetails,
           tokenPrice: h.tokenPrice,
           currentValue: h.currentValue,
           rawCurrentValue: h.rawCurrentValue,
