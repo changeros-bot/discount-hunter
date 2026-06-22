@@ -1,6 +1,7 @@
-// DCA Discount Hunter V15.10 - Homepage Wallet Sync API
+// DCA Discount Hunter V15.12 - Homepage Wallet Sync API
 // Cost basis comes from Moralis transfer history.
-// Official quantities come from live BNB Chain balanceOf(), which should match Binance Web3 Wallet more closely.
+// Current holding status comes ONLY from live BNB Chain balanceOf().
+// Moralis cost basis is used for cost/PnL only, never as fallback quantity.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
@@ -71,23 +72,40 @@ function normalizeSymbolMap(items) {
 }
 
 function mergeLiveQuantities(costHoldings, liveHoldings) {
-  const liveMap = normalizeSymbolMap(liveHoldings);
+  const costMap = normalizeSymbolMap(costHoldings);
+  const merged = [];
 
-  return (costHoldings || []).map((h) => {
-    const symbol = upper(h.symbol);
-    const live = liveMap.get(symbol) || liveMap.get(stripOn(symbol));
-    const liveQuantity = safeNumber(live?.quantity);
+  for (const live of liveHoldings || []) {
+    const symbol = upper(live.symbol);
+    const liveQuantity = safeNumber(live.quantity);
+    if (!symbol || liveQuantity <= 0) continue;
 
-    return {
-      ...h,
+    const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
+    const costQuantity = safeNumber(cost.quantity);
+    const totalCost = safeNumber(cost.totalCost);
+    const averageCost = costQuantity > 0 && totalCost > 0 ? totalCost / costQuantity : safeNumber(cost.averageCost);
+    const adjustedCost = averageCost > 0 ? liveQuantity * averageCost : totalCost;
+
+    merged.push({
+      ...cost,
       symbol,
-      costBasisQuantity: safeNumber(h.quantity),
-      quantity: liveQuantity > 0 ? liveQuantity : safeNumber(h.quantity),
-      quantitySource: liveQuantity > 0 ? "bsc_rpc_balanceOf_live" : "moralis_cost_basis_fallback",
-      liveBalanceContractAddress: live?.contractAddress || null,
-      liveBalanceDecimals: live?.decimals ?? null,
-    };
-  });
+      costBasisQuantity: costQuantity,
+      quantity: liveQuantity,
+      totalCost: adjustedCost,
+      averageCost,
+      buyCount: cost.buyCount || 0,
+      sellCount: cost.sellCount || 0,
+      firstBuyTimestamp: cost.firstBuyTimestamp || null,
+      lastBuyTimestamp: cost.lastBuyTimestamp || null,
+      lastSellTimestamp: cost.lastSellTimestamp || null,
+      officialHolding: true,
+      quantitySource: "bsc_rpc_balanceOf_live",
+      liveBalanceContractAddress: live.contractAddress || null,
+      liveBalanceDecimals: live.decimals ?? null,
+    });
+  }
+
+  return merged;
 }
 
 function enrichHoldings(holdings, tokenPrices, referencePrices) {
@@ -181,10 +199,11 @@ async function handler(req, res) {
     }
 
     const baseHoldings = mergeLiveQuantities(costHoldings, liveBalanceResult.holdings);
+    const priceSymbols = baseHoldings.length > 0 ? baseHoldings.map((h) => upper(h.symbol)) : symbols;
 
     const [tokenPrices, referencePrices] = await Promise.all([
-      fetchTokenPrices(symbols),
-      fetchReferenceStockPrices(symbols),
+      fetchTokenPrices(priceSymbols),
+      fetchReferenceStockPrices(priceSymbols),
     ]);
 
     const holdings = enrichHoldings(baseHoldings, tokenPrices, referencePrices);
@@ -194,14 +213,14 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.10-live-balance-quantity",
+      version: "15.12-live-balance-source-of-truth",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       positionSource: bodyWalletAddress ? "manual_body" : queryWalletAddress ? "query_address" : "env_wallet_address",
-      walletSyncSource: hasMoralisKey() ? "moralis_wallet_token_transfers + bsc_rpc_balanceOf" : hasMegaNodeKey() ? "meganode_wallet_token_transfers + bsc_rpc_balanceOf" : "legacy_fallback + bsc_rpc_balanceOf",
-      source: hasMoralisKey() ? "Moralis cost basis + live RPC balances" : hasMegaNodeKey() ? "MegaNode cost basis + live RPC balances" : "Legacy fallback + live RPC balances",
+      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + bsc_rpc_balanceOf_source_of_truth" : hasMegaNodeKey() ? "meganode_cost_basis + bsc_rpc_balanceOf_source_of_truth" : "legacy_cost_basis + bsc_rpc_balanceOf_source_of_truth",
+      source: hasMoralisKey() ? "Moralis cost basis + live RPC balances as holding source" : hasMegaNodeKey() ? "MegaNode cost basis + live RPC balances as holding source" : "Legacy cost basis + live RPC balances as holding source",
       priceSource: tokenPriceSources.join("、") || "binance_xstocks_live",
       referencePriceSource: referencePriceSources.join("、") || "binance_stock_reference_live",
       lastSyncTime: new Date().toISOString(),
@@ -226,6 +245,8 @@ async function handler(req, res) {
         tokenPriceSources,
         referencePriceSources,
         buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => upper(r.symbol)))).sort(),
+        costHoldingSymbols: costHoldings.map((h) => h.symbol),
+        liveBalanceSymbols: (liveBalanceResult.holdings || []).map((h) => upper(h.symbol)),
         holdingSymbols: holdings.map((h) => h.symbol),
         holdingPriceDebug: holdings.map((h) => ({
           symbol: h.symbol,
