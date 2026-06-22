@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.19-wallet-label-clarity";
+const MODEL_VERSION = "15.20-cost-based-layer-completion";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
@@ -97,6 +97,21 @@ function valueClass(value) {
 
 function getCurrentSignalLevel(asset) {
   return asset.signal?.level || 0;
+}
+
+function getCompletedLevelByCost(asset, holding) {
+  if (!isLiveHolding(holding)) return 0;
+  const totalCost = Number(holding.totalCost || 0);
+  const amounts = asset.amounts || [];
+  let cumulative = 0;
+  let completed = 0;
+
+  for (let i = 0; i < amounts.length; i += 1) {
+    cumulative += Number(amounts[i] || 0);
+    if (totalCost + 0.01 >= cumulative) completed = i + 1;
+  }
+
+  return completed;
 }
 
 function getActionAmount(asset, completedLevel) {
@@ -234,7 +249,7 @@ export default function Home() {
     const key = normalizeSymbol(asset.symbol);
     const holding = holdingMap.get(key);
     const hasHolding = isLiveHolding(holding);
-    const completedLevel = hasHolding ? 1 : 0;
+    const completedLevel = getCompletedLevelByCost(asset, holding);
     const signalLevel = getCurrentSignalLevel(asset);
     const actionAmount = getActionAmount(asset, completedLevel);
     return { ...asset, holding, hasHolding, completedLevel, signalLevel, actionAmount, isActionable: signalLevel > completedLevel && actionAmount > 0 };
@@ -256,7 +271,7 @@ export default function Home() {
 
   return <main className="page">
     <section className="hero compactHero" style={heroPanelStyle}>
-      <div style={versionMiniStyle}>v15.19</div>
+      <div style={versionMiniStyle}>v15.20</div>
       <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
       <h2 style={{ fontSize: 14, margin: "0", color: "rgba(248,250,252,.68)", textAlign: "center", fontWeight: 750, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
       {error && <div className="dataGuard">{error}</div>}
@@ -304,7 +319,7 @@ function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walle
   return <section style={{ margin: "18px 0 8px", padding: 12, background: "#020617", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}><span className={marketClass}>● Market API {marketText}</span><span className={walletClass}>● Wallet {walletText}</span></div>
     <div style={{ marginTop: 8 }}>行情資料源：{source || "讀取中"}</div>
-    <div style={{ marginTop: 6 }}>版本：V15.19｜最後同步：{formatTime(lastSyncTime)}</div>
+    <div style={{ marginTop: 6 }}>版本：V15.20｜最後同步：{formatTime(lastSyncTime)}</div>
     {walletSummary?.debugCounts && <div style={{ marginTop: 6 }}>Transfers {walletSummary.debugCounts.totalTransfers}｜Ledger {walletSummary.debugCounts.buyRecordsCount}｜Live Holdings {liveWallet.liveHoldings.length}</div>}
   </section>;
 }
