@@ -1,9 +1,10 @@
-// DCA Discount Hunter V15.23 - Cost basis debug endpoint
+// DCA Discount Hunter V15.24 - Cost basis debug endpoint
 // Debug-only API for inspecting transfer history -> buyRecords -> costHoldings.
-// Focus: verify whether latest buys such as SPCX second 5U are included.
+// Focus: verify why latest buys such as SPCX second 5U are costed incorrectly.
 
 const { fetchWalletTokenTransfers } = require("../../lib/xstocks/transfer-source");
-const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
+const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol, txAmount } = require("../../lib/xstocks/costBasis");
+const { STABLECOINS, toLower } = require("../../lib/xstocks/constants");
 
 function cleanAddress(value) {
   return String(value || "").trim();
@@ -59,6 +60,43 @@ function normalizeTimestamp(value) {
   return Number.isFinite(d.getTime()) ? d.toISOString() : String(value);
 }
 
+function groupByHash(transfers) {
+  const map = new Map();
+  for (const tx of transfers || []) {
+    const hash = String(tx.hash || "").trim();
+    if (!hash) continue;
+    const arr = map.get(hash) || [];
+    arr.push(tx);
+    map.set(hash, arr);
+  }
+  return map;
+}
+
+function isStablecoinDebug(tx) {
+  const symbol = upper(tx.tokenSymbol);
+  const name = upper(tx.tokenName);
+  const stablecoinUpper = STABLECOINS.map((s) => upper(s));
+  return stablecoinUpper.includes(symbol) || symbol === "USDON" || symbol === "BSC-USD" || name.includes("TETHER USD") || name.includes("USD COIN") || name.includes("BINANCE-PEG BSC-USD");
+}
+
+function summarizeTx(tx) {
+  return {
+    hash: tx.hash || tx.transactionHash || null,
+    timestamp: normalizeTimestamp(tx.blockTimestamp || tx.timestamp || tx.timeStamp),
+    inferredSymbol: normalizeOnSymbol(getXStockSymbol(tx)),
+    tokenSymbol: tx.tokenSymbol || null,
+    tokenName: tx.tokenName || null,
+    contractAddress: cleanAddress(tx.contractAddress).toLowerCase(),
+    from: cleanAddress(tx.from).toLowerCase(),
+    to: cleanAddress(tx.to).toLowerCase(),
+    value: tx.value || null,
+    valueDecimal: tx.valueDecimal || null,
+    tokenDecimal: tx.tokenDecimal || null,
+    amount: txAmount(tx),
+    isStablecoin: isStablecoinDebug(tx),
+  };
+}
+
 async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
 
@@ -77,26 +115,16 @@ async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "WALLET_ADDRESS not found or invalid" });
     }
 
+    const myAddress = toLower(walletAddress);
     const rawTransfers = await fetchWalletTokenTransfers(walletAddress);
     const transfers = uniqueTransfers(rawTransfers);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
     const costHoldings = calculateHoldings(buyRecords);
+    const groups = groupByHash(transfers);
 
     const filteredTransfers = transfers
-      .map((tx) => ({
-        hash: tx.hash || tx.transactionHash || null,
-        timestamp: normalizeTimestamp(tx.blockTimestamp || tx.timestamp || tx.timeStamp),
-        symbol: normalizeOnSymbol(getXStockSymbol(tx)),
-        tokenSymbol: tx.tokenSymbol || null,
-        tokenName: tx.tokenName || null,
-        contractAddress: cleanAddress(tx.contractAddress).toLowerCase(),
-        from: cleanAddress(tx.from).toLowerCase(),
-        to: cleanAddress(tx.to).toLowerCase(),
-        value: tx.value || null,
-        valueDecimal: tx.valueDecimal || null,
-        tokenDecimal: tx.tokenDecimal || null,
-      }))
-      .filter((tx) => matchesSymbol(tx.symbol || tx.tokenSymbol, symbolFilter))
+      .map(summarizeTx)
+      .filter((tx) => matchesSymbol(tx.inferredSymbol || tx.tokenSymbol, symbolFilter))
       .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
 
     const filteredBuyRecords = buyRecords
@@ -108,10 +136,36 @@ async function handler(req, res) {
         avgPrice: safeNumber(r.quantity) > 0 ? safeNumber(r.costUsd) / safeNumber(r.quantity) : 0,
         txHash: r.txHash || r.hash || null,
         timestamp: normalizeTimestamp(r.timestamp),
+        stablecoinOutflowCount: r.stablecoinOutflowCount || 0,
+        stablecoinInflowCount: r.stablecoinInflowCount || 0,
+        xstockOutflowCount: r.xstockOutflowCount || 0,
         source: r.source || null,
         warning: r.warning || null,
       }))
       .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
+
+    const relevantHashes = new Set(filteredBuyRecords.map((r) => r.txHash).filter(Boolean));
+    const txGroups = [...relevantHashes].map((hash) => {
+      const txs = groups.get(hash) || [];
+      const stableOutflows = txs.filter((tx) => isStablecoinDebug(tx) && toLower(tx.from) === myAddress).map(summarizeTx);
+      const stableInflows = txs.filter((tx) => isStablecoinDebug(tx) && toLower(tx.to) === myAddress).map(summarizeTx);
+      const xstockInflows = txs.filter((tx) => getXStockSymbol(tx) && toLower(tx.to) === myAddress).map(summarizeTx);
+      const xstockOutflows = txs.filter((tx) => getXStockSymbol(tx) && toLower(tx.from) === myAddress).map(summarizeTx);
+      return {
+        hash,
+        timestamp: normalizeTimestamp(txs[0]?.blockTimestamp || txs[0]?.timestamp || txs[0]?.timeStamp),
+        stableOutUsd: stableOutflows.reduce((sum, tx) => sum + safeNumber(tx.amount), 0),
+        stableInUsd: stableInflows.reduce((sum, tx) => sum + safeNumber(tx.amount), 0),
+        stableOutflowCount: stableOutflows.length,
+        stableInflowCount: stableInflows.length,
+        xstockInflowCount: xstockInflows.length,
+        xstockOutflowCount: xstockOutflows.length,
+        stableOutflows,
+        stableInflows,
+        xstockInflows,
+        xstockOutflows,
+      };
+    }).sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
 
     const filteredCostHoldings = costHoldings
       .filter((h) => matchesSymbol(h.symbol, symbolFilter))
@@ -129,7 +183,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.23-debug-cost-basis",
+      version: "15.24-debug-cost-basis-groups",
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       checkedAt: new Date().toISOString(),
@@ -146,6 +200,7 @@ async function handler(req, res) {
       },
       costHoldings: filteredCostHoldings,
       buyRecords: filteredBuyRecords,
+      txGroups,
       transfers: filteredTransfers,
     });
   } catch (error) {
