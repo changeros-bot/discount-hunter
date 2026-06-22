@@ -1,6 +1,7 @@
-// DCA Discount Hunter V15.15 - Homepage Wallet Sync API
+// DCA Discount Hunter V15.17 - Homepage Wallet Sync API
 // Source of truth for current holdings is live BNB Chain balanceOf().
 // Moralis transfer history is used for cost/PnL and contract hints only.
+// Cost basis is never scaled by live RPC quantity because xStocks may use different display/multiplier units.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
@@ -108,16 +109,16 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
     const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
     const costQuantity = safeNumber(cost.quantity);
     const totalCost = safeNumber(cost.totalCost);
-    const averageCost = costQuantity > 0 && totalCost > 0 ? totalCost / costQuantity : safeNumber(cost.averageCost);
-    const adjustedCost = averageCost > 0 ? liveQuantity * averageCost : totalCost;
+    const costBasisAverageCost = costQuantity > 0 && totalCost > 0 ? totalCost / costQuantity : safeNumber(cost.averageCost);
 
     merged.push({
       ...cost,
       symbol,
       costBasisQuantity: costQuantity,
       quantity: liveQuantity,
-      totalCost: adjustedCost,
-      averageCost,
+      totalCost,
+      averageCost: liveQuantity > 0 && totalCost > 0 ? totalCost / liveQuantity : 0,
+      costBasisAverageCost,
       buyCount: cost.buyCount || 0,
       sellCount: cost.sellCount || 0,
       firstBuyTimestamp: cost.firstBuyTimestamp || null,
@@ -126,12 +127,35 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
       officialHolding: true,
       quantitySource: "bsc_rpc_balanceOf_live",
       liveBalanceContractAddress: live.contractAddress || null,
+      liveBalanceContractAddresses: live.contractAddresses || (live.contractAddress ? [live.contractAddress] : []),
+      liveBalanceDetails: live.details || [],
       liveBalanceDecimals: live.decimals ?? null,
       liveBalanceSource: live.source || null,
     });
   }
 
   return merged;
+}
+
+function guardMarketValue({ quantity, tokenPrice, totalCost }) {
+  const rawCurrentValue = quantity * tokenPrice;
+  if (totalCost > 0 && rawCurrentValue > Math.max(totalCost * 20, totalCost + 1000)) {
+    return {
+      currentValue: totalCost,
+      rawCurrentValue,
+      valuationQuantity: tokenPrice > 0 ? totalCost / tokenPrice : 0,
+      valuationGuardApplied: true,
+      valuationWarning: "Live RPC quantity and token price appear to use incompatible units; market value temporarily capped to cost basis until multiplier is verified.",
+    };
+  }
+
+  return {
+    currentValue: rawCurrentValue,
+    rawCurrentValue,
+    valuationQuantity: quantity,
+    valuationGuardApplied: false,
+    valuationWarning: null,
+  };
 }
 
 function enrichHoldings(holdings, tokenPrices, referencePrices) {
@@ -142,7 +166,8 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
     const tokenPriceData = pickPrice(tokenPrices, symbol);
     const referencePriceData = pickPrice(referencePrices, symbol);
     const tokenPrice = safeNumber(tokenPriceData?.price);
-    const currentValue = quantity * tokenPrice;
+    const valuation = guardMarketValue({ quantity, tokenPrice, totalCost });
+    const currentValue = valuation.currentValue;
     const unrealizedPnL = currentValue - totalCost;
     const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
     const referenceStockPrice = safeNumber(referencePriceData?.price);
@@ -153,11 +178,13 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
       ...h,
       symbol,
       quantity,
+      valuationQuantity: valuation.valuationQuantity,
       totalCost,
       averageCost: quantity > 0 && totalCost > 0 ? totalCost / quantity : safeNumber(h.averageCost),
       tokenPrice,
       marketPrice: tokenPrice,
       currentValue,
+      rawCurrentValue: valuation.rawCurrentValue,
       marketValue: currentValue,
       positionValue: currentValue,
       unrealizedPnL,
@@ -166,6 +193,8 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
       referenceStockPrice,
       premiumDiscount,
       premiumDiscountPct,
+      valuationGuardApplied: valuation.valuationGuardApplied,
+      valuationWarning: valuation.valuationWarning,
       priceSource: tokenPriceData?.source || null,
       referencePriceSource: referencePriceData?.source || null,
       rawTokenPrice: tokenPriceData?.rawTokenPrice || null,
@@ -178,16 +207,19 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
 function summarize(holdings) {
   const portfolioTotalCost = holdings.reduce((sum, h) => sum + safeNumber(h.totalCost), 0);
   const portfolioMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.currentValue), 0);
+  const portfolioRawMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.rawCurrentValue), 0);
   const portfolioUnrealizedPnL = portfolioMarketValue - portfolioTotalCost;
   const portfolioPnLPct = portfolioTotalCost > 0 ? portfolioUnrealizedPnL / portfolioTotalCost : 0;
   return {
     actualTotalInvested: portfolioTotalCost,
     portfolioTotalCost,
     portfolioMarketValue,
+    portfolioRawMarketValue,
     portfolioUnrealizedPnL,
     portfolioPnLPct,
     totalCost: portfolioTotalCost,
     marketValue: portfolioMarketValue,
+    rawMarketValue: portfolioRawMarketValue,
     currentValue: portfolioMarketValue,
     unrealizedPnL: portfolioUnrealizedPnL,
     returnPct: portfolioPnLPct,
@@ -217,15 +249,13 @@ async function handler(req, res) {
     const costHoldings = calculateHoldings(buyRecords);
     const contractHints = buildContractHints(transfers);
 
-    // V15.15: RPC must scan the full watchlist independently of Moralis cost holdings.
-    // Transfer contract hints are used only to improve the contract address source.
     const liveScanSymbols = WATCHLIST;
 
-    let liveBalanceResult = { holdings: [], errors: [], tokenMetadata: [] };
+    let liveBalanceResult = { holdings: [], errors: [], tokenMetadata: [], contractHoldings: [] };
     try {
       liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, liveScanSymbols, contractHints);
     } catch (error) {
-      liveBalanceResult = { holdings: [], errors: [error.message], tokenMetadata: [] };
+      liveBalanceResult = { holdings: [], errors: [error.message], tokenMetadata: [], contractHoldings: [] };
     }
 
     const baseHoldings = mergeLiveQuantities(costHoldings, liveBalanceResult.holdings);
@@ -243,7 +273,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.15-full-watchlist-live-balance-source-of-truth",
+      version: "15.17-cost-basis-unit-guard",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
@@ -270,9 +300,11 @@ async function handler(req, res) {
         contractHintSymbols: Array.from(new Set(contractHints.map((h) => upper(h.symbol)))).sort(),
         liveScanSymbols,
         liveBalanceHoldingsCount: liveBalanceResult.holdings?.length || 0,
+        liveContractHoldingsCount: liveBalanceResult.contractHoldings?.length || 0,
         liveBalanceErrors: liveBalanceResult.errors || [],
         liveBalanceBlockNumber: liveBalanceResult.checkedBlockNumber || null,
         holdingsCount: holdings.length,
+        valuationGuardCount: holdings.filter((h) => h.valuationGuardApplied).length,
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
         tokenPriceSources,
@@ -285,13 +317,18 @@ async function handler(req, res) {
         holdingPriceDebug: holdings.map((h) => ({
           symbol: h.symbol,
           quantity: h.quantity,
+          valuationQuantity: h.valuationQuantity,
           costBasisQuantity: h.costBasisQuantity,
           quantitySource: h.quantitySource,
           liveBalanceSource: h.liveBalanceSource,
           liveBalanceContractAddress: h.liveBalanceContractAddress,
+          liveBalanceContractAddresses: h.liveBalanceContractAddresses,
+          liveBalanceDetails: h.liveBalanceDetails,
           tokenPrice: h.tokenPrice,
           currentValue: h.currentValue,
+          rawCurrentValue: h.rawCurrentValue,
           totalCost: h.totalCost,
+          valuationGuardApplied: h.valuationGuardApplied,
           priceSource: h.priceSource,
         })),
       },
