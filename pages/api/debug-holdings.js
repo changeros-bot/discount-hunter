@@ -1,12 +1,15 @@
-// DCA Discount Hunter V15.25 - Holdings debug endpoint
+// DCA Discount Hunter V15.26 - Holdings debug endpoint
 // Uses the same source pipeline as sync-wallet:
 // Moralis/MegaNode transfers for cost basis + verified BSC RPC balanceOf for live holdings.
+// Includes the same visible 5U fallback cost for live holdings missing transfer-history cost.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
 const { WATCHLIST } = require("../../lib/xstocks/constants");
+
+const FALLBACK_FIRST_LAYER_COST_USD = 5;
 
 function cleanAddress(value) {
   return String(value || "").trim();
@@ -104,20 +107,26 @@ function mergeLiveAndCost(costHoldings, liveHoldings) {
     const symbol = upper(live.symbol);
     const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
     const quantity = safeNumber(live.quantity);
-    const totalCost = safeNumber(cost.totalCost);
+    const rawTotalCost = safeNumber(cost.totalCost);
+    const hasRealCostBasis = rawTotalCost > 0;
+    const totalCost = hasRealCostBasis ? rawTotalCost : FALLBACK_FIRST_LAYER_COST_USD;
     return {
       symbol,
       quantity,
       totalCost,
+      rawTotalCost,
       averageCost: quantity > 0 && totalCost > 0 ? totalCost / quantity : 0,
       costBasisQuantity: safeNumber(cost.quantity),
-      buyCount: cost.buyCount || 0,
+      buyCount: cost.buyCount || (hasRealCostBasis ? 0 : 1),
       sellCount: cost.sellCount || 0,
+      costBasisSource: hasRealCostBasis ? "transfer_history" : "fallback_first_layer_cost_missing_transfer_stablecoin_leg",
+      costBasisEstimated: !hasRealCostBasis,
+      costBasisWarning: hasRealCostBasis ? null : `No transfer-history cost found for ${symbol}; using ${FALLBACK_FIRST_LAYER_COST_USD}U fallback first-layer cost.`,
       liveBalanceContractAddress: live.contractAddress || null,
       liveBalanceContractAddresses: live.contractAddresses || (live.contractAddress ? [live.contractAddress] : []),
       liveBalanceSource: live.source || null,
       liveBalanceDetails: live.details || [],
-      hasCostBasis: totalCost > 0,
+      hasCostBasis: hasRealCostBasis,
     };
   });
 }
@@ -169,7 +178,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.25-debug-holdings-live-sources",
+      version: "15.26-debug-holdings-fallback-aligned",
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       source: hasMoralisKey() ? "Moralis cost basis + verified BSC RPC live holdings" : hasMegaNodeKey() ? "MegaNode cost basis + verified BSC RPC live holdings" : "Legacy cost basis + verified BSC RPC live holdings",
@@ -187,6 +196,8 @@ module.exports = async function handler(req, res) {
         costHoldingSymbols: costHoldings.map((h) => upper(h.symbol)),
         liveHoldingSymbols: (liveBalanceResult.holdings || []).map((h) => upper(h.symbol)),
         missingCostSymbols: holdings.filter((h) => !h.hasCostBasis).map((h) => h.symbol),
+        estimatedCostBasisSymbols: holdings.filter((h) => h.costBasisEstimated).map((h) => h.symbol),
+        fallbackFirstLayerCostUsd: FALLBACK_FIRST_LAYER_COST_USD,
         liveBalanceErrors: liveBalanceResult.errors || [],
       },
       holdings,
