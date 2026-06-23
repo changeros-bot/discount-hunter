@@ -1,47 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.20-cost-based-layer-completion";
+const MODEL_VERSION = "15.31-progress-fix";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
-
-const goldenTitleStyle = {
-  display: "block",
-  fontSize: "clamp(56px, 16vw, 84px)",
-  fontWeight: 1000,
-  margin: "0 auto 10px",
-  letterSpacing: "-3px",
-  lineHeight: 0.9,
-  fontFamily: "'Noto Serif TC', 'Microsoft JhengHei', serif",
-  background: "linear-gradient(180deg, #fff6b7 0%, #ffd700 42%, #b8860b 100%)",
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  filter: "drop-shadow(0 10px 18px rgba(0,0,0,.52))",
-};
-
-const heroPanelStyle = {
-  position: "relative",
-  textAlign: "center",
-  padding: "18px 12px 10px",
-  minHeight: "220px",
-  overflow: "hidden",
-  background: "radial-gradient(circle at 50% 18%, rgba(243,186,47,.08) 0%, rgba(10,14,39,0) 30%), linear-gradient(135deg, rgba(10,14,39,.96) 0%, rgba(3,7,18,.96) 100%)",
-};
-
-const versionMiniStyle = {
-  position: "absolute",
-  top: 10,
-  right: 10,
-  padding: "4px 8px",
-  borderRadius: 999,
-  border: "1px solid rgba(243,186,47,.16)",
-  background: "rgba(243,186,47,.06)",
-  color: "rgba(243,186,47,.62)",
-  fontSize: 10,
-  fontWeight: 900,
-  transform: "scale(0.5)",
-  transformOrigin: "top right",
-};
 
 function normalizeSymbol(symbol) {
   return String(symbol || "").trim().toUpperCase();
@@ -51,14 +13,14 @@ function isLiveHolding(holding) {
   return !!holding && Number(holding.quantity) > 0 && holding.quantitySource === "bsc_rpc_balanceOf_live";
 }
 
-function parseAmount(value) {
-  const number = Number(String(value || "0").replace(/[^0-9.]/g, ""));
-  return Number.isFinite(number) ? number : 0;
-}
-
 function parsePercentValue(value) {
   const number = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
   return Number.isFinite(number) ? number : NaN;
+}
+
+function parseAmount(value) {
+  const number = Number(String(value || "0").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(number) ? number : 0;
 }
 
 function formatNumber(value, digits = 2) {
@@ -88,15 +50,8 @@ function formatTime(isoString) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
-function valueClass(value) {
-  const text = String(value ?? "").trim();
-  if (text.startsWith("-")) return "pnl-value negative";
-  if (text.startsWith("+")) return "pnl-value positive";
-  return "pnl-value";
-}
-
 function getCurrentSignalLevel(asset) {
-  return asset.signal?.level || 0;
+  return asset?.signal?.level || 0;
 }
 
 function getCompletedLevelByCost(asset, holding) {
@@ -105,12 +60,10 @@ function getCompletedLevelByCost(asset, holding) {
   const amounts = asset.amounts || [];
   let cumulative = 0;
   let completed = 0;
-
   for (let i = 0; i < amounts.length; i += 1) {
     cumulative += Number(amounts[i] || 0);
     if (totalCost + 0.01 >= cumulative) completed = i + 1;
   }
-
   return completed;
 }
 
@@ -136,24 +89,22 @@ function getNextBuyPoint(asset, completedLevel = 0) {
   const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
-  if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
+  if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0, targetDepth: 0 };
 
   const ruleDepths = rules.map((rule) => Math.abs(parsePercentValue(rule))).filter(Number.isFinite);
-  if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0 };
+  if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0, targetDepth: 0 };
 
-  let targetIndex = ruleDepths.findIndex((depth) => currentDepth < depth);
-  if (targetIndex === -1) targetIndex = ruleDepths.length - 1;
-  targetIndex = Math.max(targetIndex, completedLevel);
+  let targetIndex = Math.max(0, Number(completedLevel || 0));
+  if (targetIndex >= ruleDepths.length) targetIndex = ruleDepths.length - 1;
 
-  const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
   const targetDepth = ruleDepths[targetIndex] || ruleDepths[ruleDepths.length - 1];
-  const range = Math.max(1, targetDepth - previousDepth);
-  const progress = currentDepth >= targetDepth ? 100 : Math.min(100, Math.max(0, ((currentDepth - previousDepth) / range) * 100));
+  const progress = targetDepth > 0 ? Math.min(100, Math.max(0, (currentDepth / targetDepth) * 100)) : 0;
 
   return {
     currentAmount: `${targetIndex === 0 ? 0 : amounts[targetIndex - 1] || 0}U`,
     targetAmount: `${amounts[targetIndex] || 0}U`,
     progress,
+    targetDepth,
   };
 }
 
@@ -180,10 +131,6 @@ export default function Home() {
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState("");
   const [walletToast, setWalletToast] = useState(null);
-
-  useEffect(() => {
-    try { localStorage.setItem("discountHunterModelVersion", MODEL_VERSION); } catch {}
-  }, []);
 
   async function loadPrices() {
     setRefreshing(true);
@@ -246,13 +193,20 @@ export default function Home() {
   }, [liveWallet]);
 
   const enhancedAssets = useMemo(() => assets.map((asset) => {
-    const key = normalizeSymbol(asset.symbol);
-    const holding = holdingMap.get(key);
+    const holding = holdingMap.get(normalizeSymbol(asset.symbol));
     const hasHolding = isLiveHolding(holding);
     const completedLevel = getCompletedLevelByCost(asset, holding);
     const signalLevel = getCurrentSignalLevel(asset);
     const actionAmount = getActionAmount(asset, completedLevel);
-    return { ...asset, holding, hasHolding, completedLevel, signalLevel, actionAmount, isActionable: signalLevel > completedLevel && actionAmount > 0 };
+    return {
+      ...asset,
+      holding,
+      hasHolding,
+      completedLevel,
+      signalLevel,
+      actionAmount,
+      isActionable: signalLevel > completedLevel && actionAmount > 0,
+    };
   }), [assets, holdingMap]);
 
   const sortedAssets = useMemo(() => [...enhancedAssets].sort((a, b) => {
@@ -264,37 +218,27 @@ export default function Home() {
 
   const actionList = sortedAssets.filter((asset) => asset.isActionable);
   const heldSignalList = sortedAssets.filter((asset) => asset.signalLevel > 0 && asset.hasHolding && !asset.isActionable);
-  const watchList = useMemo(() => sortedAssets.filter((asset) => !asset.isActionable && !heldSignalList.includes(asset)).sort((a, b) => getProgressScore(b) - getProgressScore(a)), [sortedAssets, heldSignalList]);
+  const watchList = useMemo(() => sortedAssets
+    .filter((asset) => !asset.isActionable && !heldSignalList.includes(asset))
+    .sort((a, b) => getProgressScore(b) - getProgressScore(a)), [sortedAssets, heldSignalList]);
   const totalAmount = actionList.reduce((sum, asset) => sum + Number(asset.actionAmount || 0), 0);
   const marketOnline = assets.length > 0 && !error;
   const walletOnline = !!walletSummary && !walletError;
 
   return <main className="page">
-    <section className="hero compactHero" style={heroPanelStyle}>
-      <div style={versionMiniStyle}>v15.20</div>
-      <h1 style={goldenTitleStyle}>美股DCA<br />折價追蹤</h1>
-      <h2 style={{ fontSize: 14, margin: "0", color: "rgba(248,250,252,.68)", textAlign: "center", fontWeight: 750, letterSpacing: ".02em" }}>Binance xStocks 財富儀表板</h2>
+    <section className="hero compactHero" style={{ textAlign: "center", padding: "18px 12px 10px", background: "linear-gradient(135deg, rgba(10,14,39,.96), rgba(3,7,18,.96))" }}>
+      <div style={{ textAlign: "right", color: "rgba(243,186,47,.6)", fontSize: 10, fontWeight: 900 }}>v15.31</div>
+      <h1 style={{ fontSize: "clamp(48px, 14vw, 78px)", fontWeight: 1000, margin: "6px 0", lineHeight: .95, background: "linear-gradient(180deg, #fff6b7, #ffd700, #b8860b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>美股DCA<br />折價追蹤</h1>
+      <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks 財富儀表板</h2>
       {error && <div className="dataGuard">{error}</div>}
     </section>
 
     <DecisionSection actionList={actionList} totalAmount={totalAmount} updatedAt={updatedAt} refreshing={refreshing} />
     <WalletSyncSection walletSummary={walletSummary} walletLoading={walletLoading} walletError={walletError} walletToast={walletToast} onSync={() => syncWallet(true)} liveWallet={liveWallet} />
 
-    {actionList.length > 0 && <section className="list">
-      <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 可執行買點</h3>
-      {actionList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}
-    </section>}
-
-    {heldSignalList.length > 0 && <section className="list" style={{ marginTop: 16 }}>
-      <h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>✅ 鏈上已持有買點區</h3>
-      {heldSignalList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}
-    </section>}
-
-    <details className="idleGroup" style={{ marginTop: 16 }}>
-      <summary>📋 觀察區（{watchList.length}）</summary>
-      <section className="list" style={{ marginTop: 12 }}>{watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}</section>
-    </details>
-
+    {actionList.length > 0 && <section className="list"><h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 可執行買點</h3>{actionList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}</section>}
+    {heldSignalList.length > 0 && <section className="list" style={{ marginTop: 16 }}><h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>✅ 鏈上已持有買點區</h3>{heldSignalList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}</section>}
+    <details className="idleGroup" style={{ marginTop: 16 }}><summary>📋 觀察區（{watchList.length}）</summary><section className="list" style={{ marginTop: 12 }}>{watchList.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}</section></details>
     <FooterStatus source={source} marketOnline={marketOnline} walletOnline={walletOnline} walletLoading={walletLoading} walletSummary={walletSummary} liveWallet={liveWallet} />
   </main>;
 }
@@ -310,26 +254,12 @@ function DecisionSection({ actionList, totalAmount, updatedAt, refreshing }) {
   </section>;
 }
 
-function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walletSummary, liveWallet }) {
-  const marketClass = source ? (marketOnline ? "status-live" : "status-error") : "status-loading";
-  const marketText = source ? (marketOnline ? "LIVE" : "ERROR") : "LOADING";
-  const walletClass = walletLoading ? "status-loading" : walletOnline ? "status-live" : "status-error";
-  const walletText = walletLoading ? "LOADING" : walletOnline ? "LIVE" : "ERROR";
-  const lastSyncTime = walletSummary?.lastSyncTime || walletSummary?.checkedAt;
-  return <section style={{ margin: "18px 0 8px", padding: 12, background: "#020617", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}><span className={marketClass}>● Market API {marketText}</span><span className={walletClass}>● Wallet {walletText}</span></div>
-    <div style={{ marginTop: 8 }}>行情資料源：{source || "讀取中"}</div>
-    <div style={{ marginTop: 6 }}>版本：V15.20｜最後同步：{formatTime(lastSyncTime)}</div>
-    {walletSummary?.debugCounts && <div style={{ marginTop: 6 }}>Transfers {walletSummary.debugCounts.totalTransfers}｜Ledger {walletSummary.debugCounts.buyRecordsCount}｜Live Holdings {liveWallet.liveHoldings.length}</div>}
-  </section>;
-}
-
 function WalletSyncSection({ walletSummary, walletLoading, walletError, walletToast, onSync, liveWallet }) {
   const pnlColor = liveWallet.pnl >= 0 ? "#4ade80" : "#f87171";
   const toastColor = walletToast?.type === "success" ? "#86efac" : "#fecaca";
   const toastBg = walletToast?.type === "success" ? "rgba(34,197,94,.16)" : "rgba(239,68,68,.18)";
   return <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2><button onClick={onSync} disabled={walletLoading} aria-label={walletLoading ? "鏈上持倉同步中" : "重新同步鏈上持倉"} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: walletLoading ? "#334155" : "#2563eb", color: "white", fontWeight: 950 }}>{walletLoading ? "同步中…" : "重新同步"}</button></div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2><button onClick={onSync} disabled={walletLoading} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: walletLoading ? "#334155" : "#2563eb", color: "white", fontWeight: 950 }}>{walletLoading ? "同步中…" : "重新同步"}</button></div>
     {walletToast && <div role="status" aria-live="polite" style={{ marginTop: 10, padding: 10, background: toastBg, color: toastColor, borderRadius: 10, fontWeight: 900 }}>{walletToast.type === "success" ? "✓" : "⚠️"} {walletToast.message}</div>}
     {walletError && <div style={{ marginTop: 10, padding: 10, background: "rgba(239,68,68,.18)", color: "#fecaca", borderRadius: 10, fontWeight: 900 }}>⚠️ {walletError}</div>}
     {walletSummary && <>
@@ -340,12 +270,12 @@ function WalletSyncSection({ walletSummary, walletLoading, walletError, walletTo
 }
 
 function WalletMetric({ label, value, color }) {
-  return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong className={valueClass(value)} style={{ display: "block", color: color || undefined, marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
+  return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong style={{ display: "block", color: color || "#f8fafc", marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
 }
 
 function WalletHoldingCard({ holding }) {
   const pnlColor = holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171";
-  return <div style={{ padding: 12, background: "#0f172a", borderRadius: 12, border: "1px solid rgba(148,163,184,.22)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}><strong style={{ color: "#f8fafc", fontSize: 18 }}>{holding.symbol}</strong><strong className={holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}｜{formatPct(holding.pnlPct, 1)}</strong></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}><div>數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(holding.quantity, 6)}</strong></div><div>成本<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.totalCost)}</strong></div><div>均價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.averageCost)}</strong></div><div>現價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.tokenPrice)}</strong></div><div>市值<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.currentValue)}</strong></div><div>損益<br /><strong className={holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}</strong></div></div></div>;
+  return <div style={{ padding: 12, background: "#0f172a", borderRadius: 12, border: "1px solid rgba(148,163,184,.22)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}><strong style={{ color: "#f8fafc", fontSize: 18 }}>{holding.symbol}</strong><strong style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}｜{formatPct(holding.pnlPct, 1)}</strong></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}><div>數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(holding.quantity, 6)}</strong></div><div>成本<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.totalCost)}</strong></div><div>均價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.averageCost)}</strong></div><div>現價<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.tokenPrice)}</strong></div><div>市值<br /><strong style={{ color: "#f8fafc" }}>${formatNumber(holding.currentValue)}</strong></div><div>損益<br /><strong style={{ color: pnlColor }}>{formatCurrency(holding.unrealizedPnL)}</strong></div></div></div>;
 }
 
 function ProgressBar({ nextBuy }) {
@@ -364,5 +294,19 @@ function AssetCard({ asset }) {
   const signalText = level > 0 ? (actionAmount > 0 ? `${ruleColors[level - 1]} ${levelNames[level]}｜${held ? "加碼" : "建議"} ${actionAmount}U` : "✅ 鏈上已持有｜等待下一層") : (held ? "✅ 鏈上已持有｜觀察中" : "尚未到買點");
   const layerLabel = actionAmount > 0 ? "本層建議" : held ? "本層已完成" : "本層建議";
   const layerValue = actionAmount > 0 ? `${actionAmount}U` : held ? "不需加碼" : "0U";
-  return <div className={`card ${level > 0 ? "active" : "idle"}`}><div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div><div className="signal">{signalText}</div><div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>{layerLabel}</span><strong>{layerValue}</strong></div></div><details style={{ marginTop: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(15,23,42,.72)", border: "1px solid rgba(251,191,36,.22)", color: "#fef3c7", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}><summary style={{ cursor: "pointer", fontWeight: 950 }}>買點規則 ▼</summary><div style={{ display: "grid", gap: 4, marginTop: 8 }}>{ruleRows.map((row) => <div key={`${asset.symbol}-${row.levelName}`}>{row.color} {row.levelName} {row.discountText}｜{row.amountText}</div>)}</div></details>{asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}><div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div><div>持倉損益<br /><strong className={asset.holding.unrealizedPnL >= 0 ? "pnl-value positive" : "pnl-value negative"} style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div></div>}<div className="nextBuyBox"><div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>深度 {Number.isFinite(depthText) ? `${depthText.toFixed(1)}%` : "--"}｜進度 {Number(nextBuy.progress || 0).toFixed(0)}%</div><ProgressBar nextBuy={nextBuy} /></div></div>;
+  return <div className={`card ${level > 0 ? "active" : "idle"}`}><div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div><div className="signal">{signalText}</div><div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><strong>{asset.discount ?? "--"}%</strong></div><div><span>{layerLabel}</span><strong>{layerValue}</strong></div></div><details style={{ marginTop: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(15,23,42,.72)", border: "1px solid rgba(251,191,36,.22)", color: "#fef3c7", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}><summary style={{ cursor: "pointer", fontWeight: 950 }}>買點規則 ▼</summary><div style={{ display: "grid", gap: 4, marginTop: 8 }}>{ruleRows.map((row) => <div key={`${asset.symbol}-${row.levelName}`}>{row.color} {row.levelName} {row.discountText}｜{row.amountText}</div>)}</div></details>{asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}><div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div><div>持倉損益<br /><strong style={{ color: asset.holding.unrealizedPnL >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(asset.holding.unrealizedPnL)}</strong></div></div>}<div className="nextBuyBox"><div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>深度 {Number.isFinite(depthText) ? `${depthText.toFixed(1)}%` : "--"}｜距離下一層 {Number(nextBuy.progress || 0).toFixed(0)}%</div><ProgressBar nextBuy={nextBuy} /></div></div>;
+}
+
+function FooterStatus({ source, marketOnline, walletOnline, walletLoading, walletSummary, liveWallet }) {
+  const marketClass = source ? (marketOnline ? "status-live" : "status-error") : "status-loading";
+  const marketText = source ? (marketOnline ? "LIVE" : "ERROR") : "LOADING";
+  const walletClass = walletLoading ? "status-loading" : walletOnline ? "status-live" : "status-error";
+  const walletText = walletLoading ? "LOADING" : walletOnline ? "LIVE" : "ERROR";
+  const lastSyncTime = walletSummary?.lastSyncTime || walletSummary?.checkedAt;
+  return <section style={{ margin: "18px 0 8px", padding: 12, background: "#020617", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}><span className={marketClass}>● Market API {marketText}</span><span className={walletClass}>● Wallet {walletText}</span></div>
+    <div style={{ marginTop: 8 }}>行情資料源：{source || "讀取中"}</div>
+    <div style={{ marginTop: 6 }}>版本：{MODEL_VERSION}｜最後同步：{formatTime(lastSyncTime)}</div>
+    {walletSummary?.debugCounts && <div style={{ marginTop: 6 }}>Transfers {walletSummary.debugCounts.totalTransfers}｜Ledger {walletSummary.debugCounts.buyRecordsCount}｜Live Holdings {liveWallet.liveHoldings.length}</div>}
+  </section>;
 }
