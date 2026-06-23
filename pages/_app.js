@@ -6,6 +6,7 @@ import "../styles/title-gold.css";
 import "../styles/hero-poster.css";
 import "../styles/v15-unified.css";
 import "../styles/v15-fix.css";
+import "../styles/v15-color-force.css";
 import Head from "next/head";
 
 function formatTime(isoString) {
