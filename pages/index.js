@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const MODEL_VERSION = "15.35-text-only-red-green";
+const MODEL_VERSION = "15.37-progress-display-guard";
 const REFRESH_MS = 5000;
 const ruleColors = ["🟢", "🟡", "🟠", "🔴"];
 const levelNames = ["", "第一層", "第二層", "第三層", "第四層"];
@@ -103,22 +103,27 @@ function getNextBuyPoint(asset, completedLevel = 0) {
   const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
   const amounts = asset.amounts || [];
-  if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0, targetDepth: 0 };
+  if (!Number.isFinite(currentDepth) || rules.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0, displayProgress: 0, targetDepth: 0, remainingDepth: null };
 
   const ruleDepths = rules.map((rule) => Math.abs(parsePercentValue(rule))).filter(Number.isFinite);
-  if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0, targetDepth: 0 };
+  if (ruleDepths.length === 0) return { currentAmount: "0U", targetAmount: "0U", progress: 0, displayProgress: 0, targetDepth: 0, remainingDepth: null };
 
   let targetIndex = Math.max(0, Number(completedLevel || 0));
   if (targetIndex >= ruleDepths.length) targetIndex = ruleDepths.length - 1;
 
   const targetDepth = ruleDepths[targetIndex] || ruleDepths[ruleDepths.length - 1];
   const progress = targetDepth > 0 ? Math.min(100, Math.max(0, (currentDepth / targetDepth) * 100)) : 0;
+  const reachedTarget = currentDepth >= targetDepth;
+  const displayProgress = reachedTarget ? 100 : Math.min(99, Math.floor(progress));
+  const remainingDepth = Number.isFinite(targetDepth) ? Math.max(0, targetDepth - currentDepth) : null;
 
   return {
     currentAmount: `${targetIndex === 0 ? 0 : amounts[targetIndex - 1] || 0}U`,
     targetAmount: `${amounts[targetIndex] || 0}U`,
     progress,
+    displayProgress,
     targetDepth,
+    remainingDepth,
   };
 }
 
@@ -226,7 +231,7 @@ export default function Home() {
 
   return <main className="page">
     <section className="hero compactHero" style={{ textAlign: "center", padding: "18px 12px 10px", background: "linear-gradient(135deg, rgba(10,14,39,.96), rgba(3,7,18,.96))" }}>
-      <div style={{ textAlign: "right", color: "rgba(243,186,47,.6)", fontSize: 10, fontWeight: 900 }}>v15.35</div>
+      <div style={{ textAlign: "right", color: "rgba(243,186,47,.6)", fontSize: 10, fontWeight: 900 }}>v15.37</div>
       <h1 style={{ fontSize: "clamp(48px, 14vw, 78px)", fontWeight: 1000, margin: "6px 0", lineHeight: .95, background: "linear-gradient(180deg, #fff6b7, #ffd700, #b8860b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>美股DCA<br />折價追蹤</h1>
       <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks 財富儀表板</h2>
       {error && <div className="dataGuard">{error}</div>}
@@ -284,7 +289,7 @@ function WalletHoldingCard({ holding }) {
 }
 
 function ProgressBar({ nextBuy }) {
-  const pct = Math.min(100, Math.max(0, Number(nextBuy.progress || 0)));
+  const pct = Math.min(100, Math.max(0, Number(nextBuy.displayProgress ?? nextBuy.progress ?? 0)));
   return <div><div style={{ fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>下一層</div><div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8 }}><span style={{ fontSize: 13, fontWeight: 900, color: "#cbd5e1" }}>{nextBuy.currentAmount}</span><div style={{ height: 10, width: "100%", background: "rgba(148,163,184,.22)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: "#22c55e", borderRadius: 999 }} /></div><span style={{ fontSize: 13, fontWeight: 900, color: "#cbd5e1" }}>{nextBuy.targetAmount}</span></div><div style={{ marginTop: 8, textAlign: "center", fontWeight: 950, color: "#e2e8f0" }}>{pct.toFixed(0)}%</div></div>;
 }
 
@@ -300,13 +305,14 @@ function AssetCard({ asset }) {
   const signalText = level > 0 ? (actionAmount > 0 ? `${ruleColors[level - 1]} ${levelNames[level]}｜${held ? "加碼" : "建議"} ${actionAmount}U` : "✅ 鏈上已持有｜等待下一層") : (held ? "✅ 鏈上已持有｜觀察中" : "尚未到買點");
   const layerLabel = actionAmount > 0 ? "本層建議" : held ? "本層已完成" : "本層建議";
   const layerValue = actionAmount > 0 ? `${actionAmount}U` : held ? "不需加碼" : "0U";
+  const remainingText = Number.isFinite(nextBuy.remainingDepth) ? `｜還差 ${nextBuy.remainingDepth.toFixed(1)}%` : "";
   return <div className={`card ${level > 0 ? "active" : "idle"}`}>
     <div className="cardTop"><div className="titleRow"><div className="logoText">{asset.symbol.slice(0, 2)}</div><div><h2>{asset.symbol}</h2><p>{asset.name}</p><p className="desc">{asset.grade}級 ｜ {asset.description}</p></div></div><div className="badge">{asset.grade}級</div></div>
     <div className="signal">{signalText}</div>
     <div className="dataGrid"><div><span>{asset.highType || "52週高點"}</span><strong>{formatNumber(asset.high)}</strong></div><div><span>Binance現價</span><strong>{formatNumber(asset.price)}</strong></div><div><span>回撤</span><SignedText value={discountValue}>{asset.discount ?? "--"}%</SignedText></div><div><span>{layerLabel}</span><strong>{layerValue}</strong></div></div>
     <details style={{ marginTop: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(15,23,42,.72)", border: "1px solid rgba(251,191,36,.22)", color: "#fef3c7", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}><summary style={{ cursor: "pointer", fontWeight: 950 }}>買點規則 ▼</summary><div style={{ display: "grid", gap: 4, marginTop: 8 }}>{ruleRows.map((row) => <div key={`${asset.symbol}-${row.levelName}`}>{row.color} {row.levelName} {row.discountText}｜{row.amountText}</div>)}</div></details>
     {asset.holding && <div style={{ marginTop: 10, padding: 10, background: "#020617", borderRadius: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}><div>鏈上數量<br /><strong style={{ color: "#f8fafc" }}>{formatNumber(asset.holding.quantity, 6)}</strong></div><div>持倉損益<br /><SignedText value={asset.holding.unrealizedPnL}>{formatCurrency(asset.holding.unrealizedPnL)}</SignedText></div></div>}
-    <div className="nextBuyBox"><div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>深度 {Number.isFinite(depthText) ? `${depthText.toFixed(1)}%` : "--"}｜距離下一層 {Number(nextBuy.progress || 0).toFixed(0)}%</div><ProgressBar nextBuy={nextBuy} /></div>
+    <div className="nextBuyBox"><div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6, fontWeight: 850 }}>深度 {Number.isFinite(depthText) ? `${depthText.toFixed(1)}%` : "--"}｜前往下一層 {Number(nextBuy.displayProgress ?? nextBuy.progress || 0).toFixed(0)}%{remainingText}</div><ProgressBar nextBuy={nextBuy} /></div>
   </div>;
 }
 
