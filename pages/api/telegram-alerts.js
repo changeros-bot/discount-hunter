@@ -36,7 +36,11 @@ function getCompletedLevel(asset, holding) {
   const amounts = (asset.amounts || []).map(safeNumber);
   const totalCost = safeNumber(holding.totalCost);
 
-  let completed = 1;
+  // Important:
+  // A live holding can come from monthly DCA or tiny dust.
+  // Holding exists does NOT mean the dip-buy layer is completed.
+  // Only counted cost reaching the cumulative dip-buy amount can complete a layer.
+  let completed = 0;
   let cumulative = 0;
   for (let i = 0; i < amounts.length; i += 1) {
     cumulative += amounts[i];
@@ -219,7 +223,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.37-telegram-progress-guard",
+      version: "15.38-telegram-dca-holding-fix",
       sent: true,
       walletOk,
       alertCount: walletOk ? rows.length : 0,
