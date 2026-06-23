@@ -18,6 +18,18 @@ function isLiveHolding(holding) {
   return !!holding && holding.quantitySource === "bsc_rpc_balanceOf_live" && safeNumber(holding.quantity) > 0;
 }
 
+function getLayerEmoji(level) {
+  if (level <= 1) return "🟢";
+  if (level === 2) return "🟡";
+  return "🔴";
+}
+
+function getLayerLabel(level, type) {
+  const emoji = getLayerEmoji(level);
+  const levelText = `第${level}層`;
+  return type === "triggered" ? `${emoji} 已觸發${levelText}` : `${emoji} 接近${levelText}`;
+}
+
 function getCompletedLevel(asset, holding) {
   if (!isLiveHolding(holding)) return 0;
 
@@ -57,6 +69,7 @@ function getNextActionPoint(asset, completedLevel = 0) {
   const targetAmount = safeNumber(amounts[targetIndex]);
   const remaining = Math.max(0, targetDepth - currentDepth);
   const progress = targetDepth > 0 ? Math.min(100, Math.max(0, (currentDepth / targetDepth) * 100)) : 0;
+  const level = targetIndex + 1;
 
   if (currentDepth >= targetDepth) {
     return {
@@ -66,9 +79,9 @@ function getNextActionPoint(asset, completedLevel = 0) {
       remaining: 0,
       progress: 100,
       targetAmount,
-      level: targetIndex + 1,
+      level,
       completedLevel,
-      label: "🚨 已觸發買點",
+      label: getLayerLabel(level, "triggered"),
     };
   }
 
@@ -79,9 +92,9 @@ function getNextActionPoint(asset, completedLevel = 0) {
     remaining,
     progress,
     targetAmount,
-    level: targetIndex + 1,
+    level,
     completedLevel,
-    label: remaining <= 1 ? "🟢 即將觸發" : "🟡 接近買點",
+    label: getLayerLabel(level, "near"),
   };
 }
 
@@ -203,7 +216,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.34-absolute-progress-alerts",
+      version: "15.36-layer-based-telegram-colors",
       sent: true,
       walletOk,
       alertCount: walletOk ? rows.length : 0,
@@ -215,6 +228,7 @@ async function handler(req, res) {
         targetAmount: row.targetAmount,
         remaining: row.remaining,
         progress: row.progress,
+        label: row.label,
         hasLiveHolding: row.hasLiveHolding,
       })),
     });
