@@ -1,0 +1,35 @@
+/* Final signed color override layer.
+   Purpose: force red/green text-only colors after v15-unified.css and v15-fix.css.
+   No layout, wallet, price, progress, or Telegram logic is affected. */
+
+strong[style*="#22c55e"],
+strong[style*="22c55e"],
+strong[style*="34, 197, 94"],
+span[style*="#22c55e"],
+span[style*="22c55e"],
+span[style*="34, 197, 94"],
+.signed-positive,
+.pnl-positive,
+.positive {
+  color: #00e676 !important;
+  -webkit-text-fill-color: #00e676 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+strong[style*="#ff4d4d"],
+strong[style*="ff4d4d"],
+strong[style*="255, 77, 77"],
+span[style*="#ff4d4d"],
+span[style*="ff4d4d"],
+span[style*="255, 77, 77"],
+.signed-negative,
+.pnl-negative,
+.negative {
+  color: #ff2b2b !important;
+  -webkit-text-fill-color: #ff2b2b !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
