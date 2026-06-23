@@ -24,8 +24,6 @@ function getCompletedLevel(asset, holding) {
   const amounts = (asset.amounts || []).map(safeNumber);
   const totalCost = safeNumber(holding.totalCost);
 
-  // Conservative default: a real live holding means layer 1 has already been executed.
-  // If total cost is available, infer higher completed layers by cumulative buy amounts.
   let completed = 1;
   let cumulative = 0;
   for (let i = 0; i < amounts.length; i += 1) {
@@ -54,16 +52,11 @@ function getNextActionPoint(asset, completedLevel = 0) {
   if (!Number.isFinite(currentDepth) || ruleDepths.length === 0) return null;
   if (completedLevel >= ruleDepths.length) return null;
 
-  // Only evaluate the next unfinished layer. This prevents repeated alerts for a layer
-  // already executed in the wallet, while still alerting if price reaches the next layer.
   const targetIndex = Math.max(0, completedLevel);
-  const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
   const targetDepth = ruleDepths[targetIndex];
   const targetAmount = safeNumber(amounts[targetIndex]);
   const remaining = Math.max(0, targetDepth - currentDepth);
-  const range = Math.max(1, targetDepth - previousDepth);
-  const rawProgress = ((currentDepth - previousDepth) / range) * 100;
-  const progress = currentDepth >= targetDepth ? 100 : Math.min(100, Math.max(0, rawProgress));
+  const progress = targetDepth > 0 ? Math.min(100, Math.max(0, (currentDepth / targetDepth) * 100)) : 0;
 
   if (currentDepth >= targetDepth) {
     return {
@@ -210,7 +203,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.14-wallet-aware-next-layer-alerts",
+      version: "15.34-absolute-progress-alerts",
       sent: true,
       walletOk,
       alertCount: walletOk ? rows.length : 0,
