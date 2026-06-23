@@ -17,6 +17,15 @@ function findHolding(data, symbol) {
   return (data?.holdings || []).find((h) => String(h.symbol || "").toUpperCase() === target) || null;
 }
 
+function joinList(value) {
+  return Array.isArray(value) && value.length > 0 ? value.join(", ") : "--";
+}
+
+function jsonText(value) {
+  if (value === undefined || value === null) return "--";
+  return JSON.stringify(value, null, 2);
+}
+
 export default function DebugWallet() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -53,9 +62,23 @@ export default function DebugWallet() {
     .filter((h) => Number(h.quantity) > 0 && h.quantitySource === "bsc_rpc_balanceOf_live")
     .reduce((sum, h) => sum + Number(h.totalCost || 0), 0), [data]);
 
+  const dc = data?.debugCounts || {};
+  const amdInLiveBalanceSymbols = (dc.liveBalanceSymbols || []).includes("AMDON");
+  const amdInSelectedLiveBalanceSymbols = (dc.selectedLiveBalanceSymbols || []).includes("AMDON");
+  const amdInMetadata = (dc.liveTokenMetadata || []).some((t) => String(t.symbol || "").toUpperCase() === "AMDON");
+  const amdMetadata = (dc.liveTokenMetadata || []).filter((t) => String(t.symbol || "").toUpperCase() === "AMDON");
+  const pipelineConclusion = amdInLiveBalanceSymbols
+    ? amdInSelectedLiveBalanceSymbols
+      ? "AMD reached selected live balances; check merge/holdings only if holdings still says NO."
+      : "AMD reached liveBalanceSymbols but was removed by selectBestLiveContracts."
+    : amdInMetadata
+      ? "AMD metadata exists but liveBalanceSymbols is missing AMD: problem is inside fetchWalletBalancesViaRpc balance aggregation/RPC result."
+      : "AMD metadata missing: problem is token list / verified contract / watchlist input before RPC.";
+
   const rowStyle = { display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid rgba(255,255,255,.1)", padding: "9px 0" };
   const labelStyle = { color: "rgba(226,232,240,.72)", fontSize: 13 };
   const valueStyle = { color: "#f8fafc", fontSize: 13, fontWeight: 800, textAlign: "right", wordBreak: "break-all" };
+  const preStyle = { margin: "8px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, color: "#cbd5e1" };
 
   return <main style={{ minHeight: "100vh", padding: 16, background: "#050816", color: "#f8fafc", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
     <h1 style={{ margin: "0 0 6px", color: "#facc15" }}>Wallet Debug</h1>
@@ -75,11 +98,24 @@ export default function DebugWallet() {
       <div style={rowStyle}><span style={labelStyle}>calc holdings totalCost</span><span style={valueStyle}>{money(calcTotalCost)}</span></div>
       <div style={rowStyle}><span style={labelStyle}>calc live totalCost</span><span style={valueStyle}>{money(calcLiveTotalCost)}</span></div>
       <div style={rowStyle}><span style={labelStyle}>holdingsCount</span><span style={valueStyle}>{data?.holdings?.length ?? "--"}</span></div>
-      <div style={rowStyle}><span style={labelStyle}>debug holdingsCount</span><span style={valueStyle}>{data?.debugCounts?.holdingsCount ?? "--"}</span></div>
-      <div style={rowStyle}><span style={labelStyle}>liveBalanceHoldingsCount</span><span style={valueStyle}>{data?.debugCounts?.liveBalanceHoldingsCount ?? "--"}</span></div>
-      <div style={rowStyle}><span style={labelStyle}>estimatedCostBasisCount</span><span style={valueStyle}>{data?.debugCounts?.estimatedCostBasisCount ?? "--"}</span></div>
-      <div style={rowStyle}><span style={labelStyle}>estimatedCostBasisSymbols</span><span style={valueStyle}>{(data?.debugCounts?.estimatedCostBasisSymbols || []).join(", ") || "--"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>debug holdingsCount</span><span style={valueStyle}>{dc.holdingsCount ?? "--"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>liveBalanceHoldingsCount</span><span style={valueStyle}>{dc.liveBalanceHoldingsCount ?? "--"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>estimatedCostBasisCount</span><span style={valueStyle}>{dc.estimatedCostBasisCount ?? "--"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>estimatedCostBasisSymbols</span><span style={valueStyle}>{joinList(dc.estimatedCostBasisSymbols)}</span></div>
       <div style={rowStyle}><span style={labelStyle}>holdingSymbols</span><span style={valueStyle}>{holdingSymbols}</span></div>
+    </section>
+
+    <section style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "rgba(15,23,42,.92)", border: "1px solid rgba(96,165,250,.45)" }}>
+      <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Live Balance Pipeline</h2>
+      <div style={rowStyle}><span style={labelStyle}>AMD in liveBalanceSymbols</span><span style={valueStyle}>{amdInLiveBalanceSymbols ? "YES" : "NO"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>AMD in selectedLiveBalanceSymbols</span><span style={valueStyle}>{amdInSelectedLiveBalanceSymbols ? "YES" : "NO"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>AMD in liveTokenMetadata</span><span style={valueStyle}>{amdInMetadata ? "YES" : "NO"}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>pipelineConclusion</span><span style={valueStyle}>{pipelineConclusion}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>liveBalanceSymbols</span><span style={valueStyle}>{joinList(dc.liveBalanceSymbols)}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>selectedLiveBalanceSymbols</span><span style={valueStyle}>{joinList(dc.selectedLiveBalanceSymbols)}</span></div>
+      <div style={rowStyle}><span style={labelStyle}>liveBalanceErrors</span><span style={valueStyle}>{joinList(dc.liveBalanceErrors)}</span></div>
+      <details style={{ marginTop: 10 }}><summary style={{ cursor: "pointer", color: "#bfdbfe", fontWeight: 900 }}>liveTokenMetadata JSON</summary><pre style={preStyle}>{jsonText(dc.liveTokenMetadata)}</pre></details>
+      <details style={{ marginTop: 10 }}><summary style={{ cursor: "pointer", color: "#bfdbfe", fontWeight: 900 }}>AMD metadata only</summary><pre style={preStyle}>{jsonText(amdMetadata)}</pre></details>
     </section>
 
     <section style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "rgba(15,23,42,.92)", border: amd ? "1px solid rgba(34,197,94,.45)" : "1px solid rgba(239,68,68,.45)" }}>
@@ -99,7 +135,7 @@ export default function DebugWallet() {
 
     <section style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "rgba(15,23,42,.92)", border: "1px solid rgba(148,163,184,.22)", overflowX: "auto" }}>
       <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>逐檔成本</h2>
-      <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, color: "#cbd5e1" }}>{JSON.stringify((data?.holdings || []).map((h) => ({ symbol: h.symbol, quantity: h.quantity, totalCost: h.totalCost, rawTotalCost: h.rawTotalCost, costBasisSource: h.costBasisSource, costBasisEstimated: h.costBasisEstimated })), null, 2)}</pre>
+      <pre style={preStyle}>{JSON.stringify((data?.holdings || []).map((h) => ({ symbol: h.symbol, quantity: h.quantity, totalCost: h.totalCost, rawTotalCost: h.rawTotalCost, costBasisSource: h.costBasisSource, costBasisEstimated: h.costBasisEstimated })), null, 2)}</pre>
     </section>
   </main>;
 }
