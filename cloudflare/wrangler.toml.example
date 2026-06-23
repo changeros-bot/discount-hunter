@@ -1,0 +1,13 @@
+name = "discount-hunter-cron"
+main = "discount-hunter-cron-worker.js"
+compatibility_date = "2026-06-23"
+
+[vars]
+ALERT_URL = "https://discount-hunter-sigma.vercel.app/api/telegram-alerts"
+
+# Optional. If you later protect /api/telegram-alerts with a secret,
+# set CRON_SECRET in Cloudflare Worker secrets instead of here:
+# wrangler secret put CRON_SECRET
+
+[triggers]
+crons = ["*/15 * * * *"]
