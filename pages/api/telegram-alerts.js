@@ -68,7 +68,7 @@ function getNextActionPoint(asset, completedLevel = 0) {
   const targetDepth = ruleDepths[targetIndex];
   const targetAmount = safeNumber(amounts[targetIndex]);
   const remaining = Math.max(0, targetDepth - currentDepth);
-  const progress = targetDepth > 0 ? Math.min(100, Math.max(0, (currentDepth / targetDepth) * 100)) : 0;
+  const rawProgress = targetDepth > 0 ? Math.min(100, Math.max(0, (currentDepth / targetDepth) * 100)) : 0;
   const level = targetIndex + 1;
 
   if (currentDepth >= targetDepth) {
@@ -78,6 +78,7 @@ function getNextActionPoint(asset, completedLevel = 0) {
       targetDepth,
       remaining: 0,
       progress: 100,
+      displayProgress: 100,
       targetAmount,
       level,
       completedLevel,
@@ -90,7 +91,8 @@ function getNextActionPoint(asset, completedLevel = 0) {
     currentDepth,
     targetDepth,
     remaining,
-    progress,
+    progress: rawProgress,
+    displayProgress: Math.min(99, Math.floor(rawProgress)),
     targetAmount,
     level,
     completedLevel,
@@ -144,13 +146,14 @@ function formatMessage(rows, updatedAt) {
   ];
 
   rows.forEach((row, index) => {
+    const progressForDisplay = row.displayProgress ?? row.progress;
     lines.push(`${index + 1}. ${row.label} ${row.symbol}`);
     lines.push(`目前深度：${row.currentDepth.toFixed(1)}%`);
     lines.push(`目標層級：第${row.level}層`);
     if (row.completedLevel > 0) lines.push(`已完成：第${row.completedLevel}層`);
     lines.push(`門檻：-${row.targetDepth.toFixed(1)}%`);
     if (row.type === "near") lines.push(`還差：${row.remaining.toFixed(1)}%`);
-    lines.push(`進度：${row.progress.toFixed(0)}%`);
+    lines.push(`進度：${Number(progressForDisplay).toFixed(0)}%`);
     lines.push(`本層建議：${row.targetAmount}U`);
     lines.push("");
   });
@@ -216,7 +219,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.36-layer-based-telegram-colors",
+      version: "15.37-telegram-progress-guard",
       sent: true,
       walletOk,
       alertCount: walletOk ? rows.length : 0,
@@ -228,6 +231,7 @@ async function handler(req, res) {
         targetAmount: row.targetAmount,
         remaining: row.remaining,
         progress: row.progress,
+        displayProgress: row.displayProgress,
         label: row.label,
         hasLiveHolding: row.hasLiveHolding,
       })),
