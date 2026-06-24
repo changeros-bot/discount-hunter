@@ -1,8 +1,19 @@
-import { markLeftBuyZonesForAssets, getExecutableTiers, getNextProgress } from "../../lib/v16-ledger";
+import { markLeftBuyZonesForAssets, getExecutableTiers } from "../../lib/v16-ledger";
 
 function sortDecisions(a, b) {
   if (a.level !== b.level) return b.level - a.level;
   return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
+}
+
+function buildTriggeredProgress({ tier, level, amount }) {
+  return {
+    stageText: `${tier} 已達買點`,
+    fromText: `${amount}U`,
+    toText: "可買入",
+    progress: 100,
+    displayProgress: 100,
+    isTriggered: true
+  };
 }
 
 function buildDecisions(assets, ledger, now) {
@@ -28,7 +39,7 @@ function buildDecisions(assets, ledger, now) {
           discount: asset.discount,
           price: asset.price,
           amount,
-          progress: getNextProgress(asset),
+          progress: buildTriggeredProgress({ tier, level, amount }),
           command: `/buy ${asset.symbol} ${tier} ${amount}`
         };
       });
@@ -61,10 +72,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         message: "POST assets from /api/prices to calculate V16 manual decisions.",
-        usage: {
-          method: "POST",
-          body: { assets: "array from /api/prices data" }
-        }
+        usage: { method: "POST", body: { assets: "array from /api/prices data" } }
       });
     }
 
