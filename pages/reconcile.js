@@ -14,7 +14,7 @@ export default function Reconcile() {
         body: JSON.stringify({})
       });
       const wallet = await walletRes.json();
-      const res = await fetch("/api/reconcile-ledger?t=" + Date.now(), {
+      const res = await fetch("/api/reconcile-tiers?t=" + Date.now(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assets: prices.data || [], holdings: wallet.holdings || [] })
