@@ -101,7 +101,7 @@ export default function V16FullHome() {
     setReconcileMessage("");
     try {
       const currentWallet = wallet || await syncWallet();
-      const result = await jsonFetch(`/api/reconcile-ledger?t=${Date.now()}`, {
+      const result = await jsonFetch(`/api/reconcile-tiers?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assets, holdings: currentWallet?.holdings || [] })
