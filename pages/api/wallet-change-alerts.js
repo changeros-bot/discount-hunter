@@ -39,6 +39,29 @@ function buildSnapshot(holdings) {
   return snapshot;
 }
 
+function classifyChange(prev, curr) {
+  const previousQuantity = n(prev.quantity);
+  const currentQuantity = n(curr.quantity);
+
+  if (previousQuantity <= 0 && currentQuantity > 0) {
+    return { type: "new", icon: "🟢", title: "新增持倉" };
+  }
+
+  if (previousQuantity > 0 && currentQuantity <= 0) {
+    return { type: "closed", icon: "🔴", title: "清倉" };
+  }
+
+  if (currentQuantity > previousQuantity) {
+    return { type: "added", icon: "🟢", title: "加碼" };
+  }
+
+  if (currentQuantity < previousQuantity) {
+    return { type: "reduced", icon: "🟡", title: "減碼" };
+  }
+
+  return { type: "changed", icon: "⚪", title: "持倉異動" };
+}
+
 function diffSnapshots(previousSnapshot, currentSnapshot) {
   const changes = [];
   const symbols = Array.from(new Set([
@@ -47,16 +70,19 @@ function diffSnapshots(previousSnapshot, currentSnapshot) {
   ])).sort();
 
   for (const symbol of symbols) {
-    const prev = previousSnapshot?.[symbol] || { quantity: 0, totalCost: 0, currentValue: 0 };
+    const prev = previousSnapshot?.[symbol] || { quantity: 0, totalCost: 0, currentValue: 0, tokenPrice: 0 };
     const curr = currentSnapshot?.[symbol] || { quantity: 0, totalCost: 0, currentValue: 0, tokenPrice: 0 };
     const quantityDelta = n(curr.quantity) - n(prev.quantity);
     const costDelta = n(curr.totalCost) - n(prev.totalCost);
 
     if (Math.abs(quantityDelta) <= 1e-10 && Math.abs(costDelta) <= 0.01) continue;
 
+    const action = classifyChange(prev, curr);
     changes.push({
       symbol,
-      direction: quantityDelta > 0 || costDelta > 0 ? "increase" : "decrease",
+      type: action.type,
+      icon: action.icon,
+      title: action.title,
       quantityDelta,
       costDelta,
       previousQuantity: n(prev.quantity),
@@ -71,24 +97,37 @@ function diffSnapshots(previousSnapshot, currentSnapshot) {
   return changes;
 }
 
+function formatQuantity(value) {
+  return n(value).toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatUsd(value) {
+  return `${n(value).toFixed(2)}U`;
+}
+
 function formatMessage(changes, checkedAt) {
   const lines = [
-    "✅ DCA折價獵人 持倉異動",
+    "✅ DCA折價獵人 V16 持倉異動",
     "",
     `異動數量：${changes.length}`,
     `檢查時間：${new Date(checkedAt || Date.now()).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}`,
     "",
   ];
 
-  changes.forEach((change, index) => {
-    const icon = change.direction === "increase" ? "🟢" : "🔻";
-    const action = change.direction === "increase" ? "偵測到新增持倉" : "偵測到持倉減少";
-    lines.push(`${index + 1}. ${icon} ${action} ${change.symbol}on`);
-    lines.push(`數量變化：${change.quantityDelta > 0 ? "+" : ""}${change.quantityDelta.toFixed(8)}`);
-    if (Math.abs(change.costDelta) > 0.01) lines.push(`成本變化：${change.costDelta > 0 ? "+" : ""}${change.costDelta.toFixed(2)}U`);
-    lines.push(`目前數量：${change.currentQuantity.toFixed(8)}`);
-    lines.push(`目前成本：${change.currentTotalCost.toFixed(2)}U`);
-    if (change.currentValue > 0) lines.push(`目前市值：${change.currentValue.toFixed(2)}U`);
+  changes.forEach((change) => {
+    lines.push(`${change.icon} ${change.title}`);
+    lines.push(`${change.symbol}on`);
+
+    if (change.type === "closed") {
+      lines.push("已全部賣出");
+    } else {
+      lines.push(`數量：${change.quantityDelta > 0 ? "+" : ""}${formatQuantity(change.quantityDelta)}`);
+      if (Math.abs(change.costDelta) > 0.01) lines.push(`成本變化：${change.costDelta > 0 ? "+" : ""}${formatUsd(change.costDelta)}`);
+      lines.push(`目前數量：${formatQuantity(change.currentQuantity)}`);
+      lines.push(`目前成本：${formatUsd(change.currentTotalCost)}`);
+      if (change.currentValue > 0) lines.push(`目前市值：${formatUsd(change.currentValue)}`);
+    }
+
     lines.push("");
   });
 
@@ -104,7 +143,7 @@ async function handler(req, res) {
     if (!hasKvConfig()) {
       return res.status(200).json({
         ok: true,
-        version: "15.39-wallet-change-alerts",
+        version: "16.0-wallet-change-alerts",
         enabled: false,
         reason: "missing_upstash_env",
         requiredEnv: ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
@@ -121,7 +160,7 @@ async function handler(req, res) {
     }
 
     const walletKey = String(wallet.fullWalletAddress || wallet.walletAddress || "default").toLowerCase();
-    const key = `discount-hunter:wallet-snapshot:${walletKey}`;
+    const key = `discount-hunter:v16:wallet-snapshot:${walletKey}`;
     const currentSnapshot = buildSnapshot(wallet.holdings || []);
     const previous = await getJson(key);
 
@@ -129,7 +168,7 @@ async function handler(req, res) {
       await setJson(key, currentSnapshot);
       return res.status(200).json({
         ok: true,
-        version: "15.39-wallet-change-alerts",
+        version: "16.0-wallet-change-alerts",
         enabled: true,
         baselineCreated: true,
         changeCount: 0,
@@ -143,7 +182,7 @@ async function handler(req, res) {
     if (!changes.length) {
       return res.status(200).json({
         ok: true,
-        version: "15.39-wallet-change-alerts",
+        version: "16.0-wallet-change-alerts",
         enabled: true,
         baselineCreated: false,
         changeCount: 0,
@@ -155,7 +194,7 @@ async function handler(req, res) {
 
     return res.status(telegram.ok ? 200 : 500).json({
       ok: telegram.ok,
-      version: "15.39-wallet-change-alerts",
+      version: "16.0-wallet-change-alerts",
       enabled: true,
       baselineCreated: false,
       changeCount: changes.length,
