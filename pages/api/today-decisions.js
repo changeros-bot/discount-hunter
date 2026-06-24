@@ -5,7 +5,7 @@ function sortDecisions(a, b) {
   return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
 }
 
-function buildTriggeredProgress({ tier, level, amount }) {
+function buildTriggeredProgress({ tier, amount }) {
   return {
     stageText: `${tier} 已達買點`,
     fromText: `${amount}U`,
@@ -17,34 +17,42 @@ function buildTriggeredProgress({ tier, level, amount }) {
 }
 
 function buildDecisions(assets, ledger, now) {
-  return (assets || [])
-    .flatMap((asset) => {
-      const executable = getExecutableTiers({
-        ledger,
-        symbol: asset.symbol,
-        discount: asset.discount,
-        rules: asset.rules,
-        now
-      });
+  const dedup = new Map();
 
-      return executable.map(({ tier, level, rule }) => {
-        const amount = Number(asset.amounts?.[level - 1] || 0);
-        return {
-          symbol: asset.symbol,
-          name: asset.name,
-          grade: asset.grade,
-          tier,
-          level,
-          rule,
-          discount: asset.discount,
-          price: asset.price,
-          amount,
-          progress: buildTriggeredProgress({ tier, level, amount }),
-          command: `/buy ${asset.symbol} ${tier} ${amount}`
-        };
-      });
-    })
-    .sort(sortDecisions);
+  for (const asset of assets || []) {
+    const executable = getExecutableTiers({
+      ledger,
+      symbol: asset.symbol,
+      discount: asset.discount,
+      rules: asset.rules,
+      now
+    });
+
+    for (const { tier, level, rule } of executable) {
+      const key = `${asset.symbol}_${tier}`;
+      const amount = Number(asset.amounts?.[level - 1] || 0);
+      const row = {
+        symbol: asset.symbol,
+        name: asset.name,
+        grade: asset.grade,
+        tier,
+        level,
+        rule,
+        discount: asset.discount,
+        price: asset.price,
+        amount,
+        progress: buildTriggeredProgress({ tier, amount }),
+        command: `/buy ${asset.symbol} ${tier} ${amount}`
+      };
+
+      const previous = dedup.get(key);
+      if (!previous || Math.abs(Number(row.discount || 0)) > Math.abs(Number(previous.discount || 0))) {
+        dedup.set(key, row);
+      }
+    }
+  }
+
+  return Array.from(dedup.values()).sort(sortDecisions);
 }
 
 export default async function handler(req, res) {
