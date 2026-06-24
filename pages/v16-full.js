@@ -65,6 +65,8 @@ export default function V16FullHome() {
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState("");
 
   async function loadAll() {
     setLoading(true);
@@ -90,7 +92,27 @@ export default function V16FullHome() {
     try {
       const data = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
       setWallet(data);
-    } catch {}
+      return data;
+    } catch { return null; }
+  }
+
+  async function reconcileLedger() {
+    setReconciling(true);
+    setReconcileMessage("");
+    try {
+      const currentWallet = wallet || await syncWallet();
+      const result = await jsonFetch(`/api/reconcile-ledger?t=${Date.now()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assets, holdings: currentWallet?.holdings || [] })
+      });
+      setReconcileMessage(`補登 ${result.addedCount || 0} 筆`);
+      await loadAll();
+    } catch (e) {
+      setError(e.message || "補登失敗");
+    } finally {
+      setReconciling(false);
+    }
   }
 
   useEffect(() => {
@@ -123,6 +145,7 @@ export default function V16FullHome() {
       <h1 style={{ fontSize: "clamp(48px, 14vw, 78px)", fontWeight: 1000, margin: "6px 0", lineHeight: .95, background: "linear-gradient(180deg, #fff6b7, #ffd700, #b8860b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>美股DCA<br />折價追蹤</h1>
       <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks｜Ledger 決策版</h2>
       {error && <div className="dataGuard">{error}</div>}
+      {reconcileMessage && <div className="dataGuard" style={{ color: "#bbf7d0" }}>{reconcileMessage}</div>}
     </section>
 
     <section style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: decisions.length ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
@@ -132,7 +155,7 @@ export default function V16FullHome() {
     </section>
 
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2><button onClick={syncWallet} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: "#2563eb", color: "white", fontWeight: 950 }}>重新同步</button></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2><div style={{ display: "flex", gap: 6 }}><button onClick={reconcileLedger} disabled={reconciling} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: "#16a34a", color: "white", fontWeight: 950 }}>{reconciling ? "補登中" : "補登Ledger"}</button><button onClick={syncWallet} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: "#2563eb", color: "white", fontWeight: 950 }}>重新同步</button></div></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
     </section>
 
