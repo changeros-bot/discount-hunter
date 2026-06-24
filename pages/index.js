@@ -1,3 +1,3 @@
-import V16ManualPage from "./v16-manual";
+import V16FullHome from "./v16-full";
 
-export default V16ManualPage;
+export default V16FullHome;
