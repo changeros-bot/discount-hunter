@@ -51,7 +51,7 @@ async function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
-    version: "16.0-status",
+    version: "16.1-status",
     storage: hasKvConfig() ? "upstash_kv" : "file_fallback",
     checklist: {
       buyLedger: true,
@@ -62,7 +62,8 @@ async function handler(req, res) {
       telegramCooldown: true,
       walletChangeAlerts: true,
       dailyPositionReport: true,
-      frontEndIntegrated: false,
+      frontEndIntegrated: true,
+      progress100MeansTrigger: true,
       autoTrading: false,
     },
     results,
