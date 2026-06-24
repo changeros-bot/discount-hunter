@@ -12,6 +12,11 @@ function fmtMoney(value) {
   return Number.isFinite(n) ? `${n.toFixed(2)}U`.replace(".00U", "U") : "--";
 }
 
+function fmtProgress(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${Math.max(0, Math.min(100, Math.round(n)))}%` : "--";
+}
+
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
   const data = await res.json().catch(() => null);
@@ -74,7 +79,7 @@ export default function V16ManualPage() {
     <section style={{ padding: 16, borderRadius: 20, background: "linear-gradient(135deg,#111827,#020617)", border: "1px solid rgba(250,204,21,.35)", marginBottom: 12 }}>
       <div style={{ textAlign: "right", color: "#facc15", fontWeight: 1000, fontSize: 12 }}>V16-M</div>
       <h1 style={{ margin: "4px 0", fontSize: 34, lineHeight: 1.05 }}>DCA折價獵人<br />手動決策</h1>
-      <div style={{ color: "#94a3b8", fontWeight: 850 }}>提醒 → 手動買入 → 登帳 → 去重</div>
+      <div style={{ color: "#94a3b8", fontWeight: 850 }}>100% 觸發提醒 → 手動買入 → 登帳 → 去重</div>
     </section>
 
     <section style={{ padding: 14, borderRadius: 18, background: "#0f172a", border: "1px solid #334155", marginBottom: 12 }}>
@@ -92,18 +97,22 @@ export default function V16ManualPage() {
 
     <section style={{ display: "grid", gap: 10 }}>
       {!decisions.length && !loading && <div style={{ textAlign: "center", padding: 20, color: "#94a3b8", fontWeight: 900, background: "#0f172a", borderRadius: 16 }}>目前沒有未登帳買點</div>}
-      {decisions.map((item) => <article key={`${item.symbol}_${item.tier}`} style={{ padding: 14, background: "#0f172a", border: "1px solid #334155", borderRadius: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <strong style={{ fontSize: 22 }}>{tierIcon[item.tier] || "⚪"} {item.symbol}</strong>
-          <strong style={{ color: "#facc15", fontSize: 20 }}>{item.tier}</strong>
-        </div>
-        <div style={{ marginTop: 8, display: "grid", gap: 4, color: "#cbd5e1", fontWeight: 850 }}>
-          <span>跌幅：{fmtPct(item.discount)}｜門檻：{fmtPct(item.rule)}</span>
-          <span>建議：{fmtMoney(item.amount)}｜價格：{Number(item.price || 0).toFixed(4)}</span>
-          <span>{item.command}</span>
-        </div>
-        <button onClick={() => recordBuy(item)} style={{ marginTop: 12, width: "100%", padding: 12, border: 0, borderRadius: 14, background: "#16a34a", color: "white", fontWeight: 1000, fontSize: 16 }}>已手動買入，寫入 Ledger</button>
-      </article>)}
+      {decisions.map((item) => {
+        const progressValue = item.progress?.displayProgress ?? item.progress?.progress ?? 100;
+        return <article key={`${item.symbol}_${item.tier}`} style={{ padding: 14, background: "#0f172a", border: "1px solid #334155", borderRadius: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <strong style={{ fontSize: 22 }}>{tierIcon[item.tier] || "⚪"} {item.symbol}</strong>
+            <strong style={{ color: "#facc15", fontSize: 20 }}>{item.tier}</strong>
+          </div>
+          <div style={{ marginTop: 8, display: "grid", gap: 4, color: "#cbd5e1", fontWeight: 850 }}>
+            <span>進度：{fmtProgress(progressValue)}｜{item.progress?.stageText || `${item.tier} 已觸發`}</span>
+            <span>跌幅：{fmtPct(item.discount)}｜門檻：{fmtPct(item.rule)}</span>
+            <span>建議：{fmtMoney(item.amount)}｜價格：{Number(item.price || 0).toFixed(4)}</span>
+            <span>{item.command}</span>
+          </div>
+          <button onClick={() => recordBuy(item)} style={{ marginTop: 12, width: "100%", padding: 12, border: 0, borderRadius: 14, background: "#16a34a", color: "white", fontWeight: 1000, fontSize: 16 }}>已手動買入，寫入 Ledger</button>
+        </article>;
+      })}
     </section>
 
     <details style={{ marginTop: 14, padding: 12, background: "#0f172a", borderRadius: 16, border: "1px solid #334155" }}>
