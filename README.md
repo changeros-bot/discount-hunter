@@ -1,134 +1,208 @@
 # DCA 折價獵人
 
-手機優先的 30 秒決策系統，用於監控 Binance xStocks / tokenized stocks 的折價買點、鏈上持倉與 Telegram 買點警報。
+手機優先的 30 秒投資決策系統，用於監控 Binance xStocks / tokenized stocks 的折價買點、鏈上持倉、Buy Ledger 與 Telegram 提醒。
 
-## 核心原則
+> 本專案不是自動交易系統。使用者仍然手動買入，系統負責判斷、提醒、記錄與對帳。
 
-- 每檔標的使用自己的 `rules` 與 `amounts`，不可套用全域固定買點。
-- 損益與回撤顏色：負數紅字、正數綠字，不使用膠囊或 Badge。
-- Telegram 顏色依目標層級：第1層 🟢、第2層 🟡、第3層 🟠、第4層 🔴。
-- 目前持倉以 BSC RPC `balanceOf()` 為 source of truth。
-- Wallet 只代表目前持倉，不代表買點層級已完成。
-- 所有 D1/D2/D3/D4 買點完成狀態，未來以 Buy Ledger 為準。
+## 專案用途
 
-## 買入分類
+DCA 折價獵人用來解決一件事：
 
-- `N` = Normal DCA，一般定期買入。
-- `D1` = Dip Buy Level 1，第一層逢低買進。
-- `D2` = Dip Buy Level 2，第二層逢低買進。
-- `D3` = Dip Buy Level 3，第三層逢低買進。
-- `D4` = Dip Buy Level 4，第四層逢低買進。
+```text
+今天有沒有買點？
+買哪檔？
+買哪一層？
+買多少？
+是否已經買過？
+下一層還差多少？
+```
 
-## Wallet ≠ Buy Ledger
+系統目標是讓使用者打開手機後，在 30 秒內完成投資決策。
 
-鏈上持倉只可用於判斷：
+## 核心概念
 
-- 持有數量
-- 成本
-- 市值
-- 損益
+每檔標的有兩套互相獨立的買入模式。
 
-鏈上持倉不可推論：
+### DCA 定期買入
 
-- 是否已執行 D1
-- 是否已執行 D2
-- 是否已執行 D3
-- 是否已執行 D4
-- 是否屬於 Normal DCA
-- 是否屬於 Dip Buy
+Ledger 代碼：`N`
 
-所有買點完成狀態以 Buy Ledger 為準。
+- 固定時間投入
+- 與跌幅無關
+- 不影響 D1-D4
 
-## 今日決策排序
+### 折價買入
 
-排序規則：
+Ledger 代碼：
 
-1. 先依層級排序：D4 > D3 > D2 > D1。
-2. 同層級再依跌幅排序：跌幅越深越優先。
+- `D1`
+- `D2`
+- `D3`
+- `D4`
 
-## 同層買點重新開放條件
+依跌幅層級觸發，逐層買入並分層登帳。
 
-同一層買點只執行一次。
+## V16 核心規格
 
-若要重新開放同層買點，必須同時滿足以下兩條件：
+請以 `docs/V16_SPEC.md` 為唯一真相。
 
-1. 價格已離開該買點區。
-   - 例如 D1 = -15%，價格必須先回升至高於 -15%。
-2. 距離上次該層買入時間已超過 24 小時。
+重點如下：
 
-兩條件缺一不可。
+- Ledger 是歷史與去重依據，不代表目前價格區間。
+- 價格區間是動態的，跌深前進、反彈後退。
+- 今日決策 = 目前已觸發層級 - Ledger 已登帳層級。
+- 進度條採水壺模型，100% 代表到達下一層買點。
+- Gap Down 必須列出所有跨越層級。
+- 同層重新觸發必須：離開區間 + 超過 24 小時 + 再次進入。
+- 24 小時以 `leftBuyZoneAt` 計算。
+- Wallet 補登必須檢查 Wallet Cost Gap，避免誤補更深層。
 
-## 進度條規則
+## 目前功能
 
-進度條永遠顯示「目前層級 → 下一層級」。
+- Binance xStocks / tokenized stocks 價格監控
+- 52 週高點或可用高點跌幅計算
+- A / A- / B / C 分級買點規則
+- 今日決策 API
+- Buy Ledger：`N / D1 / D2 / D3 / D4`
+- Wallet Live 持倉同步
+- Wallet 成本、市值、未實現損益
+- 手動補登 Ledger
+- D1-D4 逐層補登 API：`/api/reconcile-tiers`
+- 同層重新觸發基礎邏輯
+- Telegram 發送工具
 
-範例：
+## 主要頁面
 
-- D1 = -15%
-- D2 = -25%
-- 目前 = -22.9%
+- `/`：主入口
+- `/v16-full`：V16 主頁
+- `/reconcile`：手動 Wallet → Ledger 補登頁
 
-顯示：
+## 主要 API
 
-- 第一層 → 第二層
-- 79%
-- 距離第二層還差 2.1%
+- `/api/prices`：取得價格、跌幅、規則與 signal
+- `/api/today-decisions`：產生今日決策
+- `/api/buy-ledger`：讀取 Buy Ledger
+- `/api/sync-wallet`：同步鏈上持倉
+- `/api/reconcile-tiers`：依 Wallet Cost Gap 補登 D1-D4
+- `/api/reconcile-ledger`：舊版，只補 D1，後續避免使用
 
-禁止顯示容易誤導的資訊，例如：
+## 啟動方式
 
-- 下一層 100%
-- 還差 0%
+安裝依賴：
 
-## 跨層暴跌規則
+```bash
+npm install
+```
 
-若價格從非買點區直接跌入更深層，例如直接跌到 D3，系統判定：
+本機開發：
 
-- D1 已觸發
-- D2 已觸發
-- D3 已觸發
+```bash
+npm run dev
+```
 
-但 Ledger 必須分層獨立記錄。回覆 `D2` 只代表 D2 已執行，不會自動補 D1。
+瀏覽：
 
-## Telegram 買點提醒
+```text
+http://localhost:3000
+```
 
-同一標的、同一層級，最多每 12 小時提醒一次，避免重複洗版。
+## 部署方式
 
-## Telegram 持倉異動通知
+建議部署於 Vercel。
 
-以下事件全部通知：
+一般流程：
 
-- 新增持倉
-- 加碼
-- 減碼
-- 清倉
+1. GitHub repository 連接 Vercel
+2. 設定環境變數
+3. Push 到 main branch
+4. Vercel 自動部署
 
-## 每日持倉日報
+## 環境變數
 
-每日固定推送：
+### Wallet / Chain
 
-- 持倉數量
-- 成本
-- 市值
-- 未實現損益
-- 今日決策
-- 已觸發買點
+依照目前實作可能使用：
 
-## BTC 買點規則
+```text
+WALLET_ADDRESS
+BSC_RPC_URL
+```
 
-BTC 加入折價獵人時採用：
+### Telegram
 
-- D1 = -20%
-- D2 = -35%
-- D3 = -50%
-- D4 = -60%
+```text
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
 
-## 文件
+### Upstash KV
 
-- [規格書](docs/DCA-HUNTER-SPEC.md)
-- [更新紀錄](docs/CHANGELOG.md)
-- [Debug SOP](docs/SOP-DEBUG.md)
-- [系統架構](docs/ARCHITECTURE.md)
+```text
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+```
+
+若未設定 KV，production 可能使用 memory fallback；資料持久性需特別注意。
+
+## 專案結構
+
+```text
+pages/
+  api/
+    prices.js
+    today-decisions.js
+    buy-ledger.js
+    sync-wallet.js
+    reconcile-ledger.js
+    reconcile-tiers.js
+  v16-full.js
+  reconcile.js
+
+lib/
+  v16-ledger.js
+  telegram/notify.js
+  state/kv.js
+
+docs/
+  V16_SPEC.md
+  ARCHITECTURE.md
+  PROGRESS.md
+  AI_HANDOFF.md
+  TEST_CASES.md
+
+CHANGELOG.md
+```
+
+## 已知問題
+
+### P0
+
+- `pages/v16-full.js` 尚未完成三區重構。
+- 需要重新驗證 RKLB D2 補登後，今日決策是否正確消失。
+
+### P1
+
+- Telegram 發送工具存在，但尚未完整接上 Today Decision。
+- Telegram 尚未正式做到只通知新增未登帳層級。
+
+### P2
+
+- `pages/api/reconcile-ledger.js` 是舊版 D1-only API，後續應避免使用。
+- 首頁仍有舊的「可執行買點」區塊，應改成：今日決策、買點區標的、觀察區。
 
 ## 下一步
 
-V16 Buy Ledger：建立 `N / D1 / D2 / D3 / D4` 分類紀錄，讓今日決策、Telegram 與錢包同步不再混用。
+1. 驗證 `/api/reconcile-tiers` 是否能正確補登 RKLB D2。
+2. 重構 `pages/v16-full.js` 為三區首頁。
+3. 接上 Telegram 買點提醒。
+4. 依 `docs/TEST_CASES.md` 逐項驗證。
+5. 全部通過後才可封版 V16。
+
+## 文件
+
+- [V16 規格](docs/V16_SPEC.md)
+- [架構說明](docs/ARCHITECTURE.md)
+- [進度紀錄](docs/PROGRESS.md)
+- [AI 交接](docs/AI_HANDOFF.md)
+- [測試案例](docs/TEST_CASES.md)
+- [更新紀錄](CHANGELOG.md)
