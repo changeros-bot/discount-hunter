@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-25
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-012.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-013.
 
 ## Core APIs and UI
 
@@ -25,7 +25,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/telegram-test.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Pure Telegram send test |
 | `lib/telegram/notify.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Telegram transport only |
 | `cloudflare/discount-hunter-cron-worker.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ direct | Triggers `/api/telegram-alerts`; runtime deployment pending |
-| `pages/v16-full.js` | ✅ via API | ❌ direct | ❌ direct | ❌ direct | ✅ via API | ❌ | ✅ via API | ✅ via API | ✅ own engine | Homepage, reconcile trigger, Ledger text display |
+| `pages/v16-full.js` | ✅ via `/api/buy-ledger` | ❌ direct / ✅ indirect via reconcile | ❌ direct | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ own engine | Main dashboard; triggers `/api/reconcile-tiers`; 5s read refresh |
 | `pages/v16-manual.js` | ✅ via API | ✅ via `/api/manual-buy` | ✅ via manual-buy | ❌ | ❌ | ❌ | ✅ via API | ✅ via today-decisions | ✅ via today-decisions | Manual decision surface |
 
 ## State Store / KV Writers
@@ -69,4 +69,5 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `daily-position-report` | Wallet-only report; does not write Ledger, Wallet, or KV state |
 | `wallet-alerts` | Wallet health checker; does not write Ledger, Wallet, or KV state |
 | `telegram-test` | Pure Telegram send test |
+| `v16-full loadAll()` | Read-only path; passes explicit Ledger to `today-decisions`, avoiding hidden write |
 | Debug APIs audited in Audit-002 | Read direct Wallet pipelines but do not write Ledger, Wallet, or formal state |
