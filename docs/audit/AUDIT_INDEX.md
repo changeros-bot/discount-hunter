@@ -13,8 +13,9 @@
 - Audit-010 Progress Engine ✅
 - Audit-011 Telegram Architecture ✅
 - Audit-012 Alert State Engine ✅
+- Audit-013 v16-full Architecture ✅
 
-Progress: 12/22 (~55%)
+Progress: 13/22 (~59%)
 
 This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
 
@@ -23,3 +24,7 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - `telegram-alerts` sends on every call and does not use Alert State cooldown/dedup.
 - Alert State Core exists in `lib/v16-ledger.js` but is only used by `/api/telegram-alert-check`.
 - Cloudflare Cron Worker code still exists in repo; runtime deployment status remains pending verification.
+- `v16-full` does not directly write Ledger, but can trigger Ledger writes through `/api/reconcile-tiers`.
+- `v16-full` avoids the `today-decisions` hidden write path by passing an explicit Ledger payload.
+- `v16-full` buy-zone grouping uses `/api/prices` price signal, not Ledger actionable state.
+- `v16-full` refreshes `loadAll()` every 5 seconds; this is read-heavy but not a Ledger pollution risk.
