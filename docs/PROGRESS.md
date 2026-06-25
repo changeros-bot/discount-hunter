@@ -14,6 +14,21 @@
 - 更新首頁補登按鈕與 `/reconcile` 手動補登頁，改呼叫 `/api/reconcile-tiers`。
 - 修正同層重新開放條件：24 小時應以 `leftBuyZoneAt` 計算，不是買入時間。
 - 補上 Wallet Cost Gap 防呆：Wallet 成本差額足夠，才允許補登更深層。
+- 整理 GitHub 文件體系，建立 V16 規格、架構、API、狀態機、交接、測試與已知問題文件。
+
+### 文件新增 / 更新
+
+- `README.md`：專案入口、用途、啟動、部署、環境變數、已知問題、下一步。
+- `CHANGELOG.md`：版本紀錄。
+- `docs/V16_SPEC.md`：V16 規格與封版條件。
+- `docs/ARCHITECTURE.md`：系統資料流與模組。
+- `docs/PROGRESS.md`：進度紀錄。
+- `docs/AI_HANDOFF.md`：AI 接手指南。
+- `docs/TEST_CASES.md`：封板前測試案例。
+- `docs/CONFIG.md`：設定參考。
+- `docs/API.md`：API 參考。
+- `docs/STATE_MACHINE.md`：V16 狀態機。
+- `docs/KNOWN_BUGS.md`：已知問題。
 
 ### 重要決策
 
@@ -58,11 +73,13 @@
 ### 下次接手先看
 
 1. `docs/V16_SPEC.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/AI_HANDOFF.md`
-4. `pages/api/reconcile-tiers.js`
-5. `lib/v16-ledger.js`
-6. `pages/v16-full.js`
+2. `docs/STATE_MACHINE.md`
+3. `docs/KNOWN_BUGS.md`
+4. `docs/TEST_CASES.md`
+5. `docs/API.md`
+6. `pages/api/reconcile-tiers.js`
+7. `lib/v16-ledger.js`
+8. `pages/v16-full.js`
 
 ### 下一步
 
@@ -70,3 +87,4 @@
 2. 再重構 `pages/v16-full.js` 為三區：今日決策、買點區標的、觀察區。
 3. 接上 Telegram：只通知新增未登帳層級。
 4. 跑 `docs/TEST_CASES.md` 的案例。
+5. 全部通過後再標記 V16 封板。
