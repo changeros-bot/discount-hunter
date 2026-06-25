@@ -88,19 +88,12 @@ Ledger 代碼：
 
 ## 啟動方式
 
-安裝依賴：
-
 ```bash
 npm install
-```
-
-本機開發：
-
-```bash
 npm run dev
 ```
 
-瀏覽：
+本機網址：
 
 ```text
 http://localhost:3000
@@ -110,8 +103,6 @@ http://localhost:3000
 
 建議部署於 Vercel。
 
-一般流程：
-
 1. GitHub repository 連接 Vercel
 2. 設定環境變數
 3. Push 到 main branch
@@ -120,8 +111,6 @@ http://localhost:3000
 ## 環境變數
 
 ### Wallet / Chain
-
-依照目前實作可能使用：
 
 ```text
 WALLET_ADDRESS
@@ -169,6 +158,10 @@ docs/
   PROGRESS.md
   AI_HANDOFF.md
   TEST_CASES.md
+  CONFIG.md
+  API.md
+  STATE_MACHINE.md
+  KNOWN_BUGS.md
 
 CHANGELOG.md
 ```
@@ -205,4 +198,8 @@ CHANGELOG.md
 - [進度紀錄](docs/PROGRESS.md)
 - [AI 交接](docs/AI_HANDOFF.md)
 - [測試案例](docs/TEST_CASES.md)
+- [設定參考](docs/CONFIG.md)
+- [API 參考](docs/API.md)
+- [狀態機](docs/STATE_MACHINE.md)
+- [已知問題](docs/KNOWN_BUGS.md)
 - [更新紀錄](CHANGELOG.md)
