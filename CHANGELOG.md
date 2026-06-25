@@ -8,11 +8,17 @@
 - Added `docs/PROGRESS.md` to record daily progress and handoff notes.
 - Added `docs/AI_HANDOFF.md` for future AI-assisted development.
 - Added `docs/TEST_CASES.md` with V16 verification cases.
+- Added `docs/CONFIG.md` for configurable rules, timers, and environment variables.
+- Added `docs/API.md` for endpoint behavior and validation order.
+- Added `docs/STATE_MACHINE.md` for the V16 price / ledger / decision states.
+- Added `docs/KNOWN_BUGS.md` to track pending work before封版.
 - Added root `CHANGELOG.md`.
 
 ### Updated
 
+- Updated `README.md` as the project entry point.
 - Updated `docs/ARCHITECTURE.md` to describe the V16 data flow.
+- Updated `docs/PROGRESS.md` with documentation status and next handoff steps.
 
 ### Important V16 decisions
 
