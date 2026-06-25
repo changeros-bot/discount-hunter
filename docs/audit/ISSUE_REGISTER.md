@@ -34,7 +34,7 @@ Last updated: 2026-06-25
 
 ### P1-008: Decision and Reconcile use different rule layers
 - Status: Verified
-- Evidence: Audit-009
+- Evidence: Audit-009 / Audit-013
 - Summary: `today-decisions` uses `getExecutableTiers()` with reopen logic; `reconcile-tiers` uses `getTriggeredDipTiers()` only.
 - Risk: Backfill and actionable decision may not match exactly.
 
@@ -58,7 +58,7 @@ Last updated: 2026-06-25
 
 ### P1-012: v16-full ProgressBar does not use Ledger completed state
 - Status: Verified
-- Evidence: Audit-010
+- Evidence: Audit-010 / Audit-013
 - Summary: `progressFor(asset)` uses only discount/rules/amounts. Ledger is only displayed as text.
 - Risk: Progress bar may show a tier already completed in Ledger.
 
@@ -99,6 +99,12 @@ Last updated: 2026-06-25
 - Summary: Alert State Core (`readAlerts`, `writeAlerts`, `canSendAlert`, `markAlertSent`) exists, but only `/api/telegram-alert-check` uses it. Main sending flows such as `/api/telegram-alerts` do not call it.
 - Risk: Dedup/cooldown logic exists but is bypassed by actual Telegram sending APIs.
 
+### P1-019: v16-full Buy Zone uses price signal, not Ledger actionable state
+- Status: Verified
+- Evidence: Audit-013
+- Summary: `v16-full` groups buy-zone rows by `/api/prices` `asset.signal.level`, which is based only on price discount/rules/amounts and does not consider Ledger completed tiers.
+- Risk: Buy-zone section can include assets whose current tier is already recorded in Ledger; user must rely on decision panel and Ledger text to know whether it is truly actionable.
+
 ## P2
 
 ### P2-004: Debug APIs bypass sync-wallet and read Wallet pipeline directly
@@ -118,3 +124,9 @@ Last updated: 2026-06-25
 - Evidence: Audit-012
 - Summary: Current Alert State Engine supports read, cooldown check, and mark sent. No reset key, delete key, or expiration cleanup API was found.
 - Risk: Old alert keys can remain indefinitely unless manually cleared from store.
+
+### P2-007: v16-full loadAll refresh every 5s may be aggressive
+- Status: Verified
+- Evidence: Audit-013
+- Summary: `v16-full` calls `loadAll()` every 5 seconds, which reads `/api/prices`, `/api/buy-ledger`, and `/api/today-decisions`.
+- Risk: This is not a Ledger pollution risk, but may increase Binance public API, Vercel, and KV read pressure.
