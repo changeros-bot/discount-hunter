@@ -9,8 +9,7 @@ function usd(v) { const n = Number(v || 0); return `$${n.toFixed(2)}`; }
 function signedUsd(v) { const n = Number(v || 0); return `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`; }
 function signedPct(v) { const n = Number(v || 0) * 100; return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`; }
 function signedColor(v) { const n = Number(v || 0); return n > 0 ? "#22c55e" : n < 0 ? "#ef4444" : "#f8fafc"; }
-function normalizeSymbol(s) { return String(s || "").trim().toUpperCase(); }
-function compactSymbol(s) { return normalizeSymbol(s).replace(/[^A-Z0-9]/g, ""); }
+function normalizeSymbol(s) { return String(s || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function isLiveHolding(h) { return h && Number(h.quantity) > 0 && h.quantitySource === "bsc_rpc_balanceOf_live"; }
 function timeText(iso) { if (!iso) return "讀取中"; const d = new Date(iso); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`; }
 
@@ -21,23 +20,21 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
-function ledgerRowsFor(ledger, symbol) {
+function ledgerRows(ledger, symbol) {
   if (!ledger || !symbol) return {};
   if (ledger[symbol]) return ledger[symbol];
-  const normalized = normalizeSymbol(symbol);
-  if (ledger[normalized]) return ledger[normalized];
-  const compact = compactSymbol(symbol);
-  const matchedKey = Object.keys(ledger).find((key) => compactSymbol(key) === compact);
-  return matchedKey ? ledger[matchedKey] : {};
+  const target = normalizeSymbol(symbol);
+  const key = Object.keys(ledger).find((k) => normalizeSymbol(k) === target);
+  return key ? ledger[key] : {};
 }
 
-function doneTiers(ledger, symbol) {
-  const rows = ledgerRowsFor(ledger, symbol);
+function ledgerDoneTiers(ledger, symbol) {
+  const rows = ledgerRows(ledger, symbol);
   return [1,2,3,4].filter((i) => Array.isArray(rows[`D${i}`]) && rows[`D${i}`].length).map((i) => `D${i}`);
 }
 
 function ledgerText(ledger, symbol) {
-  const done = doneTiers(ledger, symbol);
+  const done = ledgerDoneTiers(ledger, symbol);
   return done.length ? `已登帳：${done.join(" / ")}` : "尚未登帳";
 }
 
@@ -138,29 +135,19 @@ export default function V16FullHome() {
     return () => { clearInterval(t); clearInterval(w); };
   }, []);
 
-  const decisionsBySymbol = useMemo(() => {
-    const map = new Map();
-    for (const d of decisions) {
-      const list = map.get(d.symbol) || [];
-      list.push(d);
-      map.set(d.symbol, list);
-    }
-    return map;
-  }, [decisions]);
-
+  const decisionMap = useMemo(() => new Map(decisions.map((d) => [`${normalizeSymbol(d.symbol)}_${d.tier}`, d])), [decisions]);
   const rows = useMemo(() => assets.map((a) => {
     const level = Number(a?.signal?.level || 0);
     const tier = level > 0 ? `D${level}` : "";
-    const symbolDecisions = decisionsBySymbol.get(a.symbol) || [];
-    return { ...a, signalLevel: level, tier, decisions: symbolDecisions, isActionable: symbolDecisions.length > 0 };
+    const decision = decisionMap.get(`${normalizeSymbol(a.symbol)}_${tier}`);
+    return { ...a, signalLevel: level, tier, decision, isActionable: !!decision };
   }).sort((a,b) => {
-    if ((a.signalLevel > 0) !== (b.signalLevel > 0)) return a.signalLevel > 0 ? -1 : 1;
     if (a.signalLevel !== b.signalLevel) return b.signalLevel - a.signalLevel;
     return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
-  }), [assets, decisionsBySymbol]);
+  }), [assets, decisionMap]);
 
-  const buyZoneRows = rows.filter((r) => Number(r.signalLevel || 0) > 0);
-  const watchRows = rows.filter((r) => Number(r.signalLevel || 0) <= 0);
+  const buyZoneRows = rows.filter((r) => r.signalLevel > 0);
+  const watchRows = rows.filter((r) => r.signalLevel <= 0);
   const totalAmount = decisions.reduce((s, d) => s + Number(d.amount || 0), 0);
   const ws = walletSummary(wallet?.holdings);
 
@@ -194,14 +181,15 @@ export default function V16FullHome() {
 function Metric({ label, value, signed }) {
   return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong style={{ display: "block", color: signed === undefined ? "#f8fafc" : signedColor(signed), marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
 }
+
 function ProgressBar({ progress }) {
   const p = Math.min(100, Math.max(0, Number(progress.p || 0)));
   return <div><div style={{ fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>{progress.label}</div><div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 8 }}><span style={{ fontSize: 13, fontWeight: 900, color: "#cbd5e1" }}>{progress.from}</span><div style={{ height: 10, width: "100%", background: "rgba(148,163,184,.22)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${p}%`, height: "100%", background: p >= 100 ? "#f59e0b" : "#22c55e", borderRadius: 999 }} /></div><span style={{ fontSize: 13, fontWeight: 900, color: "#cbd5e1" }}>{progress.to}</span></div><div style={{ marginTop: 8, textAlign: "center", fontWeight: 950, color: p >= 100 ? "#f59e0b" : "#e2e8f0" }}>{p}%</div></div>;
 }
+
 function AssetCard({ asset, ledger }) {
   const progress = progressFor(asset);
   const rows = (asset.rules || []).map((rule, i) => ({ level: `D${i + 1}`, rule, amount: asset.amounts?.[i] || 0 }));
-  const pendingText = (asset.decisions || []).map((d) => `${d.tier} ${money(d.amount)}`).join(" / ");
-  const ledgerValue = ledgerText(ledger, asset.symbol);
-  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={ledgerValue} /></div><div style={{ marginTop: 10, color: "#cbd5e1", fontWeight: 850 }}>{asset.isActionable ? `✅ 未登帳：${pendingText}` : ledgerValue}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
+  const doneText = ledgerText(ledger, asset.symbol);
+  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: "#cbd5e1", fontWeight: 850 }}>{asset.isActionable ? `✅ ${asset.decision?.tier} 未登帳，可手動買入 ${money(asset.decision?.amount)}` : doneText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
 }
