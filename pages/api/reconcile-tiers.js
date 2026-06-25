@@ -9,6 +9,12 @@ function num(v, fallback = 0) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function ledgerCost(rows = {}) {
+  return ["N", "D1", "D2", "D3", "D4"].reduce((sum, tier) => {
+    return sum + (rows[tier] || []).reduce((s, r) => s + num(r.amount), 0);
+  }, 0);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "method_not_allowed" });
 
@@ -27,6 +33,7 @@ export default async function handler(req, res) {
       if (!asset) continue;
       const symbol = normalizeSymbol(asset.symbol);
       const tiers = getTriggeredDipTiers(asset.discount, asset.rules || []);
+      let available = num(h.totalCost, num(h.currentValue, 0)) - ledgerCost(ledger[symbol]);
 
       for (const item of tiers) {
         const tier = item.tier;
@@ -35,7 +42,11 @@ export default async function handler(req, res) {
           continue;
         }
         const level = Number(tier.replace("D", ""));
-        const amount = num(asset.amounts?.[level - 1], num(h.totalCost, num(h.currentValue, 5)));
+        const amount = num(asset.amounts?.[level - 1], 0);
+        if (amount <= 0 || available + 0.01 < amount) {
+          skipped.push({ symbol, tier, reason: "insufficient_wallet_cost", available, amount });
+          continue;
+        }
         ledger[symbol][tier].push({
           time: now,
           amount,
@@ -46,6 +57,7 @@ export default async function handler(req, res) {
           leftBuyZone: false,
           leftBuyZoneAt: null
         });
+        available -= amount;
         added.push({ symbol, tier, amount });
       }
     }
