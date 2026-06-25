@@ -1,158 +1,182 @@
-# Architecture
+# DCA 折價獵人架構說明
 
-Last updated: 2026-06-23
+更新日期：2026-06-25
 
-## System purpose
+## 1. 系統定位
 
-DCA 折價獵人是一個手機優先的 30 秒決策儀表板，用於監控 Binance xStocks / tokenized stock 的折價買點、鏈上持倉、Telegram 買點警報。
+DCA 折價獵人是長期 DCA + 逢低買入決策系統，不是自動交易系統。
 
-## Main data flow
+使用者仍然手動買入，系統負責：
 
-```text
-/api/prices
-↓
-Asset prices + rules + amounts
-↓
-Homepage cards
-↓
-Telegram alerts
-```
+- 讀價格
+- 判斷層級
+- 顯示今日決策
+- 同步 Wallet
+- 補登 Ledger
+- 發 Telegram 提醒
 
-```text
-Wallet address
-↓
-/api/sync-wallet
-↓
-BSC RPC balanceOf()
-↓
-Live holdings
-↓
-Cost basis from transfer/swap history
-↓
-Merged holdings
-↓
-Homepage wallet summary
-↓
-Telegram completed level logic
-```
-
-## APIs
-
-### /api/prices
-
-Provides:
+## 2. 核心資料流
 
 ```text
-symbol
-name
-price
-high
-highType
-discount
-rules
-amounts
-signal
+Binance / xStocks Price API
+        │
+        ▼
+Tier Engine
+        │
+        ▼
+Today Decision Engine
+        │
+        ├── UI Dashboard
+        ├── Telegram Alert
+        └── Buy Ledger
+
+Wallet / BSC RPC
+        │
+        ▼
+Wallet Sync
+        │
+        ▼
+Reconcile Engine
+        │
+        ▼
+Buy Ledger
 ```
 
-### /api/sync-wallet
+## 3. 主要模組
 
-Provides current wallet and portfolio state.
+### 3.1 Price API
 
-Source of truth for current holdings:
+主要用途：
+
+- 取得最新價格
+- 取得高點
+- 計算跌幅
+- 產生每檔標的的 `rules`、`amounts`、`signal`
+
+相關檔案：
+
+- `pages/api/prices.js`
+
+### 3.2 Tier Engine
+
+主要用途：
+
+- 根據跌幅判斷 D1-D4 是否觸發
+- 支援跳空跨層
+- 不直接決定是否已買
+
+相關檔案：
+
+- `lib/v16-ledger.js`
+- `getTriggeredDipTiers()`
+
+### 3.3 Today Decision Engine
+
+主要用途：
+
+- 計算今日應執行的買點
+- 必須排除 Ledger 已登帳層級
+- 排序 D4 > D3 > D2 > D1，同層跌幅深優先
+
+相關檔案：
+
+- `pages/api/today-decisions.js`
+- `getExecutableTiers()`
+
+### 3.4 Buy Ledger
+
+主要用途：
+
+- 記錄 N / D1 / D2 / D3 / D4
+- 作為去重依據
+- 作為今日決策排除依據
+
+相關檔案：
+
+- `pages/api/buy-ledger.js`
+- `lib/v16-ledger.js`
+- Upstash KV 或本地 fallback
+
+### 3.5 Wallet Sync
+
+主要用途：
+
+- 讀取目前鏈上持倉
+- 計算持倉成本、市值、未實現損益
+- 不直接代表 D1-D4 已完成
+
+相關檔案：
+
+- `pages/api/sync-wallet.js`
+
+### 3.6 Reconcile Engine
+
+主要用途：
+
+- 用 Wallet 持倉輔助補登 Ledger
+- 補登 D1-D4 時必須檢查 Wallet Cost Gap
+- 避免只買 D1 卻誤補 D2
+
+相關檔案：
+
+- `pages/api/reconcile-ledger.js`：舊版，只補 D1
+- `pages/api/reconcile-tiers.js`：新版，D1-D4 逐層補登並檢查成本差額
+
+### 3.7 Telegram
+
+主要用途：
+
+- 買點提醒
+- Wallet 變動提醒
+- 每日持倉日報
+
+目前狀態：
+
+- 發送工具存在
+- 今日決策觸發流程尚未完整接線
+
+相關檔案：
+
+- `lib/telegram/notify.js`
+
+## 4. UI Dashboard
+
+目前主頁：
+
+- `pages/v16-full.js`
+
+預期首頁應分為：
 
 ```text
-BSC RPC balanceOf()
+今日決策
+買點區標的
+觀察區
+Wallet
+Ledger 檢查
 ```
 
-Cost basis source:
+目前已知問題：
 
-```text
-transfer / swap history
-```
+- 首頁仍保留舊的「可執行買點」區塊
+- 三區重構尚未完成
 
-Important debug fields:
+## 5. 儲存層
 
-```text
-liveBalanceSymbols
-selectedLiveBalanceSymbols
-holdingSymbols
-estimatedCostBasisSymbols
-liveBalanceErrors
-holdingPriceDebug
-```
+優先順序：
 
-### /api/telegram-alerts
+1. Upstash KV
+2. Memory fallback
+3. Local file fallback（非 production）
 
-Reads:
+相關環境變數：
 
-```text
-/api/prices
-/api/sync-wallet
-```
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-Calculates:
+## 6. 重要設計原則
 
-```text
-completedLevel
-next target level
-remaining distance
-absolute progress
-layer-based emoji
-```
-
-Sends Telegram message through:
-
-```text
-lib/telegram/notify
-```
-
-## CSS load order
-
-Current `_app.js` CSS order:
-
-```text
-globals.css
-v10.css
-title-gold.css
-hero-poster.css
-v15-unified.css
-v15-fix.css
-v15-color-force.css
-```
-
-Important: `v15-unified.css` contains strong global overrides with `!important`, including white text rules. `v15-color-force.css` must stay last to preserve red/green signed values.
-
-## Future architecture: Wallet Execution Sync
-
-Target V15.37:
-
-```text
-Previous wallet snapshot
-↓
-Current wallet snapshot
-↓
-Diff by symbol
-↓
-Detect buy / sell / add
-↓
-Map to completed layer
-↓
-Homepage recent actions
-↓
-Telegram buy-complete notification
-```
-
-Required persistent state options:
-
-```text
-Vercel KV / Upstash Redis / Cloudflare KV / simple JSON endpoint
-```
-
-Potential keys:
-
-```text
-lastSnapshot:<wallet>
-lastBuyAction:<symbol>
-lastNotifiedCompletedLevel:<symbol>
-```
-
+- Price 狀態是動態的
+- Ledger 是歷史與去重依據
+- Wallet 是目前持倉，不等於買點完成狀態
+- Today Decision 只能顯示未登帳項目
+- Telegram 只能通知新增未登帳層級
