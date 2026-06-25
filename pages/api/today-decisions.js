@@ -1,4 +1,4 @@
-import { markLeftBuyZonesForAssets, getExecutableTiers } from "../../lib/v16-ledger";
+import { markLeftBuyZonesForAssets, getExecutableTiers, normalizeLedger } from "../../lib/v16-ledger";
 
 function sortDecisions(a, b) {
   if (a.level !== b.level) return b.level - a.level;
@@ -63,13 +63,18 @@ export default async function handler(req, res) {
 
     if (req.method === "POST") {
       const assets = req.body?.assets || [];
-      const { ledger, changed } = await markLeftBuyZonesForAssets(assets);
-      const decisions = buildDecisions(assets, ledger, now);
+      const postedLedger = req.body?.ledger;
+      const hasPostedLedger = postedLedger && typeof postedLedger === "object";
+      const ledgerResult = hasPostedLedger
+        ? { ledger: normalizeLedger(postedLedger), changed: false, source: "posted-ledger" }
+        : { ...(await markLeftBuyZonesForAssets(assets)), source: "store-ledger" };
+      const decisions = buildDecisions(assets, ledgerResult.ledger, now);
       return res.status(200).json({
         ok: true,
         mode: "posted-assets",
+        ledgerSource: ledgerResult.source,
         updatedAt: now,
-        ledgerUpdatedForLeftBuyZone: changed,
+        ledgerUpdatedForLeftBuyZone: ledgerResult.changed,
         count: decisions.length,
         totalAmount: decisions.reduce((s, item) => s + Number(item.amount || 0), 0),
         decisions
@@ -80,7 +85,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         message: "POST assets from /api/prices to calculate V16 manual decisions.",
-        usage: { method: "POST", body: { assets: "array from /api/prices data" } }
+        usage: { method: "POST", body: { assets: "array from /api/prices data", ledger: "optional buy-ledger object" } }
       });
     }
 
