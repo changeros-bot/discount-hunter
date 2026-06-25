@@ -46,7 +46,7 @@ Last updated: 2026-06-25
 
 ### P1-010: telegram-alerts uses Wallet totalCost rather than Ledger
 - Status: Verified
-- Evidence: Audit-010
+- Evidence: Audit-010 / Audit-011
 - Summary: Telegram calculates `completedLevel` from Wallet holdings cost, not Ledger completed tiers.
 - Risk: Telegram may disagree with manual Ledger state.
 
@@ -61,6 +61,37 @@ Last updated: 2026-06-25
 - Evidence: Audit-010
 - Summary: `progressFor(asset)` uses only discount/rules/amounts. Ledger is only displayed as text.
 - Risk: Progress bar may show a tier already completed in Ledger.
+
+### P1-013: Telegram has multiple buy-point/progress rule implementations
+- Status: Verified
+- Evidence: Audit-011
+- Summary: `telegram-alerts`, `telegram-daily`, and `daily-summary` each calculate buy-point/progress rows separately.
+- Risk: Telegram surfaces may disagree with each other and with UI/Decision Engine.
+
+### P1-014: daily-summary and telegram-daily are highly duplicated
+- Status: Verified
+- Evidence: Audit-011
+- Summary: Both read `/api/sync-wallet` and `/api/prices`, build a daily Telegram message, and calculate near-buy rows independently.
+- Risk: Duplicate maintenance and inconsistent behavior.
+
+### P1-015: wallet-change-alerts writes KV snapshot state
+- Status: Verified
+- Evidence: Audit-011
+- Summary: `wallet-change-alerts` writes `discount-hunter:v16:wallet-snapshot:{walletKey}` through Upstash KV.
+- Risk: Reasonable design, but must be included in State Store Inventory.
+
+### P1-016: Cloudflare Cron Worker code still exists
+- Status: Verified in repo; runtime pending
+- Evidence: Audit-011
+- Summary: `cloudflare/discount-hunter-cron-worker.js` still exists and calls `/api/telegram-alerts` by default.
+- Risk: If still deployed with Cron enabled, it may repeatedly trigger Telegram alerts.
+- Needs Runtime Verification: Cloudflare deployment and Cron Trigger status.
+
+### P1-017: telegram-alerts has no cooldown/dedup and sends on every call
+- Status: Verified
+- Evidence: Audit-011
+- Summary: `telegram-alerts` always calls `sendTelegramMessage()`, including the no-alert message path.
+- Risk: If scheduled frequently, Telegram can receive repeated messages.
 
 ## P2
 
