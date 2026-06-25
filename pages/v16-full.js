@@ -9,6 +9,7 @@ function usd(v) { const n = Number(v || 0); return `$${n.toFixed(2)}`; }
 function signedUsd(v) { const n = Number(v || 0); return `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`; }
 function signedPct(v) { const n = Number(v || 0) * 100; return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`; }
 function signedColor(v) { const n = Number(v || 0); return n > 0 ? "#22c55e" : n < 0 ? "#ef4444" : "#f8fafc"; }
+function signedClass(v) { const n = Number(v || 0); return n > 0 ? "signed-positive" : n < 0 ? "signed-negative" : ""; }
 function normalizeSymbol(s) { return String(s || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function isLiveHolding(h) { return h && Number(h.quantity) > 0 && h.quantitySource === "bsc_rpc_balanceOf_live"; }
 function timeText(iso) { if (!iso) return "讀取中"; const d = new Date(iso); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`; }
@@ -43,12 +44,10 @@ function progressFor(asset) {
   const depth = Math.abs(Number(asset.discount || 0));
   const amounts = asset.amounts || [];
   if (!rules.length || !Number.isFinite(depth)) return { label: "資料未就緒", p: 0, from: "0U", to: "0U" };
-
   if (depth < rules[0]) {
     const p = rules[0] > 0 ? Math.max(0, Math.min(99, (depth / rules[0]) * 100)) : 0;
     return { label: "距離 D1 買點", p: Math.floor(p), from: "0U", to: `${amounts[0] || 0}U` };
   }
-
   for (let i = 0; i < rules.length - 1; i++) {
     if (depth >= rules[i] && depth < rules[i + 1]) {
       const span = Math.max(0.000001, rules[i + 1] - rules[i]);
@@ -56,7 +55,6 @@ function progressFor(asset) {
       return { label: `D${i + 1} → D${i + 2}`, p: Math.max(0, Math.min(99, Math.floor(p))), from: `${amounts[i] || 0}U`, to: `${amounts[i + 1] || 0}U` };
     }
   }
-
   return { label: `D${rules.length} 已達最深層`, p: 100, from: `${amounts[rules.length - 1] || 0}U`, to: "最深層" };
 }
 
@@ -85,11 +83,16 @@ export default function V16FullHome() {
     try {
       const prices = await jsonFetch(`/api/prices?t=${Date.now()}`);
       const rows = prices.data || [];
-      const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets: rows }) });
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
+      const currentLedger = ledgerData.ledger || {};
+      const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assets: rows, ledger: currentLedger })
+      });
       setAssets(rows);
+      setLedger(currentLedger);
       setDecisions(today.decisions || []);
-      setLedger(ledgerData.ledger || {});
       setUpdatedAt(prices.updatedAt || today.updatedAt || "");
       setSource(prices.source || "");
       setError("");
@@ -163,7 +166,7 @@ export default function V16FullHome() {
     <section style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: decisions.length ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
       <div className="liveLine" style={{ fontSize: 12, textAlign: "right", marginBottom: 6, fontWeight: 850 }}><span className={loading ? "liveDot loading" : "liveDot"} /><span className="liveText">{loading ? "更新中" : "LIVE"}</span>｜{timeText(updatedAt)}</div>
       <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 10px" }}>今日決策</h2>
-      {decisions.length ? <><div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}><div>未登帳買點：{decisions.length}筆</div><div>建議投入：<span style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div></div><div style={{ display: "grid", gap: 8 }}>{decisions.map((d) => <div key={`${d.symbol}_${d.tier}`} style={{ padding: "10px 12px", background: "#0f172a", borderRadius: 10, fontWeight: 900, color: "#f8fafc" }}>{tierIcon[d.tier] || "⚪"} {d.symbol} {d.tier}（{money(d.amount)}）｜買點已達｜未登帳</div>)}</div></> : <div style={{ textAlign: "center", padding: "8px 0 12px", color: "#94a3b8", fontWeight: 900 }}>暫無未登帳買點</div>}
+      {decisions.length ? <><div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}><div>未登帳買點：{decisions.length}筆</div><div>建議投入：<span className="signed-positive" style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div></div><div style={{ display: "grid", gap: 8 }}>{decisions.map((d) => <div key={`${d.symbol}_${d.tier}`} style={{ padding: "10px 12px", background: "#0f172a", borderRadius: 10, fontWeight: 900, color: "#f8fafc" }}>{tierIcon[d.tier] || "⚪"} {d.symbol} {d.tier}（{money(d.amount)}）｜買點已達｜未登帳</div>)}</div></> : <div style={{ textAlign: "center", padding: "8px 0 12px", color: "#94a3b8", fontWeight: 900 }}>暫無未登帳買點</div>}
     </section>
 
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
@@ -179,7 +182,8 @@ export default function V16FullHome() {
 }
 
 function Metric({ label, value, signed }) {
-  return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong style={{ display: "block", color: signed === undefined ? "#f8fafc" : signedColor(signed), marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
+  const hasSigned = signed !== undefined;
+  return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong className={hasSigned ? signedClass(signed) : ""} style={{ display: "block", color: hasSigned ? signedColor(signed) : "#f8fafc", marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
 }
 
 function ProgressBar({ progress }) {
@@ -191,5 +195,5 @@ function AssetCard({ asset, ledger }) {
   const progress = progressFor(asset);
   const rows = (asset.rules || []).map((rule, i) => ({ level: `D${i + 1}`, rule, amount: asset.amounts?.[i] || 0 }));
   const doneText = ledgerText(ledger, asset.symbol);
-  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: "#cbd5e1", fontWeight: 850 }}>{asset.isActionable ? `✅ ${asset.decision?.tier} 未登帳，可手動買入 ${money(asset.decision?.amount)}` : doneText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
+  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: asset.isActionable ? "#f8fafc" : "#cbd5e1", fontWeight: 850 }}>{asset.isActionable ? `✅ ${asset.decision?.tier} 未登帳，可手動買入 ${money(asset.decision?.amount)}` : doneText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
 }
