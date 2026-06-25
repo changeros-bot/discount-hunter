@@ -89,9 +89,15 @@ Last updated: 2026-06-25
 
 ### P1-017: telegram-alerts has no cooldown/dedup and sends on every call
 - Status: Verified
-- Evidence: Audit-011
+- Evidence: Audit-011 / Audit-012
 - Summary: `telegram-alerts` always calls `sendTelegramMessage()`, including the no-alert message path.
 - Risk: If scheduled frequently, Telegram can receive repeated messages.
+
+### P1-018: Alert State Engine and Telegram sending flows are not integrated
+- Status: Verified
+- Evidence: Audit-012
+- Summary: Alert State Core (`readAlerts`, `writeAlerts`, `canSendAlert`, `markAlertSent`) exists, but only `/api/telegram-alert-check` uses it. Main sending flows such as `/api/telegram-alerts` do not call it.
+- Risk: Dedup/cooldown logic exists but is bypassed by actual Telegram sending APIs.
 
 ## P2
 
@@ -106,3 +112,9 @@ Last updated: 2026-06-25
 - Evidence: Audit-004
 - Summary: `buy-ledger` handles both reading Ledger and appending manual buy records through POST.
 - Risk: Acceptable but should be documented clearly.
+
+### P2-006: Alert State Engine lacks reset/delete/expire API
+- Status: Verified
+- Evidence: Audit-012
+- Summary: Current Alert State Engine supports read, cooldown check, and mark sent. No reset key, delete key, or expiration cleanup API was found.
+- Risk: Old alert keys can remain indefinitely unless manually cleared from store.
