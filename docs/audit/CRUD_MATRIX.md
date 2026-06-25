@@ -2,20 +2,21 @@
 
 Last updated: 2026-06-25
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-011.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-012.
 
 ## Core APIs and UI
 
 | Module / API | Read Ledger | Write Ledger | Append Buy | Mark Left Zones | Read Wallet | Write Wallet | Price | Decision | Progress | Notes |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger helpers, Decision helpers, Progress helper |
+| `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger, Decision, Progress, and Alert State helpers |
 | `pages/api/buy-ledger.js` | ✅ | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | GET reads Ledger; POST appends manual rows |
 | `pages/api/manual-buy.js` | ✅ indirect | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Manual / Telegram text command entry |
 | `pages/api/reconcile-tiers.js` | ✅ | ✅ direct | ❌ | ❌ | ✅ indirect via posted holdings | ❌ | ❌ | ✅ `getTriggeredDipTiers()` | ❌ | Backfill D1-D4 from holdings and assets |
 | `pages/api/reconcile-ledger.js` | ✅ | ✅ direct | ❌ | ❌ | ✅ indirect via posted holdings | ❌ | ❌ | ✅ D1-only | ❌ | Legacy D1-only backfill |
 | `pages/api/today-decisions.js` | ✅ | ✅ conditional | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ `getExecutableTiers()` | ✅ triggered 100% | Hidden write when no posted ledger |
 | `pages/api/prices.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Binance xStocks | ✅ initial signal | ❌ | Price API also calculates signal |
-| `pages/api/telegram-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ next action | ✅ own engine | Sends every call; no cooldown/dedup |
+| `pages/api/telegram-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ next action | ✅ own engine | Sends every call; does not use Alert State cooldown/dedup |
+| `pages/api/telegram-alert-check.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ alert cooldown check | ❌ | Uses Alert State; does not send Telegram |
 | `pages/api/telegram-daily.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Daily Telegram report |
 | `pages/api/daily-summary.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Duplicates telegram-daily-like flow |
 | `pages/api/daily-position-report.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ❌ | ❌ | Wallet-only position report; optional Telegram send |
@@ -32,7 +33,10 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | Module / Function | State Read | State Write | Key / Store | Notes |
 |---|---:|---:|---|---|
 | `wallet-change-alerts` | ✅ | ✅ | `discount-hunter:v16:wallet-snapshot:{walletKey}` | Baseline and diff snapshot |
-| `writeAlerts()` / `markAlertSent()` | ✅ | ✅ | Alert store JSON | Verified in `lib/v16-ledger.js`; full alert flow pending later audit |
+| `readAlerts()` | ✅ | ❌ | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` fallback | Alert state read |
+| `writeAlerts()` | ❌ | ✅ | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` fallback | Alert state write |
+| `markAlertSent()` | ✅ | ✅ | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` fallback | Stores `{ lastAlert }` for key |
+| `telegram-alert-check` | ✅ | ✅ conditional | Alert State | POST with `commit=true` marks sent |
 
 ## Debug APIs
 
@@ -53,7 +57,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `reconcile-tiers` | Ledger | Direct push into `ledger[symbol][tier]` → `writeLedger()` | Verified |
 | `reconcile-ledger` | Ledger | Direct D1 push → `writeLedger()` | Verified legacy |
 | `wallet-change-alerts` | KV state | `getJson()` → diff → `setJson()` | Verified |
-| `writeAlerts()` / `markAlertSent()` | Alerts state | `writeStoreJson()` | Verified in `lib/v16-ledger.js`; full alert flow pending later audit |
+| `writeAlerts()` / `markAlertSent()` | Alerts state | `readAlerts()` → mutate key → `writeAlerts()` | Verified |
 
 ## Confirmed Non-Writers
 
