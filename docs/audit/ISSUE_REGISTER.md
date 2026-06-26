@@ -146,6 +146,12 @@ Last updated: 2026-06-26
 
 ### P2-008: v16-status checklist may overstate verified safety
 - Status: Verified
-- Evidence: Audit-014
+- Evidence: Audit-014 / Audit-015
 - Summary: `/api/v16-status` returns checklist booleans such as `sameTier24hReset`, `telegramCooldown`, and `frontEndIntegrated`, but these are static status claims rather than proof of full safety integration.
 - Risk: Status endpoint may imply protection that is incomplete or not wired into the actual production flow.
+
+### P2-009: v16-status runtime checks do not cover critical APIs
+- Status: Verified
+- Evidence: Audit-015
+- Summary: `/api/v16-status` runtime checks cover only a limited set of endpoints and mark manual-write APIs as `manual_test_required`. It does not check critical APIs such as `/api/sync-wallet`, `/api/prices`, `/api/reconcile-tiers`, or `/api/telegram-alerts`.
+- Risk: `v16-status` may report ok while price, wallet sync, reconcile, or Telegram main alert flows are broken.
