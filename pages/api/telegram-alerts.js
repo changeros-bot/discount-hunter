@@ -197,7 +197,7 @@ async function handler(req, res) {
         "行情資料讀取失敗。",
         `錯誤：${prices?.message || prices?.error || pricesRes.status}`,
       ].join("\n");
-      const sent = await sendTelegramMessage(message);
+      const sent = await sendTelegramMessage(message, { cooldownKey: "telegram-alerts:prices-error", cooldownHours: 12 });
       return res.status(500).json({ ok: false, alertType: "api_error", telegram: sent });
     }
 
@@ -215,7 +215,10 @@ async function handler(req, res) {
           `檢查時間：${new Date(prices?.updatedAt || Date.now()).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}`,
         ].join("\n");
 
-    const sent = await sendTelegramMessage(message);
+    const alertKey = walletOk
+      ? `telegram-alerts:buy-points:${rows.map((row) => `${row.symbol}-${row.type}-${row.level}`).join("|") || "none"}`
+      : "telegram-alerts:wallet-error";
+    const sent = await sendTelegramMessage(message, { cooldownKey: alertKey, cooldownHours: 12 });
 
     if (!sent.ok) {
       return res.status(500).json({ ok: false, alertCount: rows.length, telegram: sent });
@@ -223,8 +226,10 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.38-telegram-dca-holding-fix",
-      sent: true,
+      version: "15.39-telegram-alert-cooldown-gate",
+      sent: !sent.skipped,
+      deduped: Boolean(sent.deduped),
+      cooldownKey: alertKey,
       walletOk,
       alertCount: walletOk ? rows.length : 0,
       alerts: rows.map((row) => ({
