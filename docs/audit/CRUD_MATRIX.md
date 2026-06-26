@@ -1,8 +1,8 @@
 # DCA 折價獵人 V16 CRUD Matrix
 
-Last updated: 2026-06-25
+Last updated: 2026-06-26
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-013.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-014.
 
 ## Core APIs and UI
 
@@ -10,7 +10,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger, Decision, Progress, and Alert State helpers |
 | `pages/api/buy-ledger.js` | ✅ | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | GET reads Ledger; POST appends manual rows |
-| `pages/api/manual-buy.js` | ✅ indirect | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Manual / Telegram text command entry |
+| `pages/api/manual-buy.js` | ✅ indirect | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Validates symbol/tier/amount but does not dedup same-tier rows |
 | `pages/api/reconcile-tiers.js` | ✅ | ✅ direct | ❌ | ❌ | ✅ indirect via posted holdings | ❌ | ❌ | ✅ `getTriggeredDipTiers()` | ❌ | Backfill D1-D4 from holdings and assets |
 | `pages/api/reconcile-ledger.js` | ✅ | ✅ direct | ❌ | ❌ | ✅ indirect via posted holdings | ❌ | ❌ | ✅ D1-only | ❌ | Legacy D1-only backfill |
 | `pages/api/today-decisions.js` | ✅ | ✅ conditional | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ `getExecutableTiers()` | ✅ triggered 100% | Hidden write when no posted ledger |
@@ -23,10 +23,11 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/wallet-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ✅ wallet health | ❌ | Sends only on anomaly or `notify=1` |
 | `pages/api/wallet-change-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ✅ wallet diff | ❌ | Writes KV wallet snapshot state |
 | `pages/api/telegram-test.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Pure Telegram send test |
+| `pages/api/v16-status.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Static/status checks; manual APIs marked manual_test_required |
 | `lib/telegram/notify.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Telegram transport only |
 | `cloudflare/discount-hunter-cron-worker.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ direct | Triggers `/api/telegram-alerts`; runtime deployment pending |
 | `pages/v16-full.js` | ✅ via `/api/buy-ledger` | ❌ direct / ✅ indirect via reconcile | ❌ direct | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ own engine | Main dashboard; triggers `/api/reconcile-tiers`; 5s read refresh |
-| `pages/v16-manual.js` | ✅ via API | ✅ via `/api/manual-buy` | ✅ via manual-buy | ❌ | ❌ | ❌ | ✅ via API | ✅ via today-decisions | ✅ via today-decisions | Manual decision surface |
+| `pages/v16-manual.js` | ✅ via `/api/buy-ledger` | ✅ via `/api/manual-buy`; ✅ possible hidden write via `today-decisions` | ✅ via manual-buy | ✅ indirect via `today-decisions` without ledger | ❌ | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ via today-decisions | Manual decision surface; calls `today-decisions` without ledger |
 
 ## State Store / KV Writers
 
@@ -52,7 +53,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 
 | Writer | Writes | Mechanism | Status |
 |---|---|---|---|
-| `appendBuy()` | Ledger | `readLedger()` → push row → `writeLedger()` | Verified |
+| `appendBuy()` | Ledger | `readLedger()` → push row → `writeLedger()` | Verified; no idempotency/dedup |
 | `markLeftBuyZonesForAssets()` | Ledger | `readLedger()` → mutate row leftBuyZone → `writeLedger()` if changed | Verified |
 | `reconcile-tiers` | Ledger | Direct push into `ledger[symbol][tier]` → `writeLedger()` | Verified |
 | `reconcile-ledger` | Ledger | Direct D1 push → `writeLedger()` | Verified legacy |
@@ -70,4 +71,5 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `wallet-alerts` | Wallet health checker; does not write Ledger, Wallet, or KV state |
 | `telegram-test` | Pure Telegram send test |
 | `v16-full loadAll()` | Read-only path; passes explicit Ledger to `today-decisions`, avoiding hidden write |
+| `v16-status` | Does not POST to manual-write APIs; marks them manual_test_required |
 | Debug APIs audited in Audit-002 | Read direct Wallet pipelines but do not write Ledger, Wallet, or formal state |
