@@ -131,6 +131,13 @@ Last updated: 2026-06-26
 - Risk: The same symbol can show different next tier, progress, or actionable status across dashboard, portal, Telegram, and daily reports.
 - Recommended Action: Create a shared decision/progress view model and migrate all surfaces to it.
 
+### P1-023: prices and sync-wallet are high-impact upstream dependencies
+- Status: Verified
+- Evidence: Audit-020
+- Summary: `/api/prices` is used by dashboard, manual page, Today Decisions, Telegram alerts, daily reports, BuyPointAlertPortal, and reconcile. `/api/sync-wallet` is used by dashboard, Telegram alerts, daily reports, daily position report, wallet alerts, wallet-change alerts, and reconcile.
+- Risk: A failure in either upstream endpoint can degrade multiple UI, Telegram, decision, reconcile, and report flows at the same time.
+- Recommended Action: Include both endpoints in `v16-status`; define degrade mode so price failure stops decision/reconcile and wallet failure stops reconcile/actionable Telegram alerts.
+
 ## P2
 
 ### P2-004: Debug APIs bypass sync-wallet and read Wallet pipeline directly
@@ -165,7 +172,7 @@ Last updated: 2026-06-26
 
 ### P2-009: v16-status runtime checks do not cover critical APIs
 - Status: Verified
-- Evidence: Audit-015
+- Evidence: Audit-015 / Audit-020
 - Summary: `/api/v16-status` runtime checks cover only a limited set of endpoints and mark manual-write APIs as `manual_test_required`. It does not check critical APIs such as `/api/sync-wallet`, `/api/prices`, `/api/reconcile-tiers`, or `/api/telegram-alerts`.
 - Risk: `v16-status` may report ok while price, wallet sync, reconcile, or Telegram main alert flows are broken.
 
@@ -192,3 +199,10 @@ Last updated: 2026-06-26
 - Evidence: Audit-018
 - Summary: Repo contains many debug endpoints, legacy utilities, duplicate daily Telegram endpoints, and historical docs. They are cleanup candidates, but should not be deleted before the full audit and reference check are complete.
 - Risk: Premature deletion could remove useful diagnostics or historical context. Recommended action is a post-audit cleanup phase with explicit archive/delete commits.
+
+### P2-014: reconcile page does not explicitly gate upstream failures
+- Status: Verified
+- Evidence: Audit-020
+- Summary: `pages/reconcile.js` calls `/api/prices`, `/api/sync-wallet`, then `/api/reconcile-tiers`, but does not explicitly check `pricesRes.ok`, `walletRes.ok`, valid `prices.data`, or valid `wallet.holdings` before posting to reconcile.
+- Risk: If price or wallet sync fails, reconcile may receive empty assets/holdings and produce misleading results.
+- Recommended Action: Gate reconcile execution on successful price and wallet responses.
