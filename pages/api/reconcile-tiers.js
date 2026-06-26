@@ -29,6 +29,7 @@ export default async function handler(req, res) {
   try {
     const assets = Array.isArray(req.body?.assets) ? req.body.assets : [];
     const holdings = Array.isArray(req.body?.holdings) ? req.body.holdings : [];
+    const dryRun = req.body?.dryRun === true || req.query?.dryRun === "true";
 
     if (!assets.some(hasUsableAsset)) {
       return res.status(400).json({ ok: false, error: "missing_or_invalid_assets", message: "reconcile requires non-empty price assets" });
@@ -40,6 +41,7 @@ export default async function handler(req, res) {
 
     const map = new Map(assets.map((a) => [clean(a.symbol), a]));
     const ledger = await readLedger();
+    const workingLedger = JSON.parse(JSON.stringify(ledger));
     const added = [];
     const skipped = [];
     const now = new Date().toISOString();
@@ -50,11 +52,11 @@ export default async function handler(req, res) {
       if (!asset) continue;
       const symbol = normalizeSymbol(asset.symbol);
       const tiers = getTriggeredDipTiers(asset.discount, asset.rules || []);
-      let available = num(h.totalCost, num(h.currentValue, 0)) - ledgerCost(ledger[symbol]);
+      let available = num(h.totalCost, num(h.currentValue, 0)) - ledgerCost(workingLedger[symbol]);
 
       for (const item of tiers) {
         const tier = item.tier;
-        if (ledger[symbol][tier]?.length) {
+        if (workingLedger[symbol][tier]?.length) {
           skipped.push({ symbol, tier, reason: "exists" });
           continue;
         }
@@ -64,7 +66,7 @@ export default async function handler(req, res) {
           skipped.push({ symbol, tier, reason: "insufficient_wallet_cost", available, amount });
           continue;
         }
-        ledger[symbol][tier].push({
+        workingLedger[symbol][tier].push({
           time: now,
           amount,
           price: num(h.tokenPrice, num(h.marketPrice, null)),
@@ -79,8 +81,8 @@ export default async function handler(req, res) {
       }
     }
 
-    const writeResult = added.length ? await writeLedger(ledger) : { store: "unchanged" };
-    return res.status(200).json({ ok: true, addedCount: added.length, added, skipped, storage: writeResult.store, ledger });
+    const writeResult = added.length && !dryRun ? await writeLedger(workingLedger) : { store: dryRun ? "dry_run_no_write" : "unchanged" };
+    return res.status(200).json({ ok: true, dryRun, addedCount: added.length, added, skipped, storage: writeResult.store, ledger: dryRun ? ledger : workingLedger });
   } catch (error) {
     return res.status(500).json({ ok: false, error: "reconcile_tiers_failed", message: error.message });
   }
