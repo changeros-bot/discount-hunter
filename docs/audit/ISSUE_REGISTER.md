@@ -47,8 +47,8 @@ Last updated: 2026-06-26
 
 ### P1-009: Progress Engine is not unified
 - Status: Verified
-- Evidence: Audit-010
-- Summary: Progress/next-action logic exists in at least four places: `v16-full`, `telegram-alerts`, `lib/discount/progress.js`, and `lib/v16-ledger.js`.
+- Evidence: Audit-010 / Audit-019
+- Summary: Progress/next-action logic exists in at least four places: `v16-full`, `telegram-alerts`, `BuyPointAlertPortal`, and `lib/v16-ledger.js`.
 - Risk: UI, Telegram, and manual decision page may show different progress meanings.
 
 ### P1-010: telegram-alerts uses Wallet totalCost rather than Ledger
@@ -65,19 +65,19 @@ Last updated: 2026-06-26
 
 ### P1-012: v16-full ProgressBar does not use Ledger completed state
 - Status: Verified
-- Evidence: Audit-010 / Audit-013
+- Evidence: Audit-010 / Audit-013 / Audit-019
 - Summary: `progressFor(asset)` uses only discount/rules/amounts. Ledger is only displayed as text.
 - Risk: Progress bar may show a tier already completed in Ledger.
 
 ### P1-013: Telegram has multiple buy-point/progress rule implementations
 - Status: Verified
-- Evidence: Audit-011
+- Evidence: Audit-011 / Audit-019
 - Summary: `telegram-alerts`, `telegram-daily`, and `daily-summary` each calculate buy-point/progress rows separately.
 - Risk: Telegram surfaces may disagree with each other and with UI/Decision Engine.
 
 ### P1-014: daily-summary and telegram-daily are highly duplicated
 - Status: Verified
-- Evidence: Audit-011 / Audit-018
+- Evidence: Audit-011 / Audit-018 / Audit-019
 - Summary: Both read `/api/sync-wallet` and `/api/prices`, build a daily Telegram message, and calculate near-buy rows independently.
 - Risk: Duplicate maintenance and inconsistent behavior.
 
@@ -123,6 +123,13 @@ Last updated: 2026-06-26
 - Evidence: Audit-016
 - Summary: Ledger State and Alert State use `readStoreJson()` / `writeStoreJson()`. If Upstash is not configured, production/Vercel skips local file fallback and stores state only in `globalThis.__V16_MEMORY_STORE__`.
 - Risk: Ledger and Alert State can be lost after serverless cold start, process restart, or deployment if `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are missing.
+
+### P1-022: Buy point / progress logic is duplicated across UI, Portal, Telegram, and Daily endpoints
+- Status: Verified
+- Evidence: Audit-019
+- Summary: `v16-full` uses its own `progressFor()`, `BuyPointAlertPortal` uses its own `getNextBuyPoint()`, `telegram-alerts` uses `getCompletedLevel()` plus `getNextActionPoint()`, and daily endpoints use their own near-buy/progress functions. `lib/v16-ledger.js` has `getNextProgress()`, but it is not used as the shared view model across all surfaces.
+- Risk: The same symbol can show different next tier, progress, or actionable status across dashboard, portal, Telegram, and daily reports.
+- Recommended Action: Create a shared decision/progress view model and migrate all surfaces to it.
 
 ## P2
 
