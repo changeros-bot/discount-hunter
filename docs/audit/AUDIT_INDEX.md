@@ -21,10 +21,12 @@
 - Audit-018 Repository Cleanup / Dead Code Analysis ✅
 - Audit-019 Consistency / Shared Logic / Single Source of Truth ✅
 - Audit-020 Cross-module Dependency / API Chain Review ✅
+- Audit-021 Final Risk Closure ✅
+- Audit-022 Deployment Readiness Gate ✅
 
-Progress: 20/22 (~91%)
+Progress: 22/22 (100%)
 
-This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
+This document is the master index for the V16 architecture audit. The audit map is complete, but V16 is not yet production-approved. Audit-021 and Audit-022 convert the remaining unknowns into explicit fix, deployment, and runtime verification gates.
 
 ## Latest Verified Findings
 - Telegram transport layer is clean; risks are in upper-level API flows.
@@ -48,3 +50,5 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - Buy point and progress logic is duplicated across `v16-full`, BuyPointAlertPortal, Telegram alerts, Telegram daily, and daily-summary. `lib/v16-ledger.js` has `getNextProgress()`, but it is not the single source of truth for all surfaces.
 - `/api/prices` and `/api/sync-wallet` are high-impact upstream dependencies. A failure in either can degrade multiple UI, Telegram, reconcile, and report flows.
 - `/reconcile` calls `/api/prices`, `/api/sync-wallet`, then `/api/reconcile-tiers`, but does not explicitly gate upstream failures before sending data to reconcile.
+- Audit-021 classifies remaining findings into blocking, deferrable, cleanup, and runtime-only verification groups.
+- Audit-022 does not approve production release; it defines the minimum release gate for V16 fix-and-release hardening.
