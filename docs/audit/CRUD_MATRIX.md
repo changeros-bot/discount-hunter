@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-26
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, State, and Runtime Config. It is based on Audit-001 through Audit-017.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, State, Runtime Config, and Cleanup Inventory. It is based on Audit-001 through Audit-018.
 
 ## Core APIs and UI
 
@@ -18,7 +18,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/sync-wallet.js` | ❌ | ❌ | ❌ | ❌ | ✅ live RPC + transfer cost basis | ❌ | ✅ token/reference prices | ❌ | ❌ | Critical wallet source API; not checked by v16-status |
 | `pages/api/telegram-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ next action | ✅ own engine | Sends every call; not checked by v16-status |
 | `pages/api/telegram-alert-check.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ alert cooldown check | ❌ | Uses Alert State; checked by v16-status |
-| `pages/api/telegram-daily.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Daily Telegram report |
+| `pages/api/telegram-daily.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Daily Telegram report; duplicate with daily-summary |
 | `pages/api/daily-summary.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Duplicates telegram-daily-like flow |
 | `pages/api/daily-position-report.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ❌ | ❌ | Wallet-only position report; optional Telegram send; checked by v16-status |
 | `pages/api/wallet-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ✅ wallet health | ❌ | Sends only on anomaly or `notify=1` |
@@ -55,6 +55,18 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `MORALIS_MAX_PAGES` | `lib/xstocks/moralis.js` | Optional tuning | Defaults to 20 pages |
 | `MEGANODE_API_KEY` / `NODEREAL_API_KEY` | `lib/xstocks/transfer-source.js`, MegaNode/NodeReal path | Optional transfer source | Transfer source falls through to legacy/empty transfers |
 | `MEGANODE_ENDPOINT` / `NODEREAL_ENDPOINT` | `lib/xstocks/transfer-source.js`, MegaNode/NodeReal path | Optional transfer source | Transfer source falls through to legacy/empty transfers |
+
+## Cleanup Inventory
+
+| Category | Items | Current Action | Notes |
+|---|---|---|---|
+| Core keep | `lib/v16-ledger.js`, `lib/state/kv.js`, `/api/prices`, `/api/sync-wallet`, `/api/today-decisions`, `/api/buy-ledger`, `/api/manual-buy`, `/api/reconcile-tiers` | Keep | Critical system path; do not delete |
+| Legacy but risky to delete | `/api/reconcile-ledger` | Keep until replacement/deprecation decision | D1-only legacy writer; P0 issue exists |
+| Debug API candidates | `pages/api/debug-*.js`, `pages/api/binance-debug.js`, `pages/api/ondo-debug.js`, `pages/api/wallet-contract-debug.js`, `pages/debug-wallet.js` | Archive/delete candidate after final audit | Useful diagnostics but should not remain mixed with production API without clear gating |
+| Legacy BscScan chain | `lib/xstocks/bscscan-legacy.js`, `debug-pnl`, `debug-transfers`, `debug-ledger` | Archive/delete candidate as a group | Current search shows use only in debug endpoints |
+| Duplicate daily reports | `pages/api/telegram-daily.js`, `pages/api/daily-summary.js` | Merge candidate | Same core flow: sync wallet + prices + Telegram daily message |
+| Historical docs | `docs/PROGRESS.md`, `docs/AI_HANDOFF.md`, `docs/SOP-DEBUG.md`, possibly `CHANGELOG.md` | Move to `docs/archive/` candidate | Keep historical context, but separate from active spec docs |
+| Active docs | `README.md`, `docs/V16_SPEC.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/STATE_MACHINE.md`, `docs/TEST_CASES.md`, `docs/KNOWN_BUGS.md`, `docs/audit/*` | Keep | Active handoff/spec/audit documents |
 
 ## Debug APIs
 
