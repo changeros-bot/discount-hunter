@@ -14,8 +14,9 @@
 - Audit-011 Telegram Architecture ✅
 - Audit-012 Alert State Engine ✅
 - Audit-013 v16-full Architecture ✅
+- Audit-014 v16-manual Architecture ✅
 
-Progress: 13/22 (~59%)
+Progress: 14/22 (~64%)
 
 This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
 
@@ -28,3 +29,6 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - `v16-full` avoids the `today-decisions` hidden write path by passing an explicit Ledger payload.
 - `v16-full` buy-zone grouping uses `/api/prices` price signal, not Ledger actionable state.
 - `v16-full` refreshes `loadAll()` every 5 seconds; this is read-heavy but not a Ledger pollution risk.
+- `v16-manual` calls `/api/today-decisions` without an explicit Ledger payload, so it can trigger the hidden store-ledger write path.
+- `manual-buy` uses the formal `appendBuy()` Ledger writer, but `appendBuy()` is not idempotent and does not prevent duplicate same-tier entries.
+- `v16-status` is a checklist/status endpoint, not a verified safety report.
