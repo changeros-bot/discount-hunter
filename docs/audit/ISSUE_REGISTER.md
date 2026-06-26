@@ -77,7 +77,7 @@ Last updated: 2026-06-26
 
 ### P1-014: daily-summary and telegram-daily are highly duplicated
 - Status: Verified
-- Evidence: Audit-011
+- Evidence: Audit-011 / Audit-018
 - Summary: Both read `/api/sync-wallet` and `/api/prices`, build a daily Telegram message, and calculate near-buy rows independently.
 - Risk: Duplicate maintenance and inconsistent behavior.
 
@@ -128,7 +128,7 @@ Last updated: 2026-06-26
 
 ### P2-004: Debug APIs bypass sync-wallet and read Wallet pipeline directly
 - Status: Verified
-- Evidence: Audit-002
+- Evidence: Audit-002 / Audit-018
 - Summary: Debug APIs read transfers/RPC/cost pipeline directly but do not write Ledger, Wallet, or formal state.
 - Risk: Documentation issue, not a data pollution issue.
 
@@ -179,3 +179,9 @@ Last updated: 2026-06-26
 - Evidence: Audit-017
 - Summary: README/CONFIG list the main env vars, but runtime code also supports `MORALIS_API_KEY`, `MORALIS_KEY`, `MORALIS_LIMIT`, `MORALIS_MAX_PAGES`, `MEGANODE_API_KEY`, `NODEREAL_API_KEY`, `MEGANODE_ENDPOINT`, `NODEREAL_ENDPOINT`, and `NEXT_PUBLIC_BSC_RPC_URL`.
 - Risk: Deployment handoff may miss optional but important data-source configuration and fallback behavior.
+
+### P2-013: Repository cleanup backlog should be handled after architecture audit
+- Status: Verified
+- Evidence: Audit-018
+- Summary: Repo contains many debug endpoints, legacy utilities, duplicate daily Telegram endpoints, and historical docs. They are cleanup candidates, but should not be deleted before the full audit and reference check are complete.
+- Risk: Premature deletion could remove useful diagnostics or historical context. Recommended action is a post-audit cleanup phase with explicit archive/delete commits.
