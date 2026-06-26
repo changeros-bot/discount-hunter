@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-26
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-016.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, State, and Runtime Config. It is based on Audit-001 through Audit-017.
 
 ## Core APIs and UI
 
@@ -26,7 +26,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/telegram-test.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Pure Telegram send test |
 | `pages/api/v16-status.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ | Partial smoke-test + static checklist; does not cover critical APIs |
 | `lib/state/kv.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Low-level Upstash `GET` / `SET` JSON wrapper |
-| `lib/telegram/notify.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Telegram transport only |
+| `lib/telegram/notify.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Telegram transport only; skips if env missing |
 | `cloudflare/discount-hunter-cron-worker.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ direct | Triggers `/api/telegram-alerts`; runtime deployment pending |
 | `pages/v16-full.js` | ✅ via `/api/buy-ledger` | ❌ direct / ✅ indirect via reconcile | ❌ direct | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ own engine | Main dashboard; triggers `/api/reconcile-tiers`; 5s read refresh |
 | `pages/v16-manual.js` | ✅ via `/api/buy-ledger` | ✅ via `/api/manual-buy`; ✅ possible hidden write via `today-decisions` | ✅ via manual-buy | ✅ indirect via `today-decisions` without ledger | ❌ | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ via today-decisions | Manual decision surface; calls `today-decisions` without ledger |
@@ -38,6 +38,23 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | Ledger State | `readLedger()` | `writeLedger()`, `appendBuy()`, `markLeftBuyZonesForAssets()`, `reconcile-tiers`, `reconcile-ledger` | `discount-hunter:v16:buy-ledger` / `data/buy-ledger.json` | Upstash → memory → local file only in non-production/non-Vercel | Production without Upstash uses volatile memory |
 | Alert State | `readAlerts()`, `telegram-alert-check` | `writeAlerts()`, `markAlertSent()`, `telegram-alert-check` with commit | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` | Upstash → memory → local file only in non-production/non-Vercel | Main Telegram send flow does not use it yet |
 | Wallet Snapshot State | `wallet-change-alerts` | `wallet-change-alerts` | `discount-hunter:v16:wallet-snapshot:{walletKey}` | Upstash only; disabled without Upstash | No memory/file fallback; returns `enabled:false` if missing config |
+
+## Runtime Env Inventory
+
+| Env Var | Used By | Required Level | Behavior If Missing |
+|---|---|---|---|
+| `WALLET_ADDRESS` | `/api/sync-wallet` | Required for default wallet sync | API returns invalid/missing wallet error if no body/query address |
+| `BSC_RPC_URL` | `lib/xstocks/rpcBalances.js` | Optional but recommended | Falls back to public BSC RPC URLs |
+| `NEXT_PUBLIC_BSC_RPC_URL` | `lib/xstocks/rpcBalances.js` | Optional | Alternative custom RPC fallback source |
+| `TELEGRAM_BOT_TOKEN` | `lib/telegram/notify.js` | Required for Telegram send | Telegram send returns `ok:false`, `skipped:true` |
+| `TELEGRAM_CHAT_ID` | `lib/telegram/notify.js` | Required for Telegram send | Telegram send returns `ok:false`, `skipped:true` |
+| `UPSTASH_REDIS_REST_URL` | `lib/state/kv.js` | Required for durable Ledger/Alert/Snapshot state | Ledger/Alert fall back to memory/file rules; wallet snapshot disabled |
+| `UPSTASH_REDIS_REST_TOKEN` | `lib/state/kv.js` | Required for durable Ledger/Alert/Snapshot state | Ledger/Alert fall back to memory/file rules; wallet snapshot disabled |
+| `MORALIS_API_KEY` / `MORALIS_KEY` | `lib/xstocks/moralis.js`, transfer source | Optional transfer source | Transfer source falls through to MegaNode/legacy/empty transfers |
+| `MORALIS_LIMIT` | `lib/xstocks/moralis.js` | Optional tuning | Defaults to internal Moralis limit |
+| `MORALIS_MAX_PAGES` | `lib/xstocks/moralis.js` | Optional tuning | Defaults to 20 pages |
+| `MEGANODE_API_KEY` / `NODEREAL_API_KEY` | `lib/xstocks/transfer-source.js`, MegaNode/NodeReal path | Optional transfer source | Transfer source falls through to legacy/empty transfers |
+| `MEGANODE_ENDPOINT` / `NODEREAL_ENDPOINT` | `lib/xstocks/transfer-source.js`, MegaNode/NodeReal path | Optional transfer source | Transfer source falls through to legacy/empty transfers |
 
 ## Debug APIs
 
