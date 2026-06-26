@@ -1,6 +1,6 @@
 # DCA 折價獵人 V16 Issue Register
 
-Last updated: 2026-06-25
+Last updated: 2026-06-26
 
 ## P0
 
@@ -17,6 +17,13 @@ Last updated: 2026-06-25
 - Summary: `pages/api/reconcile-ledger.js` only backfills D1 and cannot handle D2/D3/D4 or gap-down multi-tier backfill.
 - Risk: If used accidentally, Ledger backfill may be incomplete.
 - Current decision: Later decide whether to deprecate, disable, or redirect to `reconcile-tiers`.
+
+### P0-003: v16-manual calls today-decisions without Ledger payload
+- Status: Verified
+- Evidence: Audit-014
+- Summary: `pages/v16-manual.js` posts only `{ assets }` to `/api/today-decisions`. Because no explicit Ledger is provided, `today-decisions` uses the store-ledger path and can call `markLeftBuyZonesForAssets()`, which may write Ledger state.
+- Risk: A read/decision page can mutate Ledger state unexpectedly.
+- Current decision: Fix candidate is to make `v16-manual` fetch `/api/buy-ledger` first and pass `ledger` into `/api/today-decisions`, matching `v16-full`.
 
 ## P1
 
@@ -52,7 +59,7 @@ Last updated: 2026-06-25
 
 ### P1-011: v16-manual progress differs from Telegram progress
 - Status: Verified
-- Evidence: Audit-010
+- Evidence: Audit-010 / Audit-014
 - Summary: v16-manual displays triggered progress as 100%, while Telegram computes next action progress.
 - Risk: Same symbol may appear differently across surfaces.
 
@@ -105,6 +112,12 @@ Last updated: 2026-06-25
 - Summary: `v16-full` groups buy-zone rows by `/api/prices` `asset.signal.level`, which is based only on price discount/rules/amounts and does not consider Ledger completed tiers.
 - Risk: Buy-zone section can include assets whose current tier is already recorded in Ledger; user must rely on decision panel and Ledger text to know whether it is truly actionable.
 
+### P1-020: manual-buy / appendBuy does not prevent duplicate same-tier Ledger entries
+- Status: Verified
+- Evidence: Audit-014
+- Summary: `/api/manual-buy` calls `appendBuy()`, which validates symbol, tier, and amount but then pushes a new row into Ledger without checking whether that symbol+tier has already been recorded.
+- Risk: Repeated UI clicks or repeated Telegram/manual commands can create duplicate entries for the same symbol+tier.
+
 ## P2
 
 ### P2-004: Debug APIs bypass sync-wallet and read Wallet pipeline directly
@@ -130,3 +143,9 @@ Last updated: 2026-06-25
 - Evidence: Audit-013
 - Summary: `v16-full` calls `loadAll()` every 5 seconds, which reads `/api/prices`, `/api/buy-ledger`, and `/api/today-decisions`.
 - Risk: This is not a Ledger pollution risk, but may increase Binance public API, Vercel, and KV read pressure.
+
+### P2-008: v16-status checklist may overstate verified safety
+- Status: Verified
+- Evidence: Audit-014
+- Summary: `/api/v16-status` returns checklist booleans such as `sameTier24hReset`, `telegramCooldown`, and `frontEndIntegrated`, but these are static status claims rather than proof of full safety integration.
+- Risk: Status endpoint may imply protection that is incomplete or not wired into the actual production flow.
