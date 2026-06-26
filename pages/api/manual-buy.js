@@ -29,6 +29,16 @@ function parseCommand(text) {
 
 function buildTelegramText(result) {
   const modeText = result.tier === "N" ? "DCA定期買入" : `折價買入 ${result.tier}`;
+  if (result.duplicate) {
+    return [
+      "⚠️ 已存在，未重複登帳",
+      "",
+      `標的：${result.symbol}`,
+      `類型：${modeText}`,
+      result.row?.time ? `原登帳時間：${result.row.time}` : null
+    ].filter(Boolean).join("\n");
+  }
+
   return [
     "✅ 已登帳",
     "",
