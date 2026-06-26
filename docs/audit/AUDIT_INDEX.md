@@ -18,8 +18,9 @@
 - Audit-015 v16-status / System Status Architecture ✅
 - Audit-016 State Store / KV / File Fallback Architecture ✅
 - Audit-017 Runtime / Deployment Config Architecture ✅
+- Audit-018 Repository Cleanup / Dead Code Analysis ✅
 
-Progress: 17/22 (~77%)
+Progress: 18/22 (~82%)
 
 This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
 
@@ -41,3 +42,4 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - Wallet Snapshot State is Upstash-only; without Upstash, `/api/wallet-change-alerts` returns `enabled:false`.
 - Runtime docs list the main env vars, but package scripts do not include automated env validation or deployment health gates.
 - Runtime code supports additional env vars not listed in README/CONFIG, including Moralis, MegaNode/NodeReal, and NEXT_PUBLIC_BSC_RPC_URL options.
+- Repository cleanup should be handled as a separate post-audit phase; debug APIs, legacy BscScan utilities, duplicate daily Telegram endpoints, and historical docs are cleanup candidates but should not be deleted during architecture audit.
