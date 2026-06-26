@@ -34,11 +34,14 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
-        message: "buy_recorded",
+        message: result.duplicate ? "buy_record_duplicate_skipped" : "buy_recorded",
         symbol: result.symbol,
         tier: result.tier,
         row: result.row,
-        ledger: result.ledger
+        ledger: result.ledger,
+        duplicate: result.duplicate,
+        duplicateReason: result.duplicateReason,
+        storage: result.storage
       });
     }
 
