@@ -2,13 +2,13 @@
 
 Last updated: 2026-06-26
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-015.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, and State. It is based on Audit-001 through Audit-016.
 
 ## Core APIs and UI
 
 | Module / API | Read Ledger | Write Ledger | Append Buy | Mark Left Zones | Read Wallet | Write Wallet | Price | Decision | Progress | Notes |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger, Decision, Progress, and Alert State helpers |
+| `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger, Decision, Progress, and Alert State helpers; uses Upstash/memory/file fallback store |
 | `pages/api/buy-ledger.js` | ✅ | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | GET reads Ledger; POST appends manual rows |
 | `pages/api/manual-buy.js` | ✅ indirect | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Validates symbol/tier/amount but does not dedup same-tier rows |
 | `pages/api/reconcile-tiers.js` | ✅ | ✅ direct | ❌ | ❌ | ✅ indirect via posted holdings | ❌ | ❌ | ✅ `getTriggeredDipTiers()` | ❌ | Backfill D1-D4 from holdings and assets; not checked by v16-status |
@@ -22,9 +22,10 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/daily-summary.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Duplicates telegram-daily-like flow |
 | `pages/api/daily-position-report.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ❌ | ❌ | Wallet-only position report; optional Telegram send; checked by v16-status |
 | `pages/api/wallet-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ✅ wallet health | ❌ | Sends only on anomaly or `notify=1` |
-| `pages/api/wallet-change-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ✅ wallet diff | ❌ | Writes KV wallet snapshot state; checked by v16-status |
+| `pages/api/wallet-change-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ❌ | ✅ wallet diff | ❌ | Writes Upstash-only wallet snapshot state; disabled without Upstash |
 | `pages/api/telegram-test.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Pure Telegram send test |
 | `pages/api/v16-status.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ | Partial smoke-test + static checklist; does not cover critical APIs |
+| `lib/state/kv.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Low-level Upstash `GET` / `SET` JSON wrapper |
 | `lib/telegram/notify.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Telegram transport only |
 | `cloudflare/discount-hunter-cron-worker.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ direct | Triggers `/api/telegram-alerts`; runtime deployment pending |
 | `pages/v16-full.js` | ✅ via `/api/buy-ledger` | ❌ direct / ✅ indirect via reconcile | ❌ direct | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ own engine | Main dashboard; triggers `/api/reconcile-tiers`; 5s read refresh |
@@ -32,13 +33,11 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 
 ## State Store / KV Writers
 
-| Module / Function | State Read | State Write | Key / Store | Notes |
-|---|---:|---:|---|---|
-| `wallet-change-alerts` | ✅ | ✅ | `discount-hunter:v16:wallet-snapshot:{walletKey}` | Baseline and diff snapshot |
-| `readAlerts()` | ✅ | ❌ | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` fallback | Alert state read |
-| `writeAlerts()` | ❌ | ✅ | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` fallback | Alert state write |
-| `markAlertSent()` | ✅ | ✅ | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` fallback | Stores `{ lastAlert }` for key |
-| `telegram-alert-check` | ✅ | ✅ conditional | Alert State | POST with `commit=true` marks sent |
+| State | Reader(s) | Writer(s) | Key / Store | Fallback Behavior | Notes |
+|---|---|---|---|---|---|
+| Ledger State | `readLedger()` | `writeLedger()`, `appendBuy()`, `markLeftBuyZonesForAssets()`, `reconcile-tiers`, `reconcile-ledger` | `discount-hunter:v16:buy-ledger` / `data/buy-ledger.json` | Upstash → memory → local file only in non-production/non-Vercel | Production without Upstash uses volatile memory |
+| Alert State | `readAlerts()`, `telegram-alert-check` | `writeAlerts()`, `markAlertSent()`, `telegram-alert-check` with commit | `discount-hunter:v16:telegram-alerts` / `data/alerts.json` | Upstash → memory → local file only in non-production/non-Vercel | Main Telegram send flow does not use it yet |
+| Wallet Snapshot State | `wallet-change-alerts` | `wallet-change-alerts` | `discount-hunter:v16:wallet-snapshot:{walletKey}` | Upstash only; disabled without Upstash | No memory/file fallback; returns `enabled:false` if missing config |
 
 ## Debug APIs
 
@@ -58,7 +57,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `markLeftBuyZonesForAssets()` | Ledger | `readLedger()` → mutate row leftBuyZone → `writeLedger()` if changed | Verified |
 | `reconcile-tiers` | Ledger | Direct push into `ledger[symbol][tier]` → `writeLedger()` | Verified |
 | `reconcile-ledger` | Ledger | Direct D1 push → `writeLedger()` | Verified legacy |
-| `wallet-change-alerts` | KV state | `getJson()` → diff → `setJson()` | Verified |
+| `wallet-change-alerts` | KV wallet snapshot state | `getJson()` → diff → `setJson()` | Verified; Upstash-only |
 | `writeAlerts()` / `markAlertSent()` | Alerts state | `readAlerts()` → mutate key → `writeAlerts()` | Verified |
 
 ## Confirmed Non-Writers
