@@ -39,12 +39,12 @@ export default function V16ManualPage() {
     setError("");
     try {
       const prices = await jsonFetch(`/api/prices?t=${Date.now()}`);
+      const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assets: prices.data || [] })
+        body: JSON.stringify({ assets: prices.data || [], ledger: ledgerData.ledger || {} })
       });
-      const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const statusData = await jsonFetch(`/api/v16-status?t=${Date.now()}`);
 
       setDecisions(today.decisions || []);
