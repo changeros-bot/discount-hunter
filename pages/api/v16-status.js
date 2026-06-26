@@ -1,4 +1,4 @@
-const { hasKvConfig } = require("../../lib/state/kv");
+const { hasKvConfig, requiresDurableKv, getStorageMode } = require("../../lib/state/kv");
 
 async function readJson(response) {
   try {
@@ -16,6 +16,8 @@ async function handler(req, res) {
   const host = req.headers.host;
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const base = `${protocol}://${host}`;
+  const storage = getStorageMode();
+  const durableStateOk = hasKvConfig() || !requiresDurableKv();
 
   const checks = [
     { key: "buyLedger", label: "Buy Ledger", path: "/api/buy-ledger" },
@@ -26,7 +28,17 @@ async function handler(req, res) {
     { key: "dailyPositionReport", label: "Daily Position Report", path: "/api/daily-position-report" },
   ];
 
-  const results = [];
+  const results = [
+    {
+      key: "durableState",
+      label: "Production Durable State",
+      status: durableStateOk ? "ok" : "error",
+      storage,
+      requiresDurableKv: requiresDurableKv(),
+      hasKvConfig: hasKvConfig(),
+      reason: durableStateOk ? null : "missing_required_upstash_kv"
+    }
+  ];
 
   for (const check of checks) {
     if (check.manual) {
@@ -50,9 +62,14 @@ async function handler(req, res) {
   }
 
   return res.status(200).json({
-    ok: true,
+    ok: durableStateOk,
     version: "16.1-status",
-    storage: hasKvConfig() ? "upstash_kv" : "file_fallback",
+    storage,
+    durableStateOk,
+    requiresDurableKv: requiresDurableKv(),
+    hasKvConfig: hasKvConfig(),
+    releaseBlocked: !durableStateOk,
+    releaseBlocker: durableStateOk ? null : "missing_required_upstash_kv",
     checklist: {
       buyLedger: true,
       dcaSplitN: true,
