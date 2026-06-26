@@ -167,3 +167,15 @@ Last updated: 2026-06-26
 - Evidence: Audit-016
 - Summary: `/api/wallet-change-alerts` checks `hasKvConfig()` at startup. If Upstash KV is missing, it returns `enabled:false` with `reason: missing_upstash_env` and does not create a snapshot, diff holdings, or send Telegram.
 - Risk: Wallet change monitoring will not work without Upstash. This is explicit and safe, but should be visible in deployment checklist.
+
+### P2-011: No automated deployment environment validation
+- Status: Verified
+- Evidence: Audit-017
+- Summary: `package.json` only defines `dev`, `build`, and `start`. No lint/test/typecheck/env-check/predeploy script or health gate was found.
+- Risk: Missing Wallet, Telegram, Upstash, or RPC-related env vars may only be discovered at runtime.
+
+### P2-012: Runtime env docs do not list all supported env vars
+- Status: Verified
+- Evidence: Audit-017
+- Summary: README/CONFIG list the main env vars, but runtime code also supports `MORALIS_API_KEY`, `MORALIS_KEY`, `MORALIS_LIMIT`, `MORALIS_MAX_PAGES`, `MEGANODE_API_KEY`, `NODEREAL_API_KEY`, `MEGANODE_ENDPOINT`, `NODEREAL_ENDPOINT`, and `NEXT_PUBLIC_BSC_RPC_URL`.
+- Risk: Deployment handoff may miss optional but important data-source configuration and fallback behavior.
