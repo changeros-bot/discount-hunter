@@ -8,6 +8,34 @@ async function readJson(response) {
   }
 }
 
+function resultStatus(response, body) {
+  return response.ok && body?.ok !== false ? "ok" : "error";
+}
+
+async function callJson(base, check, payload = null) {
+  const response = await fetch(`${base}${check.path}?t=${Date.now()}`, {
+    cache: "no-store",
+    method: check.method || "GET",
+    headers: payload ? { "Content-Type": "application/json" } : undefined,
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+  const body = await readJson(response);
+  return {
+    ...check,
+    status: resultStatus(response, body),
+    httpStatus: response.status,
+    responseOk: body?.ok,
+    reason: body?.reason || body?.error || null,
+    body,
+  };
+}
+
+function summarizeResult(result) {
+  const summary = { ...result };
+  delete summary.body;
+  return summary;
+}
+
 async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -19,19 +47,11 @@ async function handler(req, res) {
   const storage = getStorageMode();
   const durableStateOk = hasKvConfig() || !requiresDurableKv();
 
-  const checks = [
-    { key: "buyLedger", label: "Buy Ledger", path: "/api/buy-ledger" },
-    { key: "manualBuy", label: "Manual Buy API", path: "/api/manual-buy", method: "POST", manual: true },
-    { key: "todayDecisions", label: "Today Decisions", path: "/api/today-decisions", method: "POST", manual: true },
-    { key: "telegramCooldown", label: "Telegram Cooldown", path: "/api/telegram-alert-check" },
-    { key: "walletChangeAlerts", label: "Wallet Change Alerts", path: "/api/wallet-change-alerts" },
-    { key: "dailyPositionReport", label: "Daily Position Report", path: "/api/daily-position-report" },
-  ];
-
   const results = [
     {
       key: "durableState",
       label: "Production Durable State",
+      critical: true,
       status: durableStateOk ? "ok" : "error",
       storage,
       requiresDurableKv: requiresDurableKv(),
@@ -40,38 +60,97 @@ async function handler(req, res) {
     }
   ];
 
-  for (const check of checks) {
-    if (check.manual) {
-      results.push({ ...check, status: "manual_test_required" });
-      continue;
-    }
+  let pricesResult = null;
+  let walletResult = null;
 
+  try {
+    pricesResult = await callJson(base, { key: "prices", label: "Prices", path: "/api/prices", critical: true });
+    results.push(summarizeResult({
+      ...pricesResult,
+      dataCount: Array.isArray(pricesResult.body?.data) ? pricesResult.body.data.length : 0,
+    }));
+  } catch (error) {
+    results.push({ key: "prices", label: "Prices", path: "/api/prices", critical: true, status: "error", error: error.message });
+  }
+
+  try {
+    walletResult = await callJson(base, { key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true }, {});
+    results.push(summarizeResult({
+      ...walletResult,
+      holdingsCount: Array.isArray(walletResult.body?.holdings) ? walletResult.body.holdings.length : 0,
+    }));
+  } catch (error) {
+    results.push({ key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true, status: "error", error: error.message });
+  }
+
+  if (pricesResult?.status === "ok" && walletResult?.status === "ok") {
     try {
-      const response = await fetch(`${base}${check.path}?t=${Date.now()}`, { cache: "no-store" });
-      const body = await readJson(response);
-      results.push({
-        ...check,
-        status: response.ok && body?.ok !== false ? "ok" : "warn",
-        httpStatus: response.status,
-        responseOk: body?.ok,
-        reason: body?.reason || body?.error || null,
-      });
+      const reconcileResult = await callJson(
+        base,
+        { key: "reconcileTiersDryRun", label: "Reconcile Tiers Dry Run", path: "/api/reconcile-tiers", method: "POST", critical: true },
+        { assets: pricesResult.body?.data || [], holdings: walletResult.body?.holdings || [], dryRun: true }
+      );
+      results.push(summarizeResult({
+        ...reconcileResult,
+        dryRun: reconcileResult.body?.dryRun,
+        addedCount: reconcileResult.body?.addedCount,
+        storage: reconcileResult.body?.storage,
+      }));
+    } catch (error) {
+      results.push({ key: "reconcileTiersDryRun", label: "Reconcile Tiers Dry Run", path: "/api/reconcile-tiers", method: "POST", critical: true, status: "error", error: error.message });
+    }
+  } else {
+    results.push({
+      key: "reconcileTiersDryRun",
+      label: "Reconcile Tiers Dry Run",
+      path: "/api/reconcile-tiers",
+      method: "POST",
+      critical: true,
+      status: "blocked",
+      reason: "prices_or_wallet_not_ok"
+    });
+  }
+
+  const passiveChecks = [
+    { key: "buyLedger", label: "Buy Ledger", path: "/api/buy-ledger" },
+    { key: "telegramCooldown", label: "Telegram Cooldown", path: "/api/telegram-alert-check" },
+    { key: "walletChangeAlerts", label: "Wallet Change Alerts", path: "/api/wallet-change-alerts" },
+    { key: "dailyPositionReport", label: "Daily Position Report", path: "/api/daily-position-report" },
+  ];
+
+  for (const check of passiveChecks) {
+    try {
+      const result = await callJson(base, check);
+      results.push(summarizeResult(result));
     } catch (error) {
       results.push({ ...check, status: "error", error: error.message });
     }
   }
 
+  results.push(
+    { key: "manualBuy", label: "Manual Buy API", path: "/api/manual-buy", method: "POST", status: "manual_test_required" },
+    { key: "todayDecisions", label: "Today Decisions", path: "/api/today-decisions", method: "POST", status: "manual_test_required" },
+    { key: "telegramTransport", label: "Telegram Transport", path: "/api/telegram-test", method: "POST", status: "manual_test_required", reason: "avoid_forced_spam_send" }
+  );
+
+  const failedCritical = results.filter((item) => item.critical && item.status !== "ok");
+  const releaseBlocked = failedCritical.length > 0;
+
   return res.status(200).json({
-    ok: durableStateOk,
-    version: "16.1-status",
+    ok: !releaseBlocked,
+    version: "16.2-health-gate",
     storage,
     durableStateOk,
     requiresDurableKv: requiresDurableKv(),
     hasKvConfig: hasKvConfig(),
-    releaseBlocked: !durableStateOk,
-    releaseBlocker: durableStateOk ? null : "missing_required_upstash_kv",
+    releaseBlocked,
+    releaseBlockers: failedCritical.map((item) => ({ key: item.key, reason: item.reason || item.error || item.status })),
     checklist: {
       buyLedger: true,
+      pricesHealthGate: true,
+      walletHealthGate: true,
+      reconcileDryRunHealthGate: true,
+      durableStateGate: true,
       dcaSplitN: true,
       dipSplitD1D4: true,
       sameTier24hReset: true,
