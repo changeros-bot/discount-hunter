@@ -1,4 +1,4 @@
-import { markLeftBuyZonesForAssets, getExecutableTiers, normalizeLedger } from "../../lib/v16-ledger";
+import { readLedger, getExecutableTiers, normalizeLedger } from "../../lib/v16-ledger";
 
 function sortDecisions(a, b) {
   if (a.level !== b.level) return b.level - a.level;
@@ -67,14 +67,14 @@ export default async function handler(req, res) {
       const hasPostedLedger = postedLedger && typeof postedLedger === "object";
       const ledgerResult = hasPostedLedger
         ? { ledger: normalizeLedger(postedLedger), changed: false, source: "posted-ledger" }
-        : { ...(await markLeftBuyZonesForAssets(assets)), source: "store-ledger" };
+        : { ledger: await readLedger(), changed: false, source: "store-ledger-readonly" };
       const decisions = buildDecisions(assets, ledgerResult.ledger, now);
       return res.status(200).json({
         ok: true,
         mode: "posted-assets",
         ledgerSource: ledgerResult.source,
         updatedAt: now,
-        ledgerUpdatedForLeftBuyZone: ledgerResult.changed,
+        ledgerUpdatedForLeftBuyZone: false,
         count: decisions.length,
         totalAmount: decisions.reduce((s, item) => s + Number(item.amount || 0), 0),
         decisions
