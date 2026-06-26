@@ -19,8 +19,9 @@
 - Audit-016 State Store / KV / File Fallback Architecture ✅
 - Audit-017 Runtime / Deployment Config Architecture ✅
 - Audit-018 Repository Cleanup / Dead Code Analysis ✅
+- Audit-019 Consistency / Shared Logic / Single Source of Truth ✅
 
-Progress: 18/22 (~82%)
+Progress: 19/22 (~86%)
 
 This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
 
@@ -43,3 +44,4 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - Runtime docs list the main env vars, but package scripts do not include automated env validation or deployment health gates.
 - Runtime code supports additional env vars not listed in README/CONFIG, including Moralis, MegaNode/NodeReal, and NEXT_PUBLIC_BSC_RPC_URL options.
 - Repository cleanup should be handled as a separate post-audit phase; debug APIs, legacy BscScan utilities, duplicate daily Telegram endpoints, and historical docs are cleanup candidates but should not be deleted during architecture audit.
+- Buy point and progress logic is duplicated across `v16-full`, BuyPointAlertPortal, Telegram alerts, Telegram daily, and daily-summary. `lib/v16-ledger.js` has `getNextProgress()`, but it is not the single source of truth for all surfaces.
