@@ -2,13 +2,13 @@
 
 Last updated: 2026-06-26
 
-This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, State, Runtime Config, and Cleanup Inventory. It is based on Audit-001 through Audit-018.
+This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, Progress, State, Runtime Config, Cleanup Inventory, and Shared Logic. It is based on Audit-001 through Audit-019.
 
 ## Core APIs and UI
 
 | Module / API | Read Ledger | Write Ledger | Append Buy | Mark Left Zones | Read Wallet | Write Wallet | Price | Decision | Progress | Notes |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger, Decision, Progress, and Alert State helpers; uses Upstash/memory/file fallback store |
+| `lib/v16-ledger.js` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | Core Ledger, Decision, Progress, and Alert State helpers; includes `getExecutableTiers()` and `getNextProgress()` |
 | `pages/api/buy-ledger.js` | ✅ | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | GET reads Ledger; POST appends manual rows |
 | `pages/api/manual-buy.js` | ✅ indirect | ✅ via `appendBuy()` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Validates symbol/tier/amount but does not dedup same-tier rows |
 | `pages/api/reconcile-tiers.js` | ✅ | ✅ direct | ❌ | ❌ | ✅ indirect via posted holdings | ❌ | ❌ | ✅ `getTriggeredDipTiers()` | ❌ | Backfill D1-D4 from holdings and assets; not checked by v16-status |
@@ -16,7 +16,7 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/today-decisions.js` | ✅ | ✅ conditional | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ `getExecutableTiers()` | ✅ triggered 100% | Hidden write when no posted ledger; marked manual_test_required by v16-status |
 | `pages/api/prices.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Binance xStocks | ✅ initial signal | ❌ | Price API also calculates signal; not checked by v16-status |
 | `pages/api/sync-wallet.js` | ❌ | ❌ | ❌ | ❌ | ✅ live RPC + transfer cost basis | ❌ | ✅ token/reference prices | ❌ | ❌ | Critical wallet source API; not checked by v16-status |
-| `pages/api/telegram-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ next action | ✅ own engine | Sends every call; not checked by v16-status |
+| `pages/api/telegram-alerts.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ next action | ✅ own engine | Sends every call; computes completed level from wallet cost and own next-action view |
 | `pages/api/telegram-alert-check.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ alert cooldown check | ❌ | Uses Alert State; checked by v16-status |
 | `pages/api/telegram-daily.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Daily Telegram report; duplicate with daily-summary |
 | `pages/api/daily-summary.js` | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Duplicates telegram-daily-like flow |
@@ -27,9 +27,20 @@ This matrix tracks which modules read or write Ledger, Wallet, Price, Decision, 
 | `pages/api/v16-status.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ | Partial smoke-test + static checklist; does not cover critical APIs |
 | `lib/state/kv.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Low-level Upstash `GET` / `SET` JSON wrapper |
 | `lib/telegram/notify.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Telegram transport only; skips if env missing |
+| `components/BuyPointAlertPortal.js` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ via `/api/prices` | ✅ near-buy rows | ✅ own engine | Frontend portal computes next buy point without Ledger/Wallet |
 | `cloudflare/discount-hunter-cron-worker.js` | ❌ | ❌ | ❌ | ❌ | ❌ direct | ❌ | ❌ direct | ❌ direct | ❌ direct | Triggers `/api/telegram-alerts`; runtime deployment pending |
-| `pages/v16-full.js` | ✅ via `/api/buy-ledger` | ❌ direct / ✅ indirect via reconcile | ❌ direct | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ own engine | Main dashboard; triggers `/api/reconcile-tiers`; 5s read refresh |
+| `pages/v16-full.js` | ✅ via `/api/buy-ledger` | ❌ direct / ✅ indirect via reconcile | ❌ direct | ❌ | ✅ via `/api/sync-wallet` | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ own `progressFor()` | Main dashboard; triggers `/api/reconcile-tiers`; 5s read refresh |
 | `pages/v16-manual.js` | ✅ via `/api/buy-ledger` | ✅ via `/api/manual-buy`; ✅ possible hidden write via `today-decisions` | ✅ via manual-buy | ✅ indirect via `today-decisions` without ledger | ❌ | ❌ | ✅ via `/api/prices` | ✅ via `/api/today-decisions` | ✅ via today-decisions | Manual decision surface; calls `today-decisions` without ledger |
+
+## Shared Logic Inventory
+
+| Logic Area | Current Implementations | Status | Risk |
+|---|---|---|---|
+| Executable decision | `lib/v16-ledger.js:getExecutableTiers()`, `/api/today-decisions` | Centralized for today-decision API | Not all display surfaces use this actionable result |
+| Triggered tiers | `lib/v16-ledger.js:getTriggeredDipTiers()`, `/api/reconcile-tiers` | Shared for reconcile/backfill | Different from actionable decision because reopen logic is not included |
+| Progress view | `lib/v16-ledger.js:getNextProgress()`, `pages/v16-full.js:progressFor()`, `BuyPointAlertPortal:getNextBuyPoint()`, `telegram-alerts:getNextActionPoint()`, `telegram-daily:getNextBuyPoint()`, `daily-summary:getBuyRows()` | Duplicated | Same symbol can show different progress/next tier across UI and Telegram |
+| Completed tier source | Ledger completed tiers, Wallet cost-derived completedLevel, `/api/prices` signal level | Not unified | Dashboard, Telegram, and Portal can disagree |
+| Daily report view | `telegram-daily`, `daily-summary` | Duplicated | Maintenance and message drift risk |
 
 ## State Store / KV Writers
 
