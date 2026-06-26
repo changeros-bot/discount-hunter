@@ -15,8 +15,9 @@
 - Audit-012 Alert State Engine ✅
 - Audit-013 v16-full Architecture ✅
 - Audit-014 v16-manual Architecture ✅
+- Audit-015 v16-status / System Status Architecture ✅
 
-Progress: 14/22 (~64%)
+Progress: 15/22 (~68%)
 
 This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
 
@@ -31,4 +32,5 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - `v16-full` refreshes `loadAll()` every 5 seconds; this is read-heavy but not a Ledger pollution risk.
 - `v16-manual` calls `/api/today-decisions` without an explicit Ledger payload, so it can trigger the hidden store-ledger write path.
 - `manual-buy` uses the formal `appendBuy()` Ledger writer, but `appendBuy()` is not idempotent and does not prevent duplicate same-tier entries.
-- `v16-status` is a checklist/status endpoint, not a verified safety report.
+- `v16-status` is a partial smoke-test endpoint plus static checklist, not a complete verified system health report.
+- `v16-status` runtime checks do not cover critical APIs such as `/api/sync-wallet`, `/api/prices`, `/api/reconcile-tiers`, or `/api/telegram-alerts`.
