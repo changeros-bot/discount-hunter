@@ -83,7 +83,7 @@ Last updated: 2026-06-26
 
 ### P1-015: wallet-change-alerts writes KV snapshot state
 - Status: Verified
-- Evidence: Audit-011
+- Evidence: Audit-011 / Audit-016
 - Summary: `wallet-change-alerts` writes `discount-hunter:v16:wallet-snapshot:{walletKey}` through Upstash KV.
 - Risk: Reasonable design, but must be included in State Store Inventory.
 
@@ -117,6 +117,12 @@ Last updated: 2026-06-26
 - Evidence: Audit-014
 - Summary: `/api/manual-buy` calls `appendBuy()`, which validates symbol, tier, and amount but then pushes a new row into Ledger without checking whether that symbol+tier has already been recorded.
 - Risk: Repeated UI clicks or repeated Telegram/manual commands can create duplicate entries for the same symbol+tier.
+
+### P1-021: Production without Upstash KV falls back to volatile memory store
+- Status: Verified
+- Evidence: Audit-016
+- Summary: Ledger State and Alert State use `readStoreJson()` / `writeStoreJson()`. If Upstash is not configured, production/Vercel skips local file fallback and stores state only in `globalThis.__V16_MEMORY_STORE__`.
+- Risk: Ledger and Alert State can be lost after serverless cold start, process restart, or deployment if `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are missing.
 
 ## P2
 
@@ -155,3 +161,9 @@ Last updated: 2026-06-26
 - Evidence: Audit-015
 - Summary: `/api/v16-status` runtime checks cover only a limited set of endpoints and mark manual-write APIs as `manual_test_required`. It does not check critical APIs such as `/api/sync-wallet`, `/api/prices`, `/api/reconcile-tiers`, or `/api/telegram-alerts`.
 - Risk: `v16-status` may report ok while price, wallet sync, reconcile, or Telegram main alert flows are broken.
+
+### P2-010: wallet-change-alerts disabled without Upstash KV
+- Status: Verified
+- Evidence: Audit-016
+- Summary: `/api/wallet-change-alerts` checks `hasKvConfig()` at startup. If Upstash KV is missing, it returns `enabled:false` with `reason: missing_upstash_env` and does not create a snapshot, diff holdings, or send Telegram.
+- Risk: Wallet change monitoring will not work without Upstash. This is explicit and safe, but should be visible in deployment checklist.
