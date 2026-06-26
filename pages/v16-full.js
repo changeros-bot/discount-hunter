@@ -21,6 +21,11 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
+function requireNonEmptyArray(value, label) {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label}_empty`);
+  return value;
+}
+
 function ledgerRows(ledger, symbol) {
   if (!ledger || !symbol) return {};
   if (ledger[symbol]) return ledger[symbol];
@@ -75,6 +80,8 @@ export default function V16FullHome() {
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState("");
   const [reconciling, setReconciling] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState("");
 
@@ -82,7 +89,7 @@ export default function V16FullHome() {
     setLoading(true);
     try {
       const prices = await jsonFetch(`/api/prices?t=${Date.now()}`);
-      const rows = prices.data || [];
+      const rows = requireNonEmptyArray(prices.data, "prices_data");
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const currentLedger = ledgerData.ledger || {};
       const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, {
@@ -103,23 +110,36 @@ export default function V16FullHome() {
     }
   }
 
-  async function syncWallet() {
+  async function syncWallet(options = {}) {
+    setWalletLoading(true);
+    if (options.clearError !== false) setWalletError("");
     try {
       const data = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      requireNonEmptyArray(data.holdings, "wallet_holdings");
       setWallet(data);
+      setWalletError("");
       return data;
-    } catch { return null; }
+    } catch (e) {
+      setWalletError(e.message || "Wallet 同步失敗");
+      if (options.throwOnError) throw e;
+      return null;
+    } finally {
+      setWalletLoading(false);
+    }
   }
 
   async function reconcileLedger() {
     setReconciling(true);
     setReconcileMessage("");
+    setError("");
     try {
-      const currentWallet = wallet || await syncWallet();
+      const safeAssets = requireNonEmptyArray(assets, "prices_data");
+      const currentWallet = wallet || await syncWallet({ throwOnError: true });
+      const holdings = requireNonEmptyArray(currentWallet?.holdings, "wallet_holdings");
       const result = await jsonFetch(`/api/reconcile-tiers?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assets, holdings: currentWallet?.holdings || [] })
+        body: JSON.stringify({ assets: safeAssets, holdings })
       });
       setReconcileMessage(`補登 ${result.addedCount || 0} 筆`);
       await loadAll();
@@ -132,9 +152,9 @@ export default function V16FullHome() {
 
   useEffect(() => {
     loadAll();
-    syncWallet();
+    syncWallet({ clearError: false });
     const t = setInterval(loadAll, REFRESH_MS);
-    const w = setInterval(syncWallet, 60000);
+    const w = setInterval(() => syncWallet({ clearError: false }), 60000);
     return () => { clearInterval(t); clearInterval(w); };
   }, []);
 
@@ -160,6 +180,7 @@ export default function V16FullHome() {
       <h1 style={{ fontSize: "clamp(48px, 14vw, 78px)", fontWeight: 1000, margin: "6px 0", lineHeight: .95, background: "linear-gradient(180deg, #fff6b7, #ffd700, #b8860b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>美股DCA<br />折價追蹤</h1>
       <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks｜Ledger 決策版</h2>
       {error && <div className="dataGuard">{error}</div>}
+      {walletError && <div className="dataGuard">Wallet：{walletError}</div>}
       {reconcileMessage && <div className="dataGuard" style={{ color: "#bbf7d0" }}>{reconcileMessage}</div>}
     </section>
 
@@ -170,14 +191,14 @@ export default function V16FullHome() {
     </section>
 
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2><div style={{ display: "flex", gap: 6 }}><button onClick={reconcileLedger} disabled={reconciling} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: "#16a34a", color: "white", fontWeight: 950 }}>{reconciling ? "補登中" : "補登Ledger"}</button><button onClick={syncWallet} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: "#2563eb", color: "white", fontWeight: 950 }}>重新同步</button></div></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2><div style={{ display: "flex", gap: 6 }}><button onClick={reconcileLedger} disabled={reconciling || !assets.length || !wallet?.holdings?.length} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: reconciling || !assets.length || !wallet?.holdings?.length ? "#475569" : "#16a34a", color: "white", fontWeight: 950 }}>{reconciling ? "補登中" : "補登Ledger"}</button><button onClick={() => syncWallet({ throwOnError: false })} disabled={walletLoading} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: walletLoading ? "#475569" : "#2563eb", color: "white", fontWeight: 950 }}>{walletLoading ? "同步中" : "重新同步"}</button></div></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
     </section>
 
     {buyZoneRows.length > 0 && <section className="list"><h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 買點區標的（{buyZoneRows.length}）</h3>{buyZoneRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section>}
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📋 觀察區（{watchRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{watchRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📘 Ledger 檢查</summary><pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", color: "#cbd5e1", fontSize: 11 }}>{JSON.stringify(ledger, null, 2)}</pre></details>
-    <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "等待同步"}｜V16-M Full Ledger Safe</footer>
+    <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : walletLoading ? "同步中" : "等待同步"}｜V16-M Full Ledger Safe</footer>
   </main>;
 }
 
