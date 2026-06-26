@@ -17,8 +17,9 @@
 - Audit-014 v16-manual Architecture ✅
 - Audit-015 v16-status / System Status Architecture ✅
 - Audit-016 State Store / KV / File Fallback Architecture ✅
+- Audit-017 Runtime / Deployment Config Architecture ✅
 
-Progress: 16/22 (~73%)
+Progress: 17/22 (~77%)
 
 This document is the master index for the V16 architecture audit. Detailed audit reports and issue register will be added incrementally.
 
@@ -38,3 +39,5 @@ This document is the master index for the V16 architecture audit. Detailed audit
 - Ledger State and Alert State use Upstash KV when configured, otherwise memory/file fallback depending on environment.
 - In Production/Vercel without Upstash KV, Ledger State and Alert State fall back to volatile memory.
 - Wallet Snapshot State is Upstash-only; without Upstash, `/api/wallet-change-alerts` returns `enabled:false`.
+- Runtime docs list the main env vars, but package scripts do not include automated env validation or deployment health gates.
+- Runtime code supports additional env vars not listed in README/CONFIG, including Moralis, MegaNode/NodeReal, and NEXT_PUBLIC_BSC_RPC_URL options.
