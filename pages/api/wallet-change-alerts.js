@@ -22,6 +22,10 @@ async function readJson(response) {
   }
 }
 
+function shouldCommit(req) {
+  return req.method === "POST" || String(req.query?.commit || "") === "1";
+}
+
 function buildSnapshot(holdings) {
   const snapshot = {};
   for (const holding of holdings || []) {
@@ -43,22 +47,10 @@ function classifyChange(prev, curr) {
   const previousQuantity = n(prev.quantity);
   const currentQuantity = n(curr.quantity);
 
-  if (previousQuantity <= 0 && currentQuantity > 0) {
-    return { type: "new", icon: "🟢", title: "新增持倉" };
-  }
-
-  if (previousQuantity > 0 && currentQuantity <= 0) {
-    return { type: "closed", icon: "🔴", title: "清倉" };
-  }
-
-  if (currentQuantity > previousQuantity) {
-    return { type: "added", icon: "🟢", title: "加碼" };
-  }
-
-  if (currentQuantity < previousQuantity) {
-    return { type: "reduced", icon: "🟡", title: "減碼" };
-  }
-
+  if (previousQuantity <= 0 && currentQuantity > 0) return { type: "new", icon: "🟢", title: "新增持倉" };
+  if (previousQuantity > 0 && currentQuantity <= 0) return { type: "closed", icon: "🔴", title: "清倉" };
+  if (currentQuantity > previousQuantity) return { type: "added", icon: "🟢", title: "加碼" };
+  if (currentQuantity < previousQuantity) return { type: "reduced", icon: "🟡", title: "減碼" };
   return { type: "changed", icon: "⚪", title: "持倉異動" };
 }
 
@@ -117,7 +109,6 @@ function formatMessage(changes, checkedAt) {
   changes.forEach((change) => {
     lines.push(`${change.icon} ${change.title}`);
     lines.push(`${change.symbol}on`);
-
     if (change.type === "closed") {
       lines.push("已全部賣出");
     } else {
@@ -127,7 +118,6 @@ function formatMessage(changes, checkedAt) {
       lines.push(`目前成本：${formatUsd(change.currentTotalCost)}`);
       if (change.currentValue > 0) lines.push(`目前市值：${formatUsd(change.currentValue)}`);
     }
-
     lines.push("");
   });
 
@@ -143,7 +133,7 @@ async function handler(req, res) {
     if (!hasKvConfig()) {
       return res.status(200).json({
         ok: true,
-        version: "16.0-wallet-change-alerts",
+        version: "16.1-wallet-change-alerts-readonly-gated",
         enabled: false,
         reason: "missing_upstash_env",
         requiredEnv: ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
@@ -154,6 +144,7 @@ async function handler(req, res) {
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const walletRes = await fetch(`${protocol}://${host}/api/sync-wallet?t=${Date.now()}`, { cache: "no-store" });
     const wallet = await readJson(walletRes);
+    const commitNow = shouldCommit(req);
 
     if (!walletRes.ok || !wallet?.ok) {
       return res.status(502).json({ ok: false, error: wallet?.error || walletRes.status });
@@ -165,40 +156,61 @@ async function handler(req, res) {
     const previous = await getJson(key);
 
     if (!previous.result) {
-      await setJson(key, currentSnapshot);
+      if (commitNow) await setJson(key, currentSnapshot);
       return res.status(200).json({
         ok: true,
-        version: "16.0-wallet-change-alerts",
+        version: "16.1-wallet-change-alerts-readonly-gated",
         enabled: true,
-        baselineCreated: true,
+        baselineCreated: commitNow,
+        previewOnly: !commitNow,
         changeCount: 0,
-        message: "Baseline created. Next wallet change will trigger Telegram.",
+        sent: false,
+        message: commitNow ? "Baseline created. Next wallet change will trigger Telegram." : "Baseline preview only. Use POST or ?commit=1 to create baseline.",
       });
     }
 
     const changes = diffSnapshots(previous.result, currentSnapshot);
+
+    if (!commitNow) {
+      return res.status(200).json({
+        ok: true,
+        version: "16.1-wallet-change-alerts-readonly-gated",
+        enabled: true,
+        baselineCreated: false,
+        previewOnly: true,
+        changeCount: changes.length,
+        sent: false,
+        changes,
+      });
+    }
+
     await setJson(key, currentSnapshot);
 
     if (!changes.length) {
       return res.status(200).json({
         ok: true,
-        version: "16.0-wallet-change-alerts",
+        version: "16.1-wallet-change-alerts-readonly-gated",
         enabled: true,
         baselineCreated: false,
+        previewOnly: false,
         changeCount: 0,
         sent: false,
       });
     }
 
-    const telegram = await sendTelegramMessage(formatMessage(changes, wallet.checkedAt));
+    const cooldownKey = `wallet-change-alerts:${changes.map((item) => `${item.symbol}-${item.type}`).join("|")}`;
+    const telegram = await sendTelegramMessage(formatMessage(changes, wallet.checkedAt), { cooldownKey, cooldownHours: 12 });
 
     return res.status(telegram.ok ? 200 : 500).json({
       ok: telegram.ok,
-      version: "16.0-wallet-change-alerts",
+      version: "16.1-wallet-change-alerts-readonly-gated",
       enabled: true,
       baselineCreated: false,
+      previewOnly: false,
       changeCount: changes.length,
       changes,
+      sent: !telegram.skipped,
+      deduped: Boolean(telegram.deduped),
       telegram,
     });
   } catch (error) {
