@@ -12,9 +12,26 @@ function signedColor(v) { const n = Number(v || 0); return n > 0 ? "#22c55e" : n
 function signedClass(v) { const n = Number(v || 0); return n > 0 ? "signed-positive" : n < 0 ? "signed-negative" : ""; }
 function normalizeSymbol(s) { return String(s || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function stripOnSuffix(symbol) { return normalizeSymbol(symbol).replace(/ON$/, ""); }
+function decisionKey(d) { return `${normalizeSymbol(d?.symbol)}_${String(d?.tier || "").toUpperCase()}`; }
 function isLiveHolding(h) { return h && Number(h.quantity) > 0 && h.quantitySource === "bsc_rpc_balanceOf_live"; }
 function timeText(iso) { if (!iso) return "讀取中"; const d = new Date(iso); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`; }
 function decisionTimeText(iso) { return iso ? timeText(iso) : "本次更新"; }
+
+function dedupeDecisions(items = []) {
+  const map = new Map();
+  for (const item of items || []) {
+    const key = decisionKey(item);
+    if (!key || key === "_") continue;
+    const previous = map.get(key);
+    if (!previous || new Date(item.triggeredAt || 0).getTime() >= new Date(previous.triggeredAt || 0).getTime()) {
+      map.set(key, item);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    if (Number(a.level || 0) !== Number(b.level || 0)) return Number(b.level || 0) - Number(a.level || 0);
+    return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
+  });
+}
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
@@ -110,7 +127,7 @@ export default function V16FullHome() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ assets: rows, ledger: currentLedger })
     });
-    setDecisions(today.decisions || []);
+    setDecisions(dedupeDecisions(today.decisions || []));
     setUpdatedAt(today.updatedAt || "");
     return today;
   }
@@ -186,10 +203,10 @@ export default function V16FullHome() {
   }, []);
 
   const walletMap = useMemo(() => walletHoldingMap(wallet?.holdings), [wallet]);
-  const displayDecisions = useMemo(() => decisions.map((d) => ({ ...d, walletOwned: walletOwns(walletMap, d.symbol) })), [decisions, walletMap]);
+  const displayDecisions = useMemo(() => dedupeDecisions(decisions).map((d) => ({ ...d, walletOwned: walletOwns(walletMap, d.symbol) })), [decisions, walletMap]);
   const executableDecisions = displayDecisions.filter((d) => !d.walletOwned);
   const boughtPendingDecisions = displayDecisions.filter((d) => d.walletOwned);
-  const decisionMap = useMemo(() => new Map(displayDecisions.map((d) => [`${normalizeSymbol(d.symbol)}_${d.tier}`, d])), [displayDecisions]);
+  const decisionMap = useMemo(() => new Map(displayDecisions.map((d) => [decisionKey(d), d])), [displayDecisions]);
   const rows = useMemo(() => assets.map((a) => {
     const level = Number(a?.signal?.level || 0);
     const tier = level > 0 ? `D${level}` : "";
@@ -219,7 +236,7 @@ export default function V16FullHome() {
     <section style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: displayDecisions.length ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
       <div className="liveLine" style={{ fontSize: 12, textAlign: "right", marginBottom: 6, fontWeight: 850 }}><span className={loading ? "liveDot loading" : "liveDot"} /><span className="liveText">{loading ? "更新中" : "LIVE"}</span>｜{timeText(updatedAt)}</div>
       <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 10px" }}>今日決策</h2>
-      {displayDecisions.length ? <><div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}><div>可手動買入：{executableDecisions.length}筆</div><div>已買入待補登：{boughtPendingDecisions.length}筆</div><div>建議新增投入：<span className="signed-positive" style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div></div><div style={{ display: "grid", gap: 8 }}>{displayDecisions.map((d) => <div key={`${d.symbol}_${d.tier}`} style={{ padding: "10px 12px", background: "#0f172a", borderRadius: 10, fontWeight: 900, color: d.walletOwned ? "#fde68a" : "#f8fafc" }}><div>{tierIcon[d.tier] || "⚪"} {d.symbol} {d.tier}（{money(d.amount)}）｜買點已達｜{d.walletOwned ? "已買入，Ledger待補登" : "未登帳"}</div><div style={{ marginTop: 4, color: "#94a3b8", fontSize: 12 }}>進買點：{decisionTimeText(d.triggeredAt)}</div></div>)}</div></> : <div style={{ textAlign: "center", padding: "8px 0 12px", color: "#94a3b8", fontWeight: 900 }}>暫無未登帳買點</div>}
+      {displayDecisions.length ? <><div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}><div>可手動買入：{executableDecisions.length}筆</div><div>已買入待補登：{boughtPendingDecisions.length}筆</div><div>建議新增投入：<span className="signed-positive" style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div></div><div style={{ display: "grid", gap: 8 }}>{displayDecisions.map((d) => <div key={decisionKey(d)} style={{ padding: "10px 12px", background: "#0f172a", borderRadius: 10, fontWeight: 900, color: d.walletOwned ? "#fde68a" : "#f8fafc" }}><div>{tierIcon[d.tier] || "⚪"} {d.symbol} {d.tier}（{money(d.amount)}）｜買點已達｜{d.walletOwned ? "已買入，Ledger待補登" : "未登帳"}</div><div style={{ marginTop: 4, color: "#94a3b8", fontSize: 12 }}>進買點：{decisionTimeText(d.triggeredAt)}</div></div>)}</div></> : <div style={{ textAlign: "center", padding: "8px 0 12px", color: "#94a3b8", fontWeight: 900 }}>暫無未登帳買點</div>}
     </section>
 
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
