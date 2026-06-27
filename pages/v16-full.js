@@ -23,9 +23,7 @@ function dedupeDecisions(items = []) {
     const key = decisionKey(item);
     if (!key || key === "_") continue;
     const previous = map.get(key);
-    if (!previous || new Date(item.triggeredAt || 0).getTime() >= new Date(previous.triggeredAt || 0).getTime()) {
-      map.set(key, item);
-    }
+    if (!previous || new Date(item.triggeredAt || 0).getTime() >= new Date(previous.triggeredAt || 0).getTime()) map.set(key, item);
   }
   return Array.from(map.values()).sort((a, b) => {
     if (Number(a.level || 0) !== Number(b.level || 0)) return Number(b.level || 0) - Number(a.level || 0);
@@ -48,9 +46,7 @@ function requireNonEmptyArray(value, label) {
 function requireLiveHoldings(holdings) {
   const rows = requireNonEmptyArray(holdings, "wallet_holdings");
   const liveRows = rows.filter(isLiveHolding);
-  if (!liveRows.length) {
-    throw new Error("尚未偵測到真實鏈上買入持倉，補登已取消");
-  }
+  if (!liveRows.length) throw new Error("尚未偵測到真實鏈上買入持倉，補登已取消");
   return liveRows;
 }
 
@@ -76,6 +72,10 @@ function ledgerHasTier(ledger, symbol, tier) {
 function ledgerText(ledger, symbol) {
   const done = ledgerDoneTiers(ledger, symbol);
   return done.length ? `已登帳：${done.join(" / ")}` : "尚未登帳";
+}
+
+function ledgerSymbols(ledger) {
+  return Object.keys(ledger || {}).filter((s) => ledgerDoneTiers(ledger, s).length > 0);
 }
 
 function walletHoldingMap(holdings) {
@@ -120,6 +120,26 @@ function walletSummary(holdings) {
   const value = live.reduce((s, h) => s + Number(h.currentValue || 0), 0);
   const pnl = value - cost;
   return { live, cost, value, pnl, pnlPct: cost > 0 ? pnl / cost : 0 };
+}
+
+function makeLedgerCheck({ wallet, ledger, displayDecisions, completedHoldingRows, updatedAt }) {
+  const liveHoldings = (wallet?.holdings || []).filter(isLiveHolding);
+  const symbols = ledgerSymbols(ledger);
+  const duplicateDecisionCount = displayDecisions.length - new Set(displayDecisions.map(decisionKey)).size;
+  const ledgerWithoutWallet = completedHoldingRows.filter((row) => !liveHoldings.some((h) => stripOnSuffix(h.symbol) === stripOnSuffix(row.symbol))).map((row) => row.symbol);
+  const issues = [];
+  if (!liveHoldings.length) issues.push("Wallet 尚未同步到 live 持倉");
+  if (duplicateDecisionCount > 0) issues.push(`今日決策有 ${duplicateDecisionCount} 筆重複`);
+  if (ledgerWithoutWallet.length) issues.push(`Ledger 持倉未在 Wallet 找到：${ledgerWithoutWallet.join("、")}`);
+  return {
+    walletLive: liveHoldings.length > 0,
+    ledgerOk: symbols.length > 0 && ledgerWithoutWallet.length === 0,
+    decisionOk: duplicateDecisionCount === 0,
+    holdingsOk: completedHoldingRows.length <= liveHoldings.length,
+    checkedSymbols: symbols,
+    issues,
+    lastSync: wallet?.lastSyncTime || wallet?.checkedAt || updatedAt
+  };
 }
 
 export default function V16FullHome() {
@@ -240,6 +260,7 @@ export default function V16FullHome() {
   const watchRows = rows.filter((r) => r.signalLevel <= 0);
   const totalAmount = executableDecisions.reduce((s, d) => s + Number(d.amount || 0), 0);
   const ws = walletSummary(wallet?.holdings);
+  const ledgerCheck = makeLedgerCheck({ wallet, ledger, displayDecisions, completedHoldingRows, updatedAt });
 
   return <main className="page">
     <section className="hero compactHero" style={{ textAlign: "center", padding: "18px 12px 10px", background: "linear-gradient(135deg, rgba(10,14,39,.96), rgba(3,7,18,.96))" }}>
@@ -264,7 +285,7 @@ export default function V16FullHome() {
 
     {completedHoldingRows.length > 0 && <details className="idleGroup" style={{ marginTop: 16 }}><summary>✅ 已登帳持倉區（{completedHoldingRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{completedHoldingRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>}
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📋 觀察區（{watchRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{watchRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>
-    <details className="idleGroup" style={{ marginTop: 16 }}><summary>📘 Ledger 檢查</summary><pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", color: "#cbd5e1", fontSize: 11 }}>{JSON.stringify(ledger, null, 2)}</pre></details>
+    <details className="idleGroup" style={{ marginTop: 16 }}><summary>📘 Ledger 檢查｜{ledgerCheck.issues.length ? `FAIL ${ledgerCheck.issues.length}` : "PASS"}</summary><LedgerCheckPanel check={ledgerCheck} ledger={ledger} /></details>
     <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : walletLoading ? "同步中" : "等待同步"}｜V16-M Full Ledger Safe</footer>
   </main>;
 }
@@ -272,6 +293,25 @@ export default function V16FullHome() {
 function Metric({ label, value, signed }) {
   const hasSigned = signed !== undefined;
   return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong className={hasSigned ? signedClass(signed) : ""} style={{ display: "block", color: hasSigned ? signedColor(signed) : "#f8fafc", marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
+}
+
+function CheckRow({ label, ok }) {
+  return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "#0f172a", borderRadius: 10, fontWeight: 900 }}><span style={{ color: "#cbd5e1" }}>{label}</span><strong style={{ color: ok ? "#22c55e" : "#f97316" }}>{ok ? "PASS" : "FAIL"}</strong></div>;
+}
+
+function LedgerCheckPanel({ check, ledger }) {
+  return <section style={{ marginTop: 12, display: "grid", gap: 10, color: "#e2e8f0" }}>
+    <CheckRow label="Wallet LIVE" ok={check.walletLive} />
+    <CheckRow label="Ledger 一致" ok={check.ledgerOk} />
+    <CheckRow label="Today Decision 去重" ok={check.decisionOk} />
+    <CheckRow label="Holdings 對帳" ok={check.holdingsOk} />
+    <div style={{ padding: 10, background: "#0f172a", borderRadius: 10, fontWeight: 850 }}>
+      <div>已檢查：{check.checkedSymbols.length ? check.checkedSymbols.join("、") : "尚無已登帳標的"}</div>
+      <div style={{ marginTop: 6, color: "#94a3b8" }}>最後同步：{timeText(check.lastSync)}</div>
+    </div>
+    {check.issues.length > 0 && <div style={{ padding: 10, background: "rgba(249,115,22,.12)", border: "1px solid rgba(249,115,22,.35)", borderRadius: 10, color: "#fed7aa", fontWeight: 850 }}>{check.issues.map((item) => <div key={item}>⚠️ {item}</div>)}</div>}
+    <details style={{ marginTop: 4 }}><summary>開發詳細資料</summary><pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", color: "#cbd5e1", fontSize: 11 }}>{JSON.stringify(ledger, null, 2)}</pre></details>
+  </section>;
 }
 
 function ProgressBar({ progress }) {
