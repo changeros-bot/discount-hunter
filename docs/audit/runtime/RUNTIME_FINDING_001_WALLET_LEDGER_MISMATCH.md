@@ -2,7 +2,7 @@
 
 Date: 2026-06-27
 Severity: P1
-Status: OPEN - FIX REQUIRED
+Status: SOURCE FIXED - DEPLOYED RUNTIME VALIDATION REQUIRED
 
 ## Finding
 
@@ -22,13 +22,13 @@ Visible wallet state includes positions for:
 
 Visible recent history also shows several same-day swaps of approximately `-5 USDT` into xStocks.
 
-However, the V16 dashboard still shows multiple Today Decisions as:
+However, the V16 dashboard still showed multiple Today Decisions as:
 
 ```text
 未登帳
 ```
 
-and asset cards show:
+and asset cards showed:
 
 ```text
 Ledger 尚未登帳
@@ -37,26 +37,20 @@ Ledger 尚未登帳
 
 ## Problem
 
-The dashboard currently treats Ledger as the only execution source of truth.
+The dashboard treated Ledger as the only execution source of truth.
 
-When the wallet already contains the purchased asset but Ledger is missing or blocked by durable-state configuration, the dashboard still presents the decision as executable.
+When the wallet already contains the purchased asset but Ledger is missing or blocked by durable-state configuration, the dashboard still presented the decision as executable.
 
-This can mislead the user into buying again.
+This could mislead the user into buying again.
 
 ## Expected Behavior
 
-When live wallet holdings indicate the user already owns the asset, but Ledger does not yet contain the tier record, the UI should not present it as a simple executable buy.
+When live wallet holdings indicate the user already owns the asset, but Ledger does not yet contain the tier record, the UI must not present it as a simple executable buy.
 
-Expected state should be closer to:
-
-```text
-錢包已持有，Ledger 待補登
-```
-
-or:
+Expected state:
 
 ```text
-Wallet 已買入，需補登 Ledger
+Wallet已持有，Ledger待補登
 ```
 
 The action should be reconcile / ledger repair, not another buy instruction.
@@ -74,14 +68,61 @@ The action should be reconcile / ledger repair, not another buy instruction.
 - `/api/buy-ledger` currently shows empty tier arrays.
 - `/api/v16-status` blocks release due to `missing_required_upstash_kv`.
 
-## Required Fix
+## Fix Applied
 
-Minimal fix should add wallet-aware display state:
+File changed:
 
-1. Build a wallet holdings map by normalized symbol.
-2. When a decision exists but wallet already has a live holding for the symbol and Ledger is missing the tier, show wallet-owned / ledger-pending state.
-3. Avoid labeling this as ordinary `未登帳，可手動買入`.
-4. Prefer reconcile / ledger repair wording.
+- `pages/v16-full.js`
+
+Change:
+
+1. Added wallet holdings map using normalized symbols.
+2. Added wallet-aware decision classification:
+
+```text
+executableDecisions
+walletPendingDecisions
+```
+
+3. Changed Today Decision display from only:
+
+```text
+未登帳
+```
+
+to:
+
+```text
+Wallet已持有，Ledger待補登
+```
+
+when live wallet already owns the symbol.
+
+4. Changed asset card action text from:
+
+```text
+可手動買入
+```
+
+to:
+
+```text
+Wallet已持有，Ledger待補登
+```
+
+when wallet-owned but Ledger-missing.
+
+5. Changed summary from `未登帳買點` to split:
+
+```text
+可手動買入
+Wallet已持有待補登
+建議新增投入
+```
+
+## Commit
+
+- `6c273824651e29e1801ba7b916baa73c8c7845ab`
 
 ## Do Not Do
 
@@ -90,8 +131,24 @@ Minimal fix should add wallet-aware display state:
 - Do not change D1-D4 thresholds.
 - Do not hide the issue silently.
 
+## Runtime Validation Required
+
+After deployment, user must re-open:
+
+```text
+https://discount-hunter-sigma.vercel.app/
+https://discount-hunter-sigma.vercel.app/v16-full
+```
+
+Expected:
+
+- Today Decision summary shows `Wallet已持有待補登` count.
+- Previously misleading rows no longer say only `未登帳`.
+- Asset cards no longer say `可手動買入` for wallet-owned symbols.
+- `建議新增投入` excludes wallet-owned pending rows.
+
 ## Current Status
 
-Open.
+Source fixed.
 
-Must be fixed before Cleanup and Release.
+Still release-blocking until deployed runtime screenshots confirm the fix.
