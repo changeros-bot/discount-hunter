@@ -1,6 +1,8 @@
 import { readLedger, writeLedger, normalizeSymbol, getTriggeredDipTiers } from "../../lib/v16-ledger";
 const { hasKvConfig, requiresDurableKv } = require("../../lib/state/kv");
 
+const LIVE_BALANCE_SOURCE = "bsc_rpc_balanceOf_live";
+
 function clean(v) {
   return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -24,8 +26,12 @@ function hasUsableAsset(asset) {
   return Boolean(asset?.symbol && Array.isArray(asset?.rules) && asset.rules.length);
 }
 
-function hasUsableHolding(holding) {
-  return Boolean(holding?.symbol && num(holding.quantity) > 0);
+function hasLiveUsableHolding(holding) {
+  return Boolean(
+    holding?.symbol &&
+    holding.quantitySource === LIVE_BALANCE_SOURCE &&
+    num(holding.quantity) > 0
+  );
 }
 
 function buildAssetMap(assets) {
@@ -67,8 +73,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "missing_or_invalid_assets", message: "reconcile requires non-empty price assets" });
     }
 
-    if (!holdings.some(hasUsableHolding)) {
-      return res.status(400).json({ ok: false, error: "missing_or_invalid_holdings", message: "reconcile requires non-empty wallet holdings" });
+    if (!holdings.some(hasLiveUsableHolding)) {
+      return res.status(400).json({
+        ok: false,
+        error: "missing_live_wallet_holdings",
+        message: "補登需要真實鏈上 live balance 持倉；目前沒有 quantitySource=bsc_rpc_balanceOf_live 且 quantity>0 的 holding。"
+      });
     }
 
     const map = buildAssetMap(assets);
@@ -79,7 +89,14 @@ export default async function handler(req, res) {
     const now = new Date().toISOString();
 
     for (const h of holdings) {
-      if (num(h.quantity) <= 0) continue;
+      if (h?.quantitySource !== LIVE_BALANCE_SOURCE) {
+        skipped.push({ symbol: h?.symbol || h?.tokenSymbol || null, reason: "not_live_wallet_balance", quantitySource: h?.quantitySource || null });
+        continue;
+      }
+      if (num(h.quantity) <= 0) {
+        skipped.push({ symbol: h.symbol || h.tokenSymbol || null, reason: "zero_quantity" });
+        continue;
+      }
       const asset = findAssetForHolding(map, h);
       if (!asset) {
         skipped.push({ symbol: h.symbol || h.tokenSymbol || null, reason: "asset_not_found" });
@@ -107,13 +124,15 @@ export default async function handler(req, res) {
           amount,
           price: num(h.tokenPrice, num(h.marketPrice, null)),
           quantity: num(h.quantity),
+          quantitySource: h.quantitySource,
+          sourceVerified: true,
           mode: "wallet_reconcile",
           note: "wallet_reconcile_" + tier,
           leftBuyZone: false,
           leftBuyZoneAt: null
         });
         available -= amount;
-        added.push({ symbol, tier, amount });
+        added.push({ symbol, tier, amount, quantitySource: h.quantitySource });
       }
     }
 
