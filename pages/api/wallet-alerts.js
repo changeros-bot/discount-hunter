@@ -22,6 +22,10 @@ function getQuantity(holding) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function shouldSend(req) {
+  return req.method === "POST" || String(req.query?.notify || "") === "1";
+}
+
 function findAnomalies(holdings) {
   const bySymbol = new Map();
   (holdings || []).forEach((holding) => {
@@ -77,6 +81,10 @@ function formatMessage(anomalies, summary) {
   return lines.join("\n");
 }
 
+async function readJsonSafe(response) {
+  return response.json().catch(() => ({}));
+}
+
 async function handler(req, res) {
   if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -91,31 +99,40 @@ async function handler(req, res) {
       body: JSON.stringify({}),
       cache: "no-store",
     });
-    const wallet = await walletRes.json();
+    const wallet = await readJsonSafe(walletRes);
+    const sendNow = shouldSend(req);
 
-    if (!walletRes.ok) {
+    if (!walletRes.ok || wallet?.ok === false) {
       const message = [
         "🔴 DCA折價獵人 Wallet同步異常",
         "",
         "鏈上持倉資料讀取失敗。",
         `錯誤：${wallet.message || wallet.error || walletRes.status}`,
       ].join("\n");
-      const sent = await sendTelegramMessage(message);
-      return res.status(500).json({ ok: false, alertType: "wallet_sync_error", telegram: sent });
+      const telegram = sendNow ? await sendTelegramMessage(message, { cooldownKey: "wallet-alerts:sync-error", cooldownHours: 12 }) : null;
+      return res.status(500).json({ ok: false, alertType: "wallet_sync_error", sent: Boolean(telegram && !telegram.skipped), previewOnly: !sendNow, telegram, message });
     }
 
     const anomalies = findAnomalies(wallet.holdings || []);
     const message = formatMessage(anomalies, wallet);
 
-    if (anomalies.length > 0 || String(req.query?.notify || "") === "1") {
-      const sent = await sendTelegramMessage(message);
-      if (!sent.ok) {
-        return res.status(500).json({ ok: false, anomalyCount: anomalies.length, telegram: sent });
+    if (sendNow && anomalies.length > 0) {
+      const key = `wallet-alerts:anomaly:${anomalies.map((item) => `${item.symbol}-${item.type}`).join("|")}`;
+      const telegram = await sendTelegramMessage(message, { cooldownKey: key, cooldownHours: 12 });
+      if (!telegram.ok) {
+        return res.status(500).json({ ok: false, anomalyCount: anomalies.length, telegram });
       }
-      return res.status(200).json({ ok: true, sent: true, anomalyCount: anomalies.length, anomalies });
+      return res.status(200).json({ ok: true, sent: !telegram.skipped, deduped: Boolean(telegram.deduped), previewOnly: false, anomalyCount: anomalies.length, anomalies, telegram });
     }
 
-    return res.status(200).json({ ok: true, sent: false, anomalyCount: 0, message: "wallet_normal" });
+    return res.status(200).json({
+      ok: true,
+      sent: false,
+      previewOnly: !sendNow,
+      anomalyCount: anomalies.length,
+      anomalies,
+      message: anomalies.length ? "wallet_anomalies_preview" : "wallet_normal",
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Wallet alert failed" });
   }
