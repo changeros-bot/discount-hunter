@@ -41,6 +41,7 @@ function buildDecisions(assets, ledger, now) {
         discount: asset.discount,
         price: asset.price,
         amount,
+        triggeredAt: now,
         progress: buildTriggeredProgress({ tier, amount }),
         command: `/buy ${asset.symbol} ${tier} ${amount}`
       };
