@@ -1,7 +1,17 @@
 const { sendTelegramMessage } = require("../../lib/telegram/notify");
 
 async function handler(req, res) {
-  if (req.method !== "POST" && req.method !== "GET") {
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      version: "16.1-telegram-test-post-only",
+      previewOnly: true,
+      message: "Use POST /api/telegram-test to send a Telegram test message.",
+      sendsTelegram: false,
+    });
+  }
+
+  if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
 
