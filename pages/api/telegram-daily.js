@@ -90,6 +90,10 @@ function buildMessage({ wallet, prices }) {
   return { message: lines.join("\n"), alertCount: alerts.length, totals };
 }
 
+async function readJsonSafe(response) {
+  return response.json().catch(() => ({}));
+}
+
 async function handler(req, res) {
   if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -110,27 +114,39 @@ async function handler(req, res) {
       fetch(`${base}/api/prices?t=${Date.now()}`, { cache: "no-store" }),
     ]);
 
-    const wallet = await walletRes.json();
-    const prices = await pricesRes.json();
+    const wallet = await readJsonSafe(walletRes);
+    const prices = await readJsonSafe(pricesRes);
 
-    if (!walletRes.ok || !pricesRes.ok) {
+    if (!walletRes.ok || !pricesRes.ok || wallet?.ok === false || prices?.ok === false) {
       const message = [
         "🔴 DCA折價獵人日報失敗",
         "",
         `Wallet：${wallet.message || wallet.error || walletRes.status}`,
         `Prices：${prices.message || prices.error || pricesRes.status}`,
       ].join("\n");
-      const sent = await sendTelegramMessage(message);
-      return res.status(500).json({ ok: false, telegram: sent });
+      const shouldSendError = req.method === "POST" || String(req.query.send || "") === "1";
+      const telegram = shouldSendError ? await sendTelegramMessage(message, { cooldownKey: "telegram-daily:error", cooldownHours: 12 }) : null;
+      return res.status(500).json({ ok: false, sent: Boolean(telegram && !telegram.skipped), previewOnly: !shouldSendError, telegram, message });
     }
 
     const daily = buildMessage({ wallet, prices });
-    const sent = await sendTelegramMessage(daily.message);
-    if (!sent.ok) {
-      return res.status(500).json({ ok: false, telegram: sent });
+    const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
+    const telegram = shouldSend ? await sendTelegramMessage(daily.message, { cooldownKey: "telegram-daily:daily-report", cooldownHours: 20 }) : null;
+
+    if (telegram && !telegram.ok) {
+      return res.status(500).json({ ok: false, telegram });
     }
 
-    return res.status(200).json({ ok: true, sent: true, alertCount: daily.alertCount, totals: daily.totals });
+    return res.status(200).json({
+      ok: true,
+      sent: Boolean(telegram && !telegram.skipped),
+      deduped: Boolean(telegram?.deduped),
+      previewOnly: !shouldSend,
+      alertCount: daily.alertCount,
+      totals: daily.totals,
+      telegram,
+      message: daily.message,
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Daily summary failed" });
   }
