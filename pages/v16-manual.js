@@ -97,7 +97,7 @@ export default function V16ManualPage() {
     <section style={{ padding: 14, borderRadius: 18, background: "#0f172a", border: "1px solid #334155", marginBottom: 12 }}>
       <button onClick={load} disabled={loading} style={{ width: "100%", padding: 12, border: 0, borderRadius: 14, background: loading ? "#475569" : "#2563eb", color: "white", fontWeight: 1000, fontSize: 16 }}>{loading ? "更新中..." : "重新整理"}</button>
       <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <Metric label="可執行" value={`${decisions.length} 檔`} />
+        <Metric label="可執行" value={`${decisions.length} 筆`} />
         <Metric label="建議投入" value={fmtMoney(totalAmount)} green />
         <Metric label="資料儲存" value={status?.storage || "--"} />
         <Metric label="Release Gate" value={status?.releaseBlocked ? "阻擋" : "正常"} warn={status?.releaseBlocked} />
