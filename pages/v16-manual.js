@@ -30,6 +30,11 @@ async function statusFetch(url) {
   return data || { ok: false, error: `HTTP ${res.status}` };
 }
 
+function requireNonEmptyArray(value, label) {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label}_empty`);
+  return value;
+}
+
 export default function V16ManualPage() {
   const [loading, setLoading] = useState(false);
   const [decisions, setDecisions] = useState([]);
@@ -45,11 +50,12 @@ export default function V16ManualPage() {
     setError("");
     try {
       const prices = await jsonFetch(`/api/prices?t=${Date.now()}`);
+      const assets = requireNonEmptyArray(prices.data, "prices_data");
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assets: prices.data || [], ledger: ledgerData.ledger || {} })
+        body: JSON.stringify({ assets, ledger: ledgerData.ledger || {} })
       });
       const statusData = await statusFetch(`/api/v16-status?t=${Date.now()}`);
 
