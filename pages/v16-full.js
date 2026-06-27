@@ -19,7 +19,7 @@ function decisionTimeText(iso) { return iso ? timeText(iso) : "本次更新"; }
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
   const data = await res.json().catch(() => null);
-  if (!res.ok || data?.ok === false) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+  if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
   return data;
 }
 
@@ -104,6 +104,17 @@ export default function V16FullHome() {
   const [reconciling, setReconciling] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState("");
 
+  async function calculateDecisions(rows, currentLedger) {
+    const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assets: rows, ledger: currentLedger })
+    });
+    setDecisions(today.decisions || []);
+    setUpdatedAt(today.updatedAt || "");
+    return today;
+  }
+
   async function loadAll() {
     setLoading(true);
     try {
@@ -111,14 +122,9 @@ export default function V16FullHome() {
       const rows = requireNonEmptyArray(prices.data, "prices_data");
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const currentLedger = ledgerData.ledger || {};
-      const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assets: rows, ledger: currentLedger })
-      });
       setAssets(rows);
       setLedger(currentLedger);
-      setDecisions(today.decisions || []);
+      const today = await calculateDecisions(rows, currentLedger);
       setUpdatedAt(prices.updatedAt || today.updatedAt || "");
       setSource(prices.source || "");
       setError("");
@@ -160,8 +166,10 @@ export default function V16FullHome() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assets: safeAssets, holdings })
       });
-      setReconcileMessage(`補登 ${result.addedCount || 0} 筆`);
-      await loadAll();
+      const updatedLedger = result.ledger || ledger;
+      setLedger(updatedLedger);
+      await calculateDecisions(safeAssets, updatedLedger);
+      setReconcileMessage(`補登 ${result.addedCount || 0} 筆｜${result.storage || "--"}`);
     } catch (e) {
       setError(e.message || "補登失敗");
     } finally {
