@@ -1,4 +1,5 @@
 import { readLedger, writeLedger, normalizeSymbol, getTriggeredDipTiers } from "../../lib/v16-ledger";
+const { hasKvConfig, requiresDurableKv } = require("../../lib/state/kv");
 
 function clean(v) {
   return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -52,6 +53,15 @@ export default async function handler(req, res) {
     const assets = Array.isArray(req.body?.assets) ? req.body.assets : [];
     const holdings = Array.isArray(req.body?.holdings) ? req.body.holdings : [];
     const dryRun = req.body?.dryRun === true || req.query?.dryRun === "true";
+
+    if (!dryRun && requiresDurableKv() && !hasKvConfig()) {
+      return res.status(409).json({
+        ok: false,
+        error: "missing_required_upstash_kv",
+        message: "補登需要正式 durable Ledger 儲存；目前未設定 Upstash KV，因此沒有寫入。",
+        releaseBlocked: true
+      });
+    }
 
     if (!assets.some(hasUsableAsset)) {
       return res.status(400).json({ ok: false, error: "missing_or_invalid_assets", message: "reconcile requires non-empty price assets" });
