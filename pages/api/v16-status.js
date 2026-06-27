@@ -12,6 +12,13 @@ function resultStatus(response, body) {
   return response.ok && body?.ok !== false ? "ok" : "error";
 }
 
+function markEmptyCritical(result, count, reason) {
+  if (result.status === "ok" && count <= 0) {
+    return { ...result, status: "error", reason };
+  }
+  return result;
+}
+
 async function callJson(base, check, payload = null) {
   const response = await fetch(`${base}${check.path}?t=${Date.now()}`, {
     cache: "no-store",
@@ -64,20 +71,24 @@ async function handler(req, res) {
   let walletResult = null;
 
   try {
-    pricesResult = await callJson(base, { key: "prices", label: "Prices", path: "/api/prices", critical: true });
+    const rawPricesResult = await callJson(base, { key: "prices", label: "Prices", path: "/api/prices", critical: true });
+    const dataCount = Array.isArray(rawPricesResult.body?.data) ? rawPricesResult.body.data.length : 0;
+    pricesResult = markEmptyCritical(rawPricesResult, dataCount, "prices_data_empty");
     results.push(summarizeResult({
       ...pricesResult,
-      dataCount: Array.isArray(pricesResult.body?.data) ? pricesResult.body.data.length : 0,
+      dataCount,
     }));
   } catch (error) {
     results.push({ key: "prices", label: "Prices", path: "/api/prices", critical: true, status: "error", error: error.message });
   }
 
   try {
-    walletResult = await callJson(base, { key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true }, {});
+    const rawWalletResult = await callJson(base, { key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true }, {});
+    const holdingsCount = Array.isArray(rawWalletResult.body?.holdings) ? rawWalletResult.body.holdings.length : 0;
+    walletResult = markEmptyCritical(rawWalletResult, holdingsCount, "wallet_holdings_empty");
     results.push(summarizeResult({
       ...walletResult,
-      holdingsCount: Array.isArray(walletResult.body?.holdings) ? walletResult.body.holdings.length : 0,
+      holdingsCount,
     }));
   } catch (error) {
     results.push({ key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true, status: "error", error: error.message });
@@ -138,7 +149,7 @@ async function handler(req, res) {
 
   return res.status(200).json({
     ok: !releaseBlocked,
-    version: "16.3-readonly-health-gate",
+    version: "16.4-explicit-empty-data-health-gate",
     storage,
     durableStateOk,
     requiresDurableKv: requiresDurableKv(),
