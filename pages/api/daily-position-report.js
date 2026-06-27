@@ -107,12 +107,16 @@ async function handler(req, res) {
     const report = buildReport(wallet);
     const text = formatReport(report, wallet.checkedAt);
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
-    const telegram = shouldSend ? await sendTelegramMessage(text) : null;
+    const telegram = shouldSend
+      ? await sendTelegramMessage(text, { cooldownKey: "daily-position-report:daily-report", cooldownHours: 20 })
+      : null;
 
     return res.status(telegram && !telegram.ok ? 500 : 200).json({
       ok: telegram ? telegram.ok : true,
-      version: "16.0-daily-position-report",
-      sent: !!telegram,
+      version: "16.1-daily-position-report-cooldown",
+      sent: Boolean(telegram && !telegram.skipped),
+      deduped: Boolean(telegram?.deduped),
+      previewOnly: !shouldSend,
       report,
       text,
       telegram,
