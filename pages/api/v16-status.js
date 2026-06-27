@@ -114,7 +114,6 @@ async function handler(req, res) {
   const passiveChecks = [
     { key: "buyLedger", label: "Buy Ledger", path: "/api/buy-ledger" },
     { key: "telegramCooldown", label: "Telegram Cooldown", path: "/api/telegram-alert-check" },
-    { key: "walletChangeAlerts", label: "Wallet Change Alerts", path: "/api/wallet-change-alerts" },
     { key: "dailyPositionReport", label: "Daily Position Report", path: "/api/daily-position-report" },
   ];
 
@@ -130,6 +129,7 @@ async function handler(req, res) {
   results.push(
     { key: "manualBuy", label: "Manual Buy API", path: "/api/manual-buy", method: "POST", status: "manual_test_required" },
     { key: "todayDecisions", label: "Today Decisions", path: "/api/today-decisions", method: "POST", status: "manual_test_required" },
+    { key: "walletChangeAlerts", label: "Wallet Change Alerts", path: "/api/wallet-change-alerts", status: "manual_test_required", reason: "state_writing_endpoint_not_used_by_health_check" },
     { key: "telegramTransport", label: "Telegram Transport", path: "/api/telegram-test", method: "POST", status: "manual_test_required", reason: "avoid_forced_spam_send" }
   );
 
@@ -138,7 +138,7 @@ async function handler(req, res) {
 
   return res.status(200).json({
     ok: !releaseBlocked,
-    version: "16.2-health-gate",
+    version: "16.3-readonly-health-gate",
     storage,
     durableStateOk,
     requiresDurableKv: requiresDurableKv(),
@@ -156,7 +156,7 @@ async function handler(req, res) {
       sameTier24hReset: true,
       gapDownRecord: true,
       telegramCooldown: true,
-      walletChangeAlerts: true,
+      walletChangeAlerts: "manual_only",
       dailyPositionReport: true,
       frontEndIntegrated: true,
       progress100MeansTrigger: true,
