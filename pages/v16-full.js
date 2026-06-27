@@ -226,7 +226,8 @@ export default function V16FullHome() {
   }), [assets, decisionMap, walletMap, ledger]);
 
   const buyZoneRows = rows.filter((r) => r.signalLevel > 0 && !r.isLedgerDoneForTier);
-  const watchRows = rows.filter((r) => r.signalLevel <= 0 || (r.signalLevel > 0 && r.isLedgerDoneForTier));
+  const completedHoldingRows = rows.filter((r) => r.signalLevel > 0 && r.isLedgerDoneForTier);
+  const watchRows = rows.filter((r) => r.signalLevel <= 0);
   const totalAmount = executableDecisions.reduce((s, d) => s + Number(d.amount || 0), 0);
   const ws = walletSummary(wallet?.holdings);
 
@@ -251,7 +252,8 @@ export default function V16FullHome() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
     </section>
 
-    {buyZoneRows.length > 0 && <section className="list"><h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 買點區標的（{buyZoneRows.length}）</h3>{buyZoneRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section>}
+    {buyZoneRows.length > 0 && <section className="list"><h3 style={{ color: "#f8fafc", margin: "0 0 10px" }}>🔥 買點警報（{buyZoneRows.length}）</h3>{buyZoneRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section>}
+    {completedHoldingRows.length > 0 && <details className="idleGroup" style={{ marginTop: 16 }}><summary>✅ 已登帳持倉區（{completedHoldingRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{completedHoldingRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>}
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📋 觀察區（{watchRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{watchRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📘 Ledger 檢查</summary><pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", color: "#cbd5e1", fontSize: 11 }}>{JSON.stringify(ledger, null, 2)}</pre></details>
     <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : walletLoading ? "同步中" : "等待同步"}｜V16-M Full Ledger Safe</footer>
