@@ -58,6 +58,12 @@ function ledgerDoneTiers(ledger, symbol) {
   return [1,2,3,4].filter((i) => Array.isArray(rows[`D${i}`]) && rows[`D${i}`].length).map((i) => `D${i}`);
 }
 
+function ledgerHasTier(ledger, symbol, tier) {
+  if (!tier) return false;
+  const rows = ledgerRows(ledger, symbol);
+  return Array.isArray(rows[tier]) && rows[tier].length > 0;
+}
+
 function ledgerText(ledger, symbol) {
   const done = ledgerDoneTiers(ledger, symbol);
   return done.length ? `已登帳：${done.join(" / ")}` : "尚未登帳";
@@ -212,14 +218,15 @@ export default function V16FullHome() {
     const tier = level > 0 ? `D${level}` : "";
     const decision = decisionMap.get(`${normalizeSymbol(a.symbol)}_${tier}`);
     const walletOwned = walletOwns(walletMap, a.symbol);
-    return { ...a, signalLevel: level, tier, decision, walletOwned, isActionable: !!decision && !walletOwned, isLedgerPending: !!decision && walletOwned };
+    const isLedgerDoneForTier = ledgerHasTier(ledger, a.symbol, tier);
+    return { ...a, signalLevel: level, tier, decision, walletOwned, isLedgerDoneForTier, isActionable: !!decision && !walletOwned, isLedgerPending: !!decision && walletOwned };
   }).sort((a,b) => {
     if (a.signalLevel !== b.signalLevel) return b.signalLevel - a.signalLevel;
     return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
-  }), [assets, decisionMap, walletMap]);
+  }), [assets, decisionMap, walletMap, ledger]);
 
-  const buyZoneRows = rows.filter((r) => r.signalLevel > 0);
-  const watchRows = rows.filter((r) => r.signalLevel <= 0);
+  const buyZoneRows = rows.filter((r) => r.signalLevel > 0 && !r.isLedgerDoneForTier);
+  const watchRows = rows.filter((r) => r.signalLevel <= 0 || (r.signalLevel > 0 && r.isLedgerDoneForTier));
   const totalAmount = executableDecisions.reduce((s, d) => s + Number(d.amount || 0), 0);
   const ws = walletSummary(wallet?.holdings);
 
