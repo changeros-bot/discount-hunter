@@ -4,6 +4,10 @@ function clean(v) {
   return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function baseKey(v) {
+  return clean(v).replace(/ON$/, "");
+}
+
 function num(v, fallback = 0) {
   const n = Number(v || 0);
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -23,6 +27,24 @@ function hasUsableHolding(holding) {
   return Boolean(holding?.symbol && num(holding.quantity) > 0);
 }
 
+function buildAssetMap(assets) {
+  const map = new Map();
+  for (const asset of assets) {
+    if (!hasUsableAsset(asset)) continue;
+    map.set(clean(asset.symbol), asset);
+    map.set(baseKey(asset.symbol), asset);
+  }
+  return map;
+}
+
+function findAssetForHolding(map, holding) {
+  const keys = [clean(holding.symbol), baseKey(holding.symbol), clean(holding.tokenSymbol), baseKey(holding.tokenSymbol)];
+  for (const key of keys) {
+    if (key && map.has(key)) return map.get(key);
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "method_not_allowed" });
 
@@ -39,7 +61,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "missing_or_invalid_holdings", message: "reconcile requires non-empty wallet holdings" });
     }
 
-    const map = new Map(assets.map((a) => [clean(a.symbol), a]));
+    const map = buildAssetMap(assets);
     const ledger = await readLedger();
     const workingLedger = JSON.parse(JSON.stringify(ledger));
     const added = [];
@@ -48,9 +70,13 @@ export default async function handler(req, res) {
 
     for (const h of holdings) {
       if (num(h.quantity) <= 0) continue;
-      const asset = map.get(clean(h.symbol));
-      if (!asset) continue;
+      const asset = findAssetForHolding(map, h);
+      if (!asset) {
+        skipped.push({ symbol: h.symbol || h.tokenSymbol || null, reason: "asset_not_found" });
+        continue;
+      }
       const symbol = normalizeSymbol(asset.symbol);
+      if (!workingLedger[symbol]) workingLedger[symbol] = { N: [], D1: [], D2: [], D3: [], D4: [] };
       const tiers = getTriggeredDipTiers(asset.discount, asset.rules || []);
       let available = num(h.totalCost, num(h.currentValue, 0)) - ledgerCost(workingLedger[symbol]);
 
