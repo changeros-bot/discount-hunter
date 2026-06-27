@@ -24,6 +24,12 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
+async function statusFetch(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  const data = await res.json().catch(() => null);
+  return data || { ok: false, error: `HTTP ${res.status}` };
+}
+
 export default function V16ManualPage() {
   const [loading, setLoading] = useState(false);
   const [decisions, setDecisions] = useState([]);
@@ -45,7 +51,7 @@ export default function V16ManualPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assets: prices.data || [], ledger: ledgerData.ledger || {} })
       });
-      const statusData = await jsonFetch(`/api/v16-status?t=${Date.now()}`);
+      const statusData = await statusFetch(`/api/v16-status?t=${Date.now()}`);
 
       setDecisions(today.decisions || []);
       setLedger(ledgerData.ledger || null);
@@ -88,8 +94,9 @@ export default function V16ManualPage() {
         <Metric label="可執行" value={`${decisions.length} 檔`} />
         <Metric label="建議投入" value={fmtMoney(totalAmount)} green />
         <Metric label="資料儲存" value={status?.storage || "--"} />
-        <Metric label="首頁接入" value={status?.checklist?.frontEndIntegrated ? "已接" : "未接"} />
+        <Metric label="Release Gate" value={status?.releaseBlocked ? "阻擋" : "正常"} warn={status?.releaseBlocked} />
       </div>
+      {status?.releaseBlocked && <div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(250,204,21,.12)", color: "#fde68a", fontWeight: 850 }}>⚠️ Release Gate：{status.releaseBlockers?.map((b) => b.key).join("、") || status.releaseBlocker || "blocked"}</div>}
     </section>
 
     {message && <pre style={{ whiteSpace: "pre-wrap", padding: 12, borderRadius: 14, background: "rgba(34,197,94,.14)", color: "#bbf7d0", fontWeight: 850 }}>{message}</pre>}
@@ -122,9 +129,9 @@ export default function V16ManualPage() {
   </main>;
 }
 
-function Metric({ label, value, green }) {
+function Metric({ label, value, green, warn }) {
   return <div style={{ padding: 10, background: "#020617", borderRadius: 14 }}>
     <div style={{ color: "#94a3b8", fontWeight: 850, fontSize: 12 }}>{label}</div>
-    <strong style={{ display: "block", marginTop: 4, color: green ? "#22c55e" : "#f8fafc", fontSize: 16 }}>{value}</strong>
+    <strong style={{ display: "block", marginTop: 4, color: warn ? "#facc15" : green ? "#22c55e" : "#f8fafc", fontSize: 16 }}>{value}</strong>
   </div>;
 }
