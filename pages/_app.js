@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
 import "../styles/globals.css";
 import "../styles/v10.css";
 import "../styles/title-gold.css";
@@ -22,16 +23,22 @@ async function fetchWalletSummary() {
     body: JSON.stringify({}),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "錢包資料讀取失敗");
+  if (!res.ok || data?.ok === false) throw new Error(data.error || "錢包資料讀取失敗");
   return data;
 }
 
 const CHANGELOG_ITEMS = [
   {
+    version: "V16-M Audit-022",
+    date: "2026/06/28",
+    commit: "5fda4e4 / pending",
+    items: ["新增 /api/daily-position alias", "修正 404 誤導問題", "全域輔助區塊只在首頁顯示"],
+  },
+  {
     version: "V16-M Audit-021",
     date: "2026/06/28",
-    commit: "pending",
-    items: ["新增 Telegram 測試按鈕", "手機端可直接 POST /api/telegram-test", "用於驗證 Bot Token 與 Chat ID"],
+    commit: "bb5c359",
+    items: ["Health Gate 統一為 shared v16 health", "v16-status 與 telegram-alerts 判斷一致", "Wallet / Prices / Ledger 健康檢查通過"],
   },
   {
     version: "V16-M Audit-018",
@@ -201,6 +208,9 @@ function HistorySummary() {
 }
 
 export default function App({ Component, pageProps }) {
+  const router = useRouter();
+  const showDashboardPanels = router.pathname === "/" || router.pathname === "/v16-full";
+
   return <>
     <Head>
       <title>DCA 折價獵人</title>
@@ -213,9 +223,11 @@ export default function App({ Component, pageProps }) {
       <meta name="twitter:description" content="手機版追蹤儀表板，快速查看狀態與更新。" />
     </Head>
     <Component {...pageProps} />
-    <Changelog />
-    <TelegramTestPanel />
-    <HoldingsDistribution />
-    <HistorySummary />
+    {showDashboardPanels && <>
+      <Changelog />
+      <TelegramTestPanel />
+      <HoldingsDistribution />
+      <HistorySummary />
+    </>}
   </>;
 }
