@@ -30,7 +30,7 @@ const CHANGELOG_ITEMS = [
   {
     version: "V16-M Audit-018",
     date: "2026/06/28",
-    commit: "pending",
+    commit: "eabc1dd",
     items: ["更新紀錄改為 V16-M 稽核格式", "新增日期、版本與 Commit 欄位", "最新修正置頂顯示"],
   },
   {
