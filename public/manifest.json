@@ -1,7 +1,8 @@
 {
   "name": "美股 DCA 折價追蹤",
   "short_name": "折價獵人",
-  "description": "DCA 折價獵人｜Binance xStocks Ledger 決策版",
+  "description": "DCA 折價獵人 | Binance 
+xStocks Ledger 決策版",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
