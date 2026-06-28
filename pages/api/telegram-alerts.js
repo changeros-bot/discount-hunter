@@ -37,6 +37,10 @@ function topThreshold(progress) {
   return NEAR_THRESHOLDS.filter((threshold) => progress >= threshold).pop() || null;
 }
 
+function highPrice(asset) {
+  return num(asset?.high || asset?.high52w || asset?.high52Week || asset?.ath || asset?.allTimeHigh);
+}
+
 function ledgerKey(ledger, symbol) {
   const target = stripOn(symbol);
   return Object.keys(ledger || {}).find((key) => stripOn(key) === target) || symbol;
@@ -76,6 +80,21 @@ function buildEvents({ assets, ledger, alerts }) {
     const next = Math.min(MAX_LEVEL, completed + 1);
     const amount = num(asset?.amounts?.[next - 1]);
     const discount = `${num(asset?.discount).toFixed(1)}%`;
+    const price = num(asset?.price);
+    const high = highPrice(asset);
+
+    if (price > 0 && high > 0 && price >= high) {
+      events.push({
+        type: "new_high",
+        symbol,
+        fromLevel: current,
+        toLevel: current,
+        threshold: "high",
+        key: eventKey("new_high", symbol, current, current, high.toFixed(4)),
+        title: "🟢 DCA 折價獵人 新高通知",
+        lines: [`${symbol} 觸及或突破高點`, `現價：${price.toFixed(4)}`, `高點：${high.toFixed(4)}`, "請確認 52 週高點／上市高點基準是否需要更新。"],
+      });
+    }
 
     if (current < previous) {
       events.push({
@@ -158,7 +177,7 @@ async function handler(req, res) {
 
     const allEvents = buildEvents({ assets: prices?.data || [], ledger, alerts });
     const now = new Date().toISOString();
-    const sendableEvents = allEvents.filter((event) => canSendAlert(alerts, event.key, now, event.type === "near" ? 24 * 365 : 12));
+    const sendableEvents = allEvents.filter((event) => canSendAlert(alerts, event.key, now, event.type === "near" ? 24 * 365 : event.type === "new_high" ? 24 : 12));
 
     const nextAlerts = { ...(alerts || {}), __layerState: { ...(alerts.__layerState || {}) } };
     for (const asset of prices?.data || []) {
@@ -179,7 +198,7 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "16.3-highest-near-individual-events",
+      version: "16.4-new-high-notifications",
       sent: sendableEvents.length > 0,
       deduped: !sendableEvents.length && allEvents.length > 0,
       walletOk: true,
