@@ -1,4 +1,5 @@
 const { sendTelegramMessage } = require("../../lib/telegram/notify");
+const { isPricesHealthy, isWalletHealthy, healthSummary } = require("../../lib/v16-health");
 
 const NEAR_THRESHOLDS = [92, 94, 96, 98];
 const MAX_LEVEL = 4;
@@ -14,14 +15,6 @@ function stripOn(symbol) {
 
 function tier(level) {
   return level > 0 ? `D${level}` : "D0";
-}
-
-function walletHealthy(response, wallet) {
-  if (!response?.ok || !wallet) return false;
-  if (wallet.ok === true) return true;
-  if (Array.isArray(wallet.holdings)) return true;
-  if (Number(wallet?.debugCounts?.liveBalanceHoldingsCount || 0) > 0) return true;
-  return false;
 }
 
 function getLevel(asset) {
@@ -172,17 +165,18 @@ async function handler(req, res) {
 
     const prices = await readJson(pricesRes);
     const wallet = await readJson(walletRes);
+    const health = healthSummary({ prices, wallet });
 
-    if (!pricesRes.ok) {
-      const sent = await sendTelegramMessage(`🔴 DCA 折價獵人 API異常\n\n行情資料讀取失敗。\n錯誤：${prices?.error || pricesRes.status}`, { cooldownKey: "telegram-alerts:prices-error", cooldownHours: 12 });
-      return res.status(500).json({ ok: false, alertType: "api_error", telegram: sent });
+    if (!pricesRes.ok || !isPricesHealthy(prices)) {
+      const reason = prices?.error || prices?.message || `http_${pricesRes.status}_unhealthy_payload`;
+      const sent = await sendTelegramMessage(`🔴 DCA 折價獵人 API異常\n\n行情資料讀取失敗。\n錯誤：${reason}`, { cooldownKey: "telegram-alerts:prices-error", cooldownHours: 12 });
+      return res.status(500).json({ ok: false, pricesOk: false, health, telegram: sent });
     }
 
-    const walletOk = walletHealthy(walletRes, wallet);
-    if (!walletOk) {
+    if (!walletRes.ok || !isWalletHealthy(wallet)) {
       const reason = wallet?.error || wallet?.message || `http_${walletRes.status}_unhealthy_payload`;
       const sent = await sendTelegramMessage(`⚠️ DCA 折價獵人 Wallet讀取異常\n\n本次不發買點清單。\n錯誤：${reason}`, { cooldownKey: "telegram-alerts:wallet-error", cooldownHours: 12 });
-      return res.status(500).json({ ok: false, walletOk: false, walletStatus: walletRes.status, walletPayloadOk: wallet?.ok ?? null, walletHoldingsCount: Array.isArray(wallet?.holdings) ? wallet.holdings.length : null, telegram: sent });
+      return res.status(500).json({ ok: false, walletOk: false, health, walletStatus: walletRes.status, telegram: sent });
     }
 
     const allEvents = buildEvents({ assets: prices?.data || [], ledger, alerts });
@@ -208,11 +202,12 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "16.5-robust-wallet-validation",
+      version: "16.6-shared-health-gate",
       sent: sendableEvents.length > 0,
       deduped: !sendableEvents.length && allEvents.length > 0,
+      pricesOk: true,
       walletOk: true,
-      walletHoldingsCount: Array.isArray(wallet?.holdings) ? wallet.holdings.length : null,
+      health,
       eventCount: allEvents.length,
       sendableCount: sendableEvents.length,
       storage: storage.store,
