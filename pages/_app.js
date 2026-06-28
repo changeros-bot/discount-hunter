@@ -28,6 +28,12 @@ async function fetchWalletSummary() {
 
 const CHANGELOG_ITEMS = [
   {
+    version: "V16-M Audit-021",
+    date: "2026/06/28",
+    commit: "pending",
+    items: ["新增 Telegram 測試按鈕", "手機端可直接 POST /api/telegram-test", "用於驗證 Bot Token 與 Chat ID"],
+  },
+  {
     version: "V16-M Audit-018",
     date: "2026/06/28",
     commit: "eabc1dd",
@@ -70,6 +76,38 @@ function Changelog() {
           {entry.items.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </section>)}
+    </div>
+  </details>;
+}
+
+function TelegramTestPanel() {
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function sendTest() {
+    setLoading(true);
+    setStatus("發送中...");
+    try {
+      const res = await fetch("/api/telegram-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "dashboard_button" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.description || `HTTP ${res.status}`);
+      setStatus("✅ 已送出，請確認 Telegram 是否收到測試訊息");
+    } catch (err) {
+      setStatus(`❌ 失敗：${err.message || "Telegram test failed"}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <details className="historyBox">
+    <summary>🧪 Telegram 測試</summary>
+    <div className="historyContent">
+      <button onClick={sendTest} disabled={loading} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: 0, background: loading ? "#475569" : "#16a34a", color: "white", fontWeight: 950, fontSize: 16 }}>{loading ? "發送中..." : "送出 Telegram 測試"}</button>
+      {status && <div className="chartMessage" style={{ marginTop: 12 }}>{status}</div>}
     </div>
   </details>;
 }
@@ -176,6 +214,7 @@ export default function App({ Component, pageProps }) {
     </Head>
     <Component {...pageProps} />
     <Changelog />
+    <TelegramTestPanel />
     <HoldingsDistribution />
     <HistorySummary />
   </>;
