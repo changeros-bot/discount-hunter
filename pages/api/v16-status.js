@@ -1,22 +1,12 @@
 const { hasKvConfig, requiresDurableKv, getStorageMode } = require("../../lib/state/kv");
+const { isPricesHealthy, isWalletHealthy, healthSummary } = require("../../lib/v16-health");
 
 async function readJson(response) {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
+  try { return await response.json(); } catch { return null; }
 }
 
 function resultStatus(response, body) {
   return response.ok && body?.ok !== false ? "ok" : "error";
-}
-
-function markEmptyCritical(result, count, reason) {
-  if (result.status === "ok" && count <= 0) {
-    return { ...result, status: "error", reason };
-  }
-  return result;
 }
 
 async function callJson(base, check, payload = null) {
@@ -44,9 +34,7 @@ function summarizeResult(result) {
 }
 
 async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
+  if (req.method !== "GET") return res.status(405).json({ ok: false, error: "Method not allowed" });
 
   const host = req.headers.host;
   const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -54,29 +42,32 @@ async function handler(req, res) {
   const storage = getStorageMode();
   const durableStateOk = hasKvConfig() || !requiresDurableKv();
 
-  const results = [
-    {
-      key: "durableState",
-      label: "Production Durable State",
-      critical: true,
-      status: durableStateOk ? "ok" : "error",
-      storage,
-      requiresDurableKv: requiresDurableKv(),
-      hasKvConfig: hasKvConfig(),
-      reason: durableStateOk ? null : "missing_required_upstash_kv"
-    }
-  ];
+  const results = [{
+    key: "durableState",
+    label: "Production Durable State",
+    critical: true,
+    status: durableStateOk ? "ok" : "error",
+    storage,
+    requiresDurableKv: requiresDurableKv(),
+    hasKvConfig: hasKvConfig(),
+    reason: durableStateOk ? null : "missing_required_upstash_kv",
+  }];
 
   let pricesResult = null;
   let walletResult = null;
+  let health = null;
 
   try {
     const rawPricesResult = await callJson(base, { key: "prices", label: "Prices", path: "/api/prices", critical: true });
-    const dataCount = Array.isArray(rawPricesResult.body?.data) ? rawPricesResult.body.data.length : 0;
-    pricesResult = markEmptyCritical(rawPricesResult, dataCount, "prices_data_empty");
+    const pricesOk = isPricesHealthy(rawPricesResult.body);
+    pricesResult = {
+      ...rawPricesResult,
+      status: rawPricesResult.httpStatus >= 200 && rawPricesResult.httpStatus < 300 && pricesOk ? "ok" : "error",
+      reason: pricesOk ? null : "prices_unhealthy_payload",
+    };
     results.push(summarizeResult({
       ...pricesResult,
-      dataCount,
+      dataCount: Array.isArray(rawPricesResult.body?.data) ? rawPricesResult.body.data.length : 0,
     }));
   } catch (error) {
     results.push({ key: "prices", label: "Prices", path: "/api/prices", critical: true, status: "error", error: error.message });
@@ -84,15 +75,23 @@ async function handler(req, res) {
 
   try {
     const rawWalletResult = await callJson(base, { key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true }, {});
-    const holdingsCount = Array.isArray(rawWalletResult.body?.holdings) ? rawWalletResult.body.holdings.length : 0;
-    walletResult = markEmptyCritical(rawWalletResult, holdingsCount, "wallet_holdings_empty");
+    const walletOk = isWalletHealthy(rawWalletResult.body);
+    walletResult = {
+      ...rawWalletResult,
+      status: rawWalletResult.httpStatus >= 200 && rawWalletResult.httpStatus < 300 && walletOk ? "ok" : "error",
+      reason: walletOk ? null : "wallet_unhealthy_payload",
+    };
     results.push(summarizeResult({
       ...walletResult,
-      holdingsCount,
+      holdingsCount: Array.isArray(rawWalletResult.body?.holdings) ? rawWalletResult.body.holdings.length : 0,
+      liveBalanceHoldingsCount: Number(rawWalletResult.body?.debugCounts?.liveBalanceHoldingsCount || 0),
+      selectedLiveBalanceHoldingsCount: Number(rawWalletResult.body?.debugCounts?.selectedLiveBalanceHoldingsCount || 0),
     }));
   } catch (error) {
     results.push({ key: "syncWallet", label: "Sync Wallet", path: "/api/sync-wallet", method: "POST", critical: true, status: "error", error: error.message });
   }
+
+  health = healthSummary({ prices: pricesResult?.body, wallet: walletResult?.body });
 
   if (pricesResult?.status === "ok" && walletResult?.status === "ok") {
     try {
@@ -118,7 +117,7 @@ async function handler(req, res) {
       method: "POST",
       critical: true,
       status: "blocked",
-      reason: "prices_or_wallet_not_ok"
+      reason: "prices_or_wallet_not_ok",
     });
   }
 
@@ -149,17 +148,20 @@ async function handler(req, res) {
 
   return res.status(200).json({
     ok: !releaseBlocked,
-    version: "16.4-explicit-empty-data-health-gate",
+    version: "16.6-shared-health-gate",
     storage,
     durableStateOk,
     requiresDurableKv: requiresDurableKv(),
     hasKvConfig: hasKvConfig(),
+    pricesOk: Boolean(health?.pricesOk),
+    walletOk: Boolean(health?.walletOk),
+    health,
     releaseBlocked,
     releaseBlockers: failedCritical.map((item) => ({ key: item.key, reason: item.reason || item.error || item.status })),
     checklist: {
       buyLedger: true,
-      pricesHealthGate: true,
-      walletHealthGate: true,
+      pricesHealthGate: "shared_v16_health",
+      walletHealthGate: "shared_v16_health",
       reconcileDryRunHealthGate: true,
       durableStateGate: true,
       dcaSplitN: true,
