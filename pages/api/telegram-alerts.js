@@ -16,6 +16,14 @@ function tier(level) {
   return level > 0 ? `D${level}` : "D0";
 }
 
+function walletHealthy(response, wallet) {
+  if (!response?.ok || !wallet) return false;
+  if (wallet.ok === true) return true;
+  if (Array.isArray(wallet.holdings)) return true;
+  if (Number(wallet?.debugCounts?.liveBalanceHoldingsCount || 0) > 0) return true;
+  return false;
+}
+
 function getLevel(asset) {
   const signal = Number(asset?.signal?.level || 0);
   if (signal > 0) return Math.min(MAX_LEVEL, signal);
@@ -170,9 +178,11 @@ async function handler(req, res) {
       return res.status(500).json({ ok: false, alertType: "api_error", telegram: sent });
     }
 
-    if (!(walletRes.ok && wallet?.ok)) {
-      const sent = await sendTelegramMessage(`⚠️ DCA 折價獵人 Wallet讀取異常\n\n本次不發買點清單。\n錯誤：${wallet?.error || walletRes.status}`, { cooldownKey: "telegram-alerts:wallet-error", cooldownHours: 12 });
-      return res.status(500).json({ ok: false, walletOk: false, telegram: sent });
+    const walletOk = walletHealthy(walletRes, wallet);
+    if (!walletOk) {
+      const reason = wallet?.error || wallet?.message || `http_${walletRes.status}_unhealthy_payload`;
+      const sent = await sendTelegramMessage(`⚠️ DCA 折價獵人 Wallet讀取異常\n\n本次不發買點清單。\n錯誤：${reason}`, { cooldownKey: "telegram-alerts:wallet-error", cooldownHours: 12 });
+      return res.status(500).json({ ok: false, walletOk: false, walletStatus: walletRes.status, walletPayloadOk: wallet?.ok ?? null, walletHoldingsCount: Array.isArray(wallet?.holdings) ? wallet.holdings.length : null, telegram: sent });
     }
 
     const allEvents = buildEvents({ assets: prices?.data || [], ledger, alerts });
@@ -198,10 +208,11 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "16.4-new-high-notifications",
+      version: "16.5-robust-wallet-validation",
       sent: sendableEvents.length > 0,
       deduped: !sendableEvents.length && allEvents.length > 0,
       walletOk: true,
+      walletHoldingsCount: Array.isArray(wallet?.holdings) ? wallet.holdings.length : null,
       eventCount: allEvents.length,
       sendableCount: sendableEvents.length,
       storage: storage.store,
