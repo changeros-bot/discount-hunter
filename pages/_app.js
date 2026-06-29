@@ -16,6 +16,29 @@ function formatTime(isoString) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
+function money(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(2).replace(".00", "")}U` : "--";
+}
+
+function pct(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(1)}%` : "--";
+}
+
+function price(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `$${n.toFixed(4)}` : "--";
+}
+
+function normalizeSymbol(symbol) {
+  return String(symbol || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function decisionKey(decision) {
+  return `${normalizeSymbol(decision?.symbol)}_${String(decision?.tier || "").toUpperCase()}`;
+}
+
 async function fetchWalletSummary() {
   const res = await fetch("/api/sync-wallet", {
     method: "POST",
@@ -27,7 +50,20 @@ async function fetchWalletSummary() {
   return data;
 }
 
+async function fetchJson(url, options) {
+  const res = await fetch(url, { cache: "no-store", ...(options || {}) });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+  return data;
+}
+
 const CHANGELOG_ITEMS = [
+  {
+    version: "V16-M Audit-023",
+    date: "2026/06/29",
+    commit: "pending",
+    items: ["新增今日決策詳細卡片", "補足價格、跌幅、高點、規則與原因", "避免只看到一行買點訊息"],
+  },
   {
     version: "V16-M Audit-022",
     date: "2026/06/28",
@@ -85,6 +121,85 @@ function Changelog() {
       </section>)}
     </div>
   </details>;
+}
+
+function RichTodayDecisionCards() {
+  const [state, setState] = useState({ loading: true, error: "", decisions: [], assets: [], updatedAt: "" });
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const prices = await fetchJson(`/api/prices?t=${Date.now()}`);
+        const ledger = await fetchJson(`/api/buy-ledger?t=${Date.now()}`);
+        const today = await fetchJson(`/api/today-decisions?t=${Date.now()}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assets: prices.data || [], ledger: ledger.ledger || {} }),
+        });
+        if (!active) return;
+        setState({ loading: false, error: "", decisions: today.decisions || [], assets: prices.data || [], updatedAt: today.updatedAt || prices.updatedAt || "" });
+      } catch (err) {
+        if (!active) return;
+        setState((prev) => ({ ...prev, loading: false, error: err.message || "今日決策詳細資料讀取失敗" }));
+      }
+    }
+    load();
+    const timer = setInterval(load, 15000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
+
+  const assetMap = useMemo(() => new Map((state.assets || []).map((asset) => [normalizeSymbol(asset.symbol), asset])), [state.assets]);
+
+  return <details className="historyBox" open>
+    <summary>🧾 今日決策詳細卡片（{state.decisions.length}）</summary>
+    <div className="historyContent" style={{ display: "grid", gap: 12 }}>
+      {state.loading && <div className="chartMessage">讀取今日決策詳細資料中…</div>}
+      {state.error && <div className="chartMessage">⚠️ {state.error}</div>}
+      {!state.loading && !state.error && state.decisions.length === 0 && <div className="chartMessage">目前沒有未登帳買點。</div>}
+      {state.decisions.map((decision) => {
+        const asset = assetMap.get(normalizeSymbol(decision.symbol)) || {};
+        const ruleRows = (asset.rules || []).map((rule, index) => ({ tier: `D${index + 1}`, rule, amount: asset.amounts?.[index] || 0 }));
+        const currentRule = ruleRows.find((row) => row.tier === decision.tier);
+        return <article key={decisionKey(decision)} style={{ padding: 14, borderRadius: 16, background: "linear-gradient(135deg, rgba(15,23,42,.98), rgba(2,6,23,.98))", border: "1px solid rgba(245,158,11,.42)", color: "#e2e8f0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 1000, color: "#f8fafc" }}>{decision.symbol} {decision.tier}</div>
+              <div style={{ color: "#94a3b8", fontWeight: 850, marginTop: 2 }}>{decision.name || asset.name || "--"}</div>
+            </div>
+            <strong style={{ color: "#22c55e", fontSize: 20 }}>{money(decision.amount)}</strong>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+            <MiniMetric label="目前價格" value={price(decision.price ?? asset.price)} />
+            <MiniMetric label="高點基準" value={price(asset.high)} />
+            <MiniMetric label="目前跌幅" value={pct(decision.discount ?? asset.discount)} tone="danger" />
+            <MiniMetric label="觸發規則" value={currentRule ? `${pct(currentRule.rule)} / ${money(currentRule.amount)}` : "--"} />
+          </div>
+
+          <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: "rgba(15,23,42,.88)", border: "1px solid rgba(148,163,184,.22)", fontWeight: 850 }}>
+            <div>狀態：買點已達，等待手動確認。</div>
+            <div style={{ marginTop: 4, color: "#94a3b8" }}>進買點：{formatTime(decision.triggeredAt || state.updatedAt)}</div>
+            <div style={{ marginTop: 4, color: "#94a3b8" }}>指令：{decision.command || `/buy ${decision.symbol} ${decision.tier} ${decision.amount}`}</div>
+          </div>
+
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ fontWeight: 950 }}>查看全部層級規則</summary>
+            <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+              {ruleRows.map((row) => <div key={row.tier} style={{ color: row.tier === decision.tier ? "#fbbf24" : "#cbd5e1", fontWeight: 850 }}>{row.tier}：{pct(row.rule)}｜{money(row.amount)}</div>)}
+            </div>
+          </details>
+        </article>;
+      })}
+    </div>
+  </details>;
+}
+
+function MiniMetric({ label, value, tone }) {
+  return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}>
+    <span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span>
+    <strong style={{ display: "block", marginTop: 4, color: tone === "danger" ? "#f87171" : "#f8fafc", fontSize: 16 }}>{value}</strong>
+  </div>;
 }
 
 function TelegramTestPanel() {
@@ -224,6 +339,7 @@ export default function App({ Component, pageProps }) {
     </Head>
     <Component {...pageProps} />
     {showDashboardPanels && <>
+      <RichTodayDecisionCards />
       <Changelog />
       <TelegramTestPanel />
       <HoldingsDistribution />
