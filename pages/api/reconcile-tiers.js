@@ -58,7 +58,8 @@ export default async function handler(req, res) {
   try {
     const assets = Array.isArray(req.body?.assets) ? req.body.assets : [];
     const holdings = Array.isArray(req.body?.holdings) ? req.body.holdings : [];
-    const dryRun = req.body?.dryRun === true || req.query?.dryRun === "true";
+    const confirmReconcile = req.body?.confirmReconcile === true;
+    const dryRun = req.body?.dryRun !== false || req.query?.dryRun === "true" || !confirmReconcile;
 
     if (!dryRun && requiresDurableKv() && !hasKvConfig()) {
       return res.status(409).json({
@@ -66,6 +67,22 @@ export default async function handler(req, res) {
         error: "missing_required_upstash_kv",
         message: "補登需要正式 durable Ledger 儲存；目前未設定 Upstash KV，因此沒有寫入。",
         releaseBlocked: true
+      });
+    }
+
+    if (!confirmReconcile && req.body?.source !== "explicit-confirm-reconcile") {
+      const ledger = await readLedger();
+      return res.status(409).json({
+        ok: false,
+        dryRun: true,
+        blocked: true,
+        error: "explicit_reconcile_confirmation_required",
+        message: "安全保護：Wallet 持有不等於本層已買入。未提供 confirmReconcile=true，不允許自動補登 Ledger。",
+        addedCount: 0,
+        added: [],
+        skipped: [],
+        storage: "blocked_no_write",
+        ledger
       });
     }
 
@@ -126,8 +143,8 @@ export default async function handler(req, res) {
           quantity: num(h.quantity),
           quantitySource: h.quantitySource,
           sourceVerified: true,
-          mode: "wallet_reconcile",
-          note: "wallet_reconcile_" + tier,
+          mode: "wallet_reconcile_confirmed",
+          note: "explicit_confirm_reconcile_" + tier,
           leftBuyZone: false,
           leftBuyZoneAt: null
         });
@@ -137,7 +154,7 @@ export default async function handler(req, res) {
     }
 
     const writeResult = added.length && !dryRun ? await writeLedger(workingLedger) : { store: dryRun ? "dry_run_no_write" : "unchanged" };
-    return res.status(200).json({ ok: true, dryRun, addedCount: added.length, added, skipped, storage: writeResult.store, ledger: dryRun ? ledger : workingLedger });
+    return res.status(200).json({ ok: true, dryRun, requiresExplicitConfirm: true, addedCount: added.length, added, skipped, storage: writeResult.store, ledger: dryRun ? ledger : workingLedger });
   } catch (error) {
     return res.status(500).json({ ok: false, error: "reconcile_tiers_failed", message: error.message });
   }
