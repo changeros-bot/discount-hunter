@@ -46,7 +46,7 @@ function requireNonEmptyArray(value, label) {
 function requireLiveHoldings(holdings) {
   const rows = requireNonEmptyArray(holdings, "wallet_holdings");
   const liveRows = rows.filter(isLiveHolding);
-  if (!liveRows.length) throw new Error("尚未偵測到真實鏈上買入持倉，補登已取消");
+  if (!liveRows.length) throw new Error("尚未偵測到真實鏈上買入持倉，檢查已取消");
   return liveRows;
 }
 
@@ -197,15 +197,14 @@ export default function V16FullHome() {
       const safeAssets = requireNonEmptyArray(assets, "prices_data");
       const currentWallet = await syncWallet({ throwOnError: true });
       const holdings = requireLiveHoldings(currentWallet?.holdings);
-      const result = await jsonFetch(`/api/reconcile-tiers?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets: safeAssets, holdings }) });
-      const updatedLedger = result.ledger || ledger;
-      setLedger(updatedLedger);
-      await calculateDecisions(safeAssets, updatedLedger);
-      setReconcileMessage(`補登 ${result.addedCount || 0} 筆｜${result.storage || "--"}`);
+      const result = await jsonFetch(`/api/reconcile-tiers?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets: safeAssets, holdings, dryRun: true, source: "ledger-check-button" }) });
+      setLedger(result.ledger || ledger);
+      await calculateDecisions(safeAssets, result.ledger || ledger);
+      setReconcileMessage(`Ledger 檢查完成｜未寫入｜可補登候選 ${result.addedCount || 0} 筆`);
     } catch (e) {
-      const msg = e.message || "補登失敗";
+      const msg = e.message || "Ledger 檢查失敗";
       setError(msg);
-      setReconcileMessage(msg.includes("尚未偵測") ? msg : "");
+      setReconcileMessage(msg.includes("explicit_reconcile_confirmation_required") ? "安全保護：未確認買入，不會自動補登 Ledger。" : msg.includes("尚未偵測") ? msg : "");
     } finally {
       setReconciling(false);
     }
@@ -248,7 +247,7 @@ export default function V16FullHome() {
       <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks｜Ledger 決策版</h2>
       {error && <div className="dataGuard">{error}</div>}
       {walletError && <div className="dataGuard">Wallet：{walletError}</div>}
-      {reconcileMessage && <div className="dataGuard" style={{ color: reconcileMessage.includes("尚未偵測") ? "#fde68a" : "#bbf7d0" }}>{reconcileMessage}</div>}
+      {reconcileMessage && <div className="dataGuard" style={{ color: reconcileMessage.includes("不會自動") ? "#fde68a" : "#bbf7d0" }}>{reconcileMessage}</div>}
     </section>
 
     <section style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: displayDecisions.length ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
@@ -261,14 +260,14 @@ export default function V16FullHome() {
           <div>建議新增投入：<span className="signed-positive" style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div>
         </div>
         <div style={{ display: "grid", gap: 12 }}>{displayDecisions.map((d) => <DecisionCard key={decisionKey(d)} decision={d} asset={assetMap.get(normalizeSymbol(d.symbol))} />)}</div>
-      </> : <div style={{ textAlign: "center", padding: "8px 0 12px", color: "#94a3b8", fontWeight: 900 }}>暫無未登帳買點</div>}
+      </> : <div style={{ textAlign: "center", padding: "34px 0 36px", color: "#cbd5e1", fontWeight: 1000, fontSize: 18 }}>暫無未登帳買點</div>}
     </section>
 
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={reconcileLedger} disabled={reconciling || !assets.length} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: reconciling || !assets.length ? "#475569" : "#16a34a", color: "white", fontWeight: 950 }}>{reconciling ? "補登中" : "補登Ledger"}</button>
+          <button onClick={reconcileLedger} disabled={reconciling || !assets.length} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: reconciling || !assets.length ? "#475569" : "#334155", color: "white", fontWeight: 950 }}>{reconciling ? "檢查中" : "Ledger檢查"}</button>
           <button onClick={() => syncWallet({ throwOnError: false })} disabled={walletLoading} style={{ padding: "8px 11px", borderRadius: 10, border: 0, background: walletLoading ? "#475569" : "#2563eb", color: "white", fontWeight: 950 }}>{walletLoading ? "同步中" : "重新同步"}</button>
         </div>
       </div>
