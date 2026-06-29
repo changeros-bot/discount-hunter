@@ -7,25 +7,53 @@ import {
   getExecutableTiers
 } from "../../lib/v16-ledger";
 
+function isExplicitManualRow(row) {
+  const mode = String(row?.mode || "").toLowerCase();
+  const note = String(row?.note || "").toLowerCase();
+  return mode === "dip_manual" || mode === "dca_manual" || note.includes("manual");
+}
+
+function visibleLedgerOnly(ledger = {}) {
+  const visible = {};
+  for (const [symbol, tiers] of Object.entries(ledger || {})) {
+    visible[symbol] = {};
+    for (const [tier, rows] of Object.entries(tiers || {})) {
+      visible[symbol][tier] = Array.isArray(rows) ? rows.filter(isExplicitManualRow) : [];
+    }
+  }
+  return visible;
+}
+
+function completedLevelFromVisible(ledger, symbol) {
+  const rows = ledger?.[symbol] || {};
+  for (let level = 4; level >= 1; level -= 1) {
+    if (Array.isArray(rows[`D${level}`]) && rows[`D${level}`].length) return level;
+  }
+  return 0;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
 
   try {
     if (req.method === "GET") {
-      const ledger = await readLedger();
-      const { symbol } = req.query || {};
+      const rawLedger = await readLedger();
+      const ledger = visibleLedgerOnly(rawLedger);
+      const { symbol, includeRaw } = req.query || {};
 
       if (symbol) {
         const normalizedSymbol = normalizeSymbol(symbol);
         return res.status(200).json({
           ok: true,
           symbol: normalizedSymbol,
-          completedDipLevel: getCompletedDipLevel(ledger, normalizedSymbol),
-          ledger: ledger[normalizedSymbol]
+          visibilityRule: "explicit_manual_only",
+          completedDipLevel: completedLevelFromVisible(ledger, normalizedSymbol),
+          ledger: ledger[normalizedSymbol],
+          rawLedger: includeRaw === "true" ? rawLedger[normalizedSymbol] : undefined
         });
       }
 
-      return res.status(200).json({ ok: true, ledger });
+      return res.status(200).json({ ok: true, visibilityRule: "explicit_manual_only", ledger, rawLedger: includeRaw === "true" ? rawLedger : undefined });
     }
 
     if (req.method === "POST") {
