@@ -133,3 +133,37 @@ New features increase risk before RC.
 Impact:
 
 - App Push, notification history UI, LINE, Email, and advanced analytics move to V17 unless explicitly approved.
+
+---
+
+## Decision-009 — Wallet verifies, but does not prove a tier was bought
+
+Decision:
+
+Wallet data must be used for verification, quantity monitoring, value, cost basis, PnL, and reconcile safety. However, Wallet ownership alone must not mark a D1-D4 tier as bought.
+
+Reason:
+
+A wallet may already hold a symbol from an older tier. If the system treats “Wallet owns symbol” as “current tier bought,” future layers such as D2, D3, or D4 can be incorrectly suppressed.
+
+Correct state logic:
+
+```text
+Price reaches tier + Ledger has tier
+  -> Completed
+
+Price reaches tier + Pending purchase exists
+  -> Bought, Ledger pending
+
+Price reaches tier + no Ledger tier + no Pending purchase
+  -> Manual buy candidate
+
+Wallet owns symbol
+  -> Verification signal only, not tier completion proof
+```
+
+Impact:
+
+- Today Decision suggested amount is based on manual-buy candidates.
+- Wallet ownership may show warning/context, but cannot reduce suggested amount by itself.
+- Future Wallet delta detection should create Pending events only after quantity increase is detected and matched to a decision.
