@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!confirmReconcile && req.body?.source !== "explicit-confirm-reconcile") {
+    if (!dryRun && !confirmReconcile) {
       const ledger = await readLedger();
       return res.status(409).json({
         ok: false,
@@ -154,7 +154,7 @@ export default async function handler(req, res) {
     }
 
     const writeResult = added.length && !dryRun ? await writeLedger(workingLedger) : { store: dryRun ? "dry_run_no_write" : "unchanged" };
-    return res.status(200).json({ ok: true, dryRun, requiresExplicitConfirm: true, addedCount: added.length, added, skipped, storage: writeResult.store, ledger: dryRun ? ledger : workingLedger });
+    return res.status(200).json({ ok: true, dryRun, requiresExplicitConfirm: true, addedCount: dryRun ? 0 : added.length, candidateCount: added.length, candidates: added, added: dryRun ? [] : added, skipped, storage: writeResult.store, ledger: dryRun ? ledger : workingLedger });
   } catch (error) {
     return res.status(500).json({ ok: false, error: "reconcile_tiers_failed", message: error.message });
   }
