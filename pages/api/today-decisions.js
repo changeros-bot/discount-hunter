@@ -9,19 +9,37 @@ function buildTriggeredProgress({ tier, amount }) {
   return {
     stageText: `${tier} 已達買點`,
     fromText: `${amount}U`,
-    toText: "可買入",
+    toText: "可執行",
     progress: 100,
     displayProgress: 100,
     isTriggered: true
   };
 }
 
+function isExplicitManualRow(row) {
+  const mode = String(row?.mode || "").toLowerCase();
+  const note = String(row?.note || "").toLowerCase();
+  return mode === "dip_manual" || mode === "dca_manual" || note.includes("manual");
+}
+
+function explicitLedgerOnly(ledger) {
+  const normalized = normalizeLedger(ledger || {});
+  const output = normalizeLedger({});
+  for (const [symbol, tiers] of Object.entries(normalized)) {
+    for (const [tier, rows] of Object.entries(tiers || {})) {
+      output[symbol][tier] = Array.isArray(rows) ? rows.filter(isExplicitManualRow) : [];
+    }
+  }
+  return output;
+}
+
 function buildDecisions(assets, ledger, now) {
   const dedup = new Map();
+  const explicitLedger = explicitLedgerOnly(ledger);
 
   for (const asset of assets || []) {
     const executable = getExecutableTiers({
-      ledger,
+      ledger: explicitLedger,
       symbol: asset.symbol,
       discount: asset.discount,
       rules: asset.rules,
@@ -43,13 +61,11 @@ function buildDecisions(assets, ledger, now) {
         amount,
         triggeredAt: now,
         progress: buildTriggeredProgress({ tier, amount }),
-        command: `/buy ${asset.symbol} ${tier} ${amount}`
+        completionRule: "explicit_manual_mark_required"
       };
 
       const previous = dedup.get(key);
-      if (!previous || Math.abs(Number(row.discount || 0)) > Math.abs(Number(previous.discount || 0))) {
-        dedup.set(key, row);
-      }
+      if (!previous || Math.abs(Number(row.discount || 0)) > Math.abs(Number(previous.discount || 0))) dedup.set(key, row);
     }
   }
 
@@ -74,6 +90,7 @@ export default async function handler(req, res) {
         ok: true,
         mode: "posted-assets",
         ledgerSource: ledgerResult.source,
+        completionRule: "explicit_manual_mark_only",
         updatedAt: now,
         ledgerUpdatedForLeftBuyZone: false,
         count: decisions.length,
@@ -83,11 +100,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "GET") {
-      return res.status(200).json({
-        ok: true,
-        message: "POST assets from /api/prices to calculate V16 manual decisions.",
-        usage: { method: "POST", body: { assets: "array from /api/prices data", ledger: "optional buy-ledger object" } }
-      });
+      return res.status(200).json({ ok: true, message: "POST assets from /api/prices to calculate V16 manual decisions." });
     }
 
     return res.status(405).json({ ok: false, error: "method_not_allowed" });
