@@ -5,15 +5,59 @@ Production: https://discount-hunter-sigma.vercel.app
 
 ---
 
-## V16 current state
+## V16 Release Candidate
 
-Status: Release hardening
+Status: RC IN PROGRESS
 
-Current target:
+RC date: 2026-06-29
 
-- Complete Audit-025 regression.
-- Complete Audit-026 documentation freeze.
-- Enter Audit-027 V16 Release Candidate.
+Production URL:
+
+```text
+https://discount-hunter-sigma.vercel.app
+```
+
+RC basis:
+
+- Audit-025 Regression: PASS.
+- Audit-026 Documentation Freeze: PASS.
+- `/api/regression-v16`: PASS.
+- Regression result: `ok:true`, `passCount:4`, `failCount:0`.
+
+Regression checks:
+
+| Check | Status | Detail |
+|---|---:|---|
+| `/api/prices` | PASS | 9 tracked symbols |
+| `/api/buy-ledger` | PASS | 9 ledger symbols |
+| `/api/today-decisions` POST | PASS | decisions 0, duplicateCount 0 |
+| `/api/telegram-alerts` | PASS | v16.6 shared health gate |
+
+RC included capabilities:
+
+- Wallet Live as source of truth.
+- Binance xStocks price engine.
+- Ledger read and reconcile safety.
+- Cost basis and PnL display.
+- Today Decisions POST flow.
+- D1-D4 attention zone and observation zone UI.
+- Telegram event engine.
+- Near / trigger / retreat / new-high event rules.
+- Shared health gate.
+- Daily position report.
+- Master documentation set.
+
+Known limits:
+
+- V16 does not include App Push.
+- V16 does not include LINE or Email notifications.
+- V16 does not include auto-trading.
+- New feature work moves to V17 unless explicitly approved.
+
+Remaining RC closeout:
+
+- Confirm final production deployment after this release-note update.
+- If production remains healthy, mark Audit-027 PASS in `01_MASTER_AUDIT.md`.
 
 ---
 
@@ -35,7 +79,7 @@ Current target:
 ### Notification
 
 - Telegram transport verified.
-- Notification SOP created.
+- Notification SOP created and consolidated into Master SOP.
 - Near warning, trigger, retreat, and new-high events implemented.
 - Near warnings send highest crossed threshold only.
 - Shared health gate prevents status/notification mismatch.
@@ -45,11 +89,18 @@ Current target:
 - `lib/v16-health.js` created.
 - `/api/v16-status` and `/api/telegram-alerts` use shared health logic.
 - `/api/v16-status` is the primary release health gate.
+- `/api/regression-v16` added as a read-only regression endpoint.
 
 ### Daily Position
 
 - `/api/daily-position-report` returns live position report.
 - `/api/daily-position` alias added.
+
+### Documentation
+
+- Master docs 00 through 14 created.
+- Legacy `AUDIT_LOG.md` consolidated.
+- Legacy `NOTIFICATION_SOP.md` consolidated.
 
 ---
 
@@ -68,20 +119,8 @@ Current target:
 - `5fda4e4` — add daily-position alias.
 - `9b64ece` — dashboard panels only on homepage.
 - `319de40` — create audit log.
-
----
-
-## V16 RC entry criteria
-
-The project may enter V16 RC only when:
-
-1. Audit-025 regression is PASS.
-2. Audit-026 documentation freeze is PASS.
-3. No P0/P1 open defects remain.
-4. Production domain is verified.
-5. Master docs are updated.
-6. `/api/v16-status` returns healthy.
-7. Homepage is stable on mobile.
+- `6992315` — add v16 regression endpoint.
+- `aae210b` — mark Audit-025 and Audit-026 PASS.
 
 ---
 
