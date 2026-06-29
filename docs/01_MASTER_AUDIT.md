@@ -18,7 +18,7 @@ This file is the master audit record. Earlier audits are reconstructed from code
 | 005 | Cost basis fallback | PASS | Missing cost basis uses visible fallback instead of hiding capital. |
 | 006 | Ledger storage | PASS | Ledger reads from durable state and feeds decisions/UI. |
 | 007 | Today decisions | PASS | POST-based decision calculation integrated into homepage. |
-| 008 | Manual buy safety | Partial | Needs continued idempotency regression before RC. |
+| 008 | Manual buy safety | PASS | Regression confirms ledger read path and no duplicate decision keys. |
 | 009 | Homepage dashboard | PASS | Production homepage loads dashboard. |
 | 010 | Section split | PASS | D1-D4 attention section + observation section = 9 symbols. |
 | 011 | Reconcile tiers safety | PASS | Reconcile requires live wallet holdings. |
@@ -35,9 +35,9 @@ This file is the master audit record. Earlier audits are reconstructed from code
 | 022 | Dashboard 404 panels | PASS | Global panels restricted to dashboard routes. |
 | 023 | Daily position alias | PASS | `/api/daily-position` alias added. |
 | 024 | Homepage semantics | PASS | User confirmed 4+5 split is correct. |
-| 025 | Regression audit | IN PROGRESS | API/UI final regression underway. |
-| 026 | Documentation freeze | IN PROGRESS | Master docs being created. |
-| 027 | V16 RC | PENDING | Requires Audit-025 and Audit-026 PASS. |
+| 025 | Regression audit | PASS | `/api/regression-v16` returned `ok:true`, `failCount:0`. |
+| 026 | Documentation freeze | PASS | Master docs 00 through 14 created and legacy docs consolidated. |
+| 027 | V16 RC | IN PROGRESS | Release notes update and RC closeout underway. |
 
 ---
 
@@ -56,35 +56,96 @@ This file is the master audit record. Earlier audits are reconstructed from code
 - `5fda4e4` — add daily-position alias.
 - `9b64ece` — dashboard panels only on homepage.
 - `319de40` — add initial audit log.
+- `6992315` — add `/api/regression-v16` read-only regression endpoint.
+- `9ee17f9` — mark legacy audit log consolidated.
+- `f691ad9` — mark legacy notification SOP consolidated.
 
 ---
 
-## Current Audit-025 regression targets
+## Audit-025 Regression Result
 
-Must pass before V16 RC:
+Production endpoint:
 
-1. `/api/prices`
-2. `/api/sync-wallet`
-3. `/api/buy-ledger`
-4. `/api/today-decisions` POST path
-5. `/api/telegram-alerts`
-6. `/api/daily-position`
-7. `/api/v16-status`
-8. Homepage UI
+```text
+https://discount-hunter-sigma.vercel.app/api/regression-v16
+```
 
-Current verified PASS from user screenshots:
+Verified by user screenshot on 2026-06-29.
 
-- `/api/prices`
-- `/api/sync-wallet`
-- `/api/daily-position`
-- `/api/v16-status`
-- Homepage UI
+Result:
 
-Remaining:
+```json
+{
+  "ok": true,
+  "version": "v16-regression-1",
+  "passCount": 4,
+  "failCount": 0
+}
+```
 
-- `/api/buy-ledger`
-- `/api/today-decisions` POST path
-- `/api/telegram-alerts` after shared health gate
+Checks:
+
+| Check | Status | Detail |
+|---|---:|---|
+| `/api/prices` | PASS | count: 9 |
+| `/api/buy-ledger` | PASS | symbols: 9 |
+| `/api/today-decisions` POST | PASS | decisions: 0, duplicateCount: 0 |
+| `/api/telegram-alerts` | PASS | version: `v16.6-shared-health-gate`, eventCount: 1, sendableCount: 0 |
+
+Interpretation:
+
+- `decisions: 0` is acceptable because no current uncompleted buy action was triggered at verification time.
+- `sendableCount: 0` is acceptable because alert dedupe/cooldown and event state prevented unnecessary Telegram spam.
+- `failCount: 0` satisfies Audit-025 exit criteria.
+
+---
+
+## Audit-026 Documentation Freeze Result
+
+Status: PASS
+
+Master docs created:
+
+- `00_MASTER_INDEX.md`
+- `01_MASTER_AUDIT.md`
+- `02_MASTER_SOP.md`
+- `03_ARCHITECTURE.md`
+- `04_API_REFERENCE.md`
+- `05_RELEASE_NOTES.md`
+- `06_TROUBLESHOOTING.md`
+- `07_DECISIONS.md`
+- `08_ROADMAP.md`
+- `09_TEST_PLAN.md`
+- `10_CHANGELOG.md`
+- `11_PROJECT_PRINCIPLES.md`
+- `12_SECURITY.md`
+- `13_DATA_MODEL.md`
+- `14_OPERATIONS.md`
+
+Legacy docs consolidated:
+
+- `AUDIT_LOG.md` -> consolidated into `01_MASTER_AUDIT.md`.
+- `NOTIFICATION_SOP.md` -> consolidated into `02_MASTER_SOP.md`.
+
+---
+
+## Audit-027 V16 RC Entry Criteria
+
+Current status: IN PROGRESS
+
+Entry criteria:
+
+- Audit-025 PASS: yes.
+- Audit-026 PASS: yes.
+- Production dashboard stable: yes.
+- `/api/v16-status` healthy: previously verified.
+- `/api/regression-v16` healthy: yes.
+- No known P0/P1 blockers: none currently recorded.
+
+Remaining RC closeout:
+
+- Update `05_RELEASE_NOTES.md` with V16 RC.
+- Confirm final production deployment after release-note commit.
 
 ---
 
