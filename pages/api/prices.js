@@ -1,17 +1,24 @@
+import { getAssetRegistry } from "../../lib/v17-asset-registry";
+
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
 const BINANCE_DYNAMIC_URL = "https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/market/token/rwa/dynamic/ai";
 
-const watchlist = [
-  { symbol: "QQQon", name: "Invesco QQQ", grade: "A+", description: "核心ETF｜Nasdaq 100", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
-  { symbol: "NVDAon", name: "NVIDIA", grade: "A", description: "AI GPU核心龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
-  { symbol: "TSMon", name: "Taiwan Semiconductor", grade: "A", description: "全球先進製程龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
-  { symbol: "AVGOon", name: "Broadcom", grade: "A", description: "AI網路 + ASIC龍頭", rules: [-15, -25, -35, -50], amounts: [5, 10, 15, 20] },
-  { symbol: "SPCXon", name: "SpaceX", grade: "A-", description: "高成長太空龍頭", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
-  { symbol: "GOOGLon", name: "Alphabet", grade: "B", description: "AI + 搜尋 + 雲端", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
-  { symbol: "AMDon", name: "Advanced Micro Devices", grade: "B", description: "AI GPU挑戰者", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
-  { symbol: "MRVLon", name: "Marvell", grade: "B", description: "AI網通與ASIC供應鏈", rules: [-20, -35, -50, -65], amounts: [5, 10, 15, 20] },
-  { symbol: "RKLBon", name: "Rocket Lab", grade: "C", description: "高風險太空成長股", rules: [-25, -40, -60], amounts: [5, 10, 15] }
-];
+function getWatchlist() {
+  return getAssetRegistry()
+    .filter((asset) => String(asset.assetType || "").startsWith("tokenized_stock"))
+    .map((asset) => ({
+      symbol: asset.symbol,
+      name: asset.name,
+      grade: asset.conviction,
+      description: asset.description || asset.name,
+      rules: asset.rules || [],
+      amounts: asset.amounts || [],
+      assetStatus: asset.status,
+      engine: asset.engine,
+      strategy: asset.strategy,
+      discountModel: asset.discountModel
+    }));
+}
 
 const headers = {
   accept: "application/json, text/plain, */*",
@@ -174,6 +181,7 @@ export default async function handler(req, res) {
   res.setHeader("Expires", "0");
 
   try {
+    const watchlist = getWatchlist();
     const tokenListResult = await getBinanceTokenList();
     const tokenList = tokenListResult.list;
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
@@ -216,7 +224,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       updatedAt: new Date().toISOString(),
-      source: "Binance xStocks public API",
+      source: "Binance xStocks public API｜V17 Asset Registry",
+      sourceOfTruth: "lib/v17-asset-registry.js",
       count: data.length,
       cachePolicy: "no-store",
       binanceHealth: {
