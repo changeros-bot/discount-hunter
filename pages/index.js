@@ -1,3 +1,3 @@
-import V16FullHome from "./v16-full";
+import V17Dashboard from "./v17";
 
-export default V16FullHome;
+export default V17Dashboard;
