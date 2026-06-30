@@ -26,9 +26,17 @@ function walletSummary(holdings = []) {
   return { cost, value, pnl, pnlPct: cost > 0 ? pnl / cost : 0 };
 }
 
-function completedTierText(row) {
+function tierStatusText(row) {
+  if (row.skippedTiers?.includes(row.tier)) return `已略過：${row.tier}`;
   const done = row.ledgerDoneTiers?.length ? row.ledgerDoneTiers.join(" / ") : row.tier;
   return `已完成：${done}`;
+}
+
+function tierStatusStyle(row) {
+  if (row.skippedTiers?.includes(row.tier)) {
+    return { background: "rgba(250,204,21,.12)", color: "#fde68a" };
+  }
+  return { background: "rgba(34,197,94,.10)", color: "#bbf7d0" };
 }
 
 function DecisionActions({ row, onAction, busy }) {
@@ -63,6 +71,7 @@ function StateMachineCheck({ classified }) {
 export default function V17Dashboard() {
   const [assets, setAssets] = useState([]);
   const [decisions, setDecisions] = useState([]);
+  const [decisionStates, setDecisionStates] = useState([]);
   const [ledger, setLedger] = useState({});
   const [wallet, setWallet] = useState(null);
   const [source, setSource] = useState("Binance xStocks public API");
@@ -79,7 +88,7 @@ export default function V17Dashboard() {
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const walletData = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null);
       const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: true }) });
-      setAssets(rows); setLedger(ledgerData.ledger || {}); setWallet(walletData); setDecisions(today.cards || []);
+      setAssets(rows); setLedger(ledgerData.ledger || {}); setWallet(walletData); setDecisions(today.cards || []); setDecisionStates(today.states || []);
       setUpdatedAt(prices.updatedAt || today.updatedAt || new Date().toISOString()); setSource(prices.source || "Binance xStocks public API"); setError("");
     } catch (err) { setError(err.message || "V17 讀取失敗"); } finally { setLoading(false); }
   }
@@ -100,7 +109,7 @@ export default function V17Dashboard() {
 
   useEffect(() => { load(); const timer = setInterval(load, REFRESH_MS); return () => clearInterval(timer); }, []);
 
-  const classified = useMemo(() => classifyUniverse({ assets, ledger, holdings: wallet?.holdings || [], decisions }), [assets, ledger, wallet, decisions]);
+  const classified = useMemo(() => classifyUniverse({ assets, ledger, holdings: wallet?.holdings || [], decisions, states: decisionStates }), [assets, ledger, wallet, decisions, decisionStates]);
   const ws = walletSummary(wallet?.holdings || []);
   const ledgerStatus = classified.summary.duplicateSymbols.length || classified.summary.missingSymbols.length ? "CHECK" : "PASS";
 
@@ -110,7 +119,7 @@ export default function V17Dashboard() {
       <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
     </section>
-    <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(34,197,94,.10)", color: "#bbf7d0", fontWeight: 900 }}>{completedTierText(row)}</div><TierProgress row={row} /></AssetCard>} />
+    <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
     <Collapsible title="📋 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row} />} />
     <StateMachineCheck classified={classified} />
     <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "等待同步"}｜Ledger：{ledgerStatus}｜V17 Exclusive State Machine</footer>
