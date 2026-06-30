@@ -22,7 +22,7 @@ export function timeText(iso) {
 }
 
 export function Metric({ label, value }) {
-  return <div style={{ padding: 10, borderRadius: 12, background: "#020617" }}>
+  return <div style={{ padding: 10, borderRadius: 12, background: "#020617", border: "1px solid rgba(148,163,184,.14)" }}>
     <div style={{ color: "#94a3b8", fontWeight: 850, fontSize: 12 }}>{label}</div>
     <strong style={{ display: "block", marginTop: 4, fontSize: 16 }}>{value}</strong>
   </div>;
@@ -46,7 +46,7 @@ export function LayerRules({ rules = [], amounts = [], activeTier }) {
 }
 
 export function AssetCard({ row, children }) {
-  return <article style={{ padding: 14, borderRadius: 16, background: "#0f172a", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
+  return <article style={{ padding: 14, borderRadius: 16, background: "linear-gradient(135deg, #0f172a, #020617)", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
       <div>
         <div style={{ fontSize: 20, fontWeight: 1000 }}>{TIER_ICON[row.tier] || "⚪"} {row.symbol} {row.tier}</div>
@@ -64,18 +64,18 @@ export function AssetCard({ row, children }) {
 }
 
 export function Section({ title, count, rows, empty, render }) {
-  return <section style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "rgba(2,6,23,.9)", border: "1px solid rgba(148,163,184,.18)" }}>
-    <h2 style={{ margin: "0 0 10px", fontSize: 20, color: "#facc15" }}>{title}（{count}）</h2>
+  return <section style={{ marginTop: 14, padding: 12, borderRadius: 18, background: "rgba(2,6,23,.9)", border: "1px solid rgba(250,204,21,.18)" }}>
+    <h2 style={{ margin: "0 0 10px", fontSize: 20, color: "#facc15", fontWeight: 1000 }}>{title}（{count}）</h2>
     {rows.length ? <div style={{ display: "grid", gap: 12 }}>{rows.map(render)}</div> : <div style={{ padding: "26px 0", textAlign: "center", color: "#94a3b8", fontWeight: 900 }}>{empty}</div>}
   </section>;
 }
 
 export function PageShell({ loading, updatedAt, error, children }) {
   return <main style={{ minHeight: "100vh", padding: 14, background: "#020617", color: "#f8fafc", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" }}>
-    <header style={{ padding: "14px 10px", textAlign: "center" }}>
-      <div style={{ textAlign: "right", color: "#facc15", fontSize: 11, fontWeight: 1000 }}>V17</div>
-      <h1 style={{ margin: "4px 0", fontSize: 44, lineHeight: 1, color: "#fde68a" }}>折價獵人</h1>
-      <div style={{ color: "#94a3b8", fontWeight: 850 }}>State Machine Dashboard｜{loading ? "更新中" : "LIVE"}｜{timeText(updatedAt)}</div>
+    <header style={{ padding: "18px 12px 14px", textAlign: "center", borderRadius: 22, background: "linear-gradient(135deg, rgba(10,14,39,.96), rgba(3,7,18,.96))", border: "1px solid rgba(250,204,21,.18)" }}>
+      <div style={{ textAlign: "right", color: "rgba(250,204,21,.8)", fontSize: 11, fontWeight: 1000 }}>V17</div>
+      <h1 style={{ margin: "6px 0", fontSize: "clamp(48px, 14vw, 78px)", lineHeight: .95, fontWeight: 1000, color: "#facc15" }}>美股DCA<br />折價追蹤</h1>
+      <div style={{ color: "rgba(248,250,252,.68)", fontWeight: 850 }}>V17 State Machine｜{loading ? "更新中" : "LIVE"}｜{timeText(updatedAt)}</div>
       {error && <div style={{ marginTop: 10, padding: 10, borderRadius: 12, color: "#fecaca", background: "rgba(127,29,29,.35)", fontWeight: 900 }}>{error}</div>}
     </header>
     {children}
