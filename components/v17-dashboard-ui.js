@@ -21,15 +21,17 @@ export function timeText(iso) {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
 }
 
-export function Metric({ label, value }) {
+export function Metric({ label, value, signed }) {
+  const hasSigned = signed !== undefined;
+  const color = !hasSigned ? "#f8fafc" : Number(signed) > 0 ? "#22c55e" : Number(signed) < 0 ? "#fca5a5" : "#f8fafc";
   return <div style={{ padding: 10, borderRadius: 12, background: "#020617", border: "1px solid rgba(148,163,184,.14)" }}>
     <div style={{ color: "#94a3b8", fontWeight: 850, fontSize: 12 }}>{label}</div>
-    <strong style={{ display: "block", marginTop: 4, fontSize: 16 }}>{value}</strong>
+    <strong style={{ display: "block", marginTop: 4, fontSize: 16, color }}>{value}</strong>
   </div>;
 }
 
 export function LayerRules({ rules = [], amounts = [], activeTier }) {
-  return <details open style={{ marginTop: 10 }}>
+  return <details style={{ marginTop: 10 }}>
     <summary style={{ fontWeight: 900, color: "#e2e8f0" }}>層級規則</summary>
     <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
       {(rules || []).map((rule, index) => {
@@ -45,6 +47,20 @@ export function LayerRules({ rules = [], amounts = [], activeTier }) {
   </details>;
 }
 
+export function HoldingMetrics({ holding }) {
+  if (!holding) return null;
+  const pnl = Number(holding.currentValue || 0) - Number(holding.totalCost || 0);
+  const pnlPct = Number(holding.totalCost || 0) > 0 ? pnl / Number(holding.totalCost || 0) : 0;
+  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+    <Metric label="數量" value={Number(holding.quantity || 0).toFixed(4)} />
+    <Metric label="成本" value={fmtUsd(holding.totalCost, 2)} />
+    <Metric label="市值" value={fmtUsd(holding.currentValue, 2)} />
+    <Metric label="損益" value={`${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}`} signed={pnl} />
+    <Metric label="報酬率" value={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%`} signed={pnlPct} />
+    <Metric label="來源" value={holding.quantitySource === "bsc_rpc_balanceOf_live" ? "Wallet LIVE" : "Ledger"} />
+  </div>;
+}
+
 export function AssetCard({ row, children }) {
   return <article style={{ padding: 14, borderRadius: 16, background: "linear-gradient(135deg, #0f172a, #020617)", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -58,8 +74,8 @@ export function AssetCard({ row, children }) {
       <Metric label="現價" value={fmtUsd(row.price, 4)} />
       <Metric label="高點" value={fmtUsd(row.high || row.cycleHigh, 2)} />
     </div>
-    <LayerRules rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
     {children}
+    <LayerRules rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
   </article>;
 }
 
