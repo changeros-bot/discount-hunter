@@ -1,6 +1,6 @@
 import { getAssetRegistry } from "../../../lib/v17-asset-registry";
 import { buildV17Decisions } from "../../../lib/v17-decision-engine";
-import { adaptV17DecisionResult } from "../../../lib/v17-ui-adapter";
+import { adaptV17DecisionResult, adaptActionToCard } from "../../../lib/v17-ui-adapter";
 import { V17_STORAGE_KEYS, readV17State, writeV17State, getV17StorageStatus } from "../../../lib/v17-storage";
 
 function compactStates(decisions = []) {
@@ -39,6 +39,7 @@ export default async function handler(req, res) {
     const shouldPersist = req.method === "POST" && body.persistState === true;
     const nextStates = compactStates(result.decisions);
     const write = shouldPersist ? await writeV17State(V17_STORAGE_KEYS.ACTION_STATE, { updatedAt: now, states: nextStates }) : null;
+    const states = (result.decisions || []).map(adaptActionToCard);
 
     return res.status(200).json({
       ok: true,
@@ -46,6 +47,7 @@ export default async function handler(req, res) {
       updatedAt: now,
       ui,
       cards: ui.cards,
+      states,
       summary: ui.summary,
       statePersisted: Boolean(write),
       stateWrite: write,
