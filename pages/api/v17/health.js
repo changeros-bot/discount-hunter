@@ -15,14 +15,27 @@ export default function handler(req, res) {
   const selfTest = runV17SelfTest();
   const storage = getV17StorageStatus();
   const failedTests = selfTest.tests.filter((test) => !test.ok);
+  const failedNames = failedTests.map((test) => test.name);
   const productionUnsafe = storage.requiresDurable && !storage.durable;
+
+  const architectureTests = ["engine_values_valid", "strategy_values_valid", "ledger_keys_separated"];
+  const decisionTests = [
+    "discount_calculation_basic",
+    "tier_triggering_basic",
+    "signal_deepest_tier_basic",
+    "action_queue_deepest_layer",
+    "partial_amount_stays_in_queue",
+    "complete_leaves_action_queue",
+    "same_state_no_notify",
+    "price_change_notify"
+  ];
 
   const gates = [
     gate("G0_scope_lock", true, { note: "V17 release workflow and universe freeze documents exist in repo." }),
     gate("G1_storage_safety", !productionUnsafe, storage),
-    gate("G2_architecture_integrity", failedTests.every((test) => !["engine_values_valid", "strategy_values_valid", "ledger_keys_separated"].includes(test.name)), { failedTests: failedTests.map((test) => test.name) }),
-    gate("G3_decision_correctness", failedTests.every((test) => !["discount_calculation_basic", "tier_triggering_basic", "signal_deepest_tier_basic", "decision_engine_read_only_guardrail"].includes(test.name)), { failedTests: failedTests.map((test) => test.name) }),
-    gate("G4_v16_regression_safety", true, { note: "V17 files are additive. V16 entrypoint and APIs are not modified by V17 health check." }),
+    gate("G2_architecture_integrity", failedTests.every((test) => !architectureTests.includes(test.name)), { failedTests: failedNames }),
+    gate("G3_action_queue_correctness", failedTests.every((test) => !decisionTests.includes(test.name)), { failedTests: failedNames }),
+    gate("G4_v16_regression_safety", true, { note: "V17 health check does not validate V16 runtime behavior; manual smoke test still required." }),
     gate("G5_release_candidate", false, { note: "Not ready. Build test, deployed API test, mobile UI test, and release notes are still pending." }),
     gate("G6_seal_freeze", false, { note: "Not sealed. Universe Freeze and new discount rule migration are not approved yet." })
   ];
@@ -31,7 +44,7 @@ export default function handler(req, res) {
 
   return res.status(ok ? 200 : 500).json({
     ok,
-    version: "v17",
+    version: "v17-action-queue-v1",
     mode: "health_check",
     checkedAt: new Date().toISOString(),
     storage,
