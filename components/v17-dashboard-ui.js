@@ -1,4 +1,11 @@
 const TIER_ICON = { D1: "🟢", D2: "🟡", D3: "🟠", D4: "🔴", D0: "⚪" };
+const TIER_TONE = {
+  D0: { color: "#cbd5e1", bg: "rgba(148,163,184,.12)", border: "rgba(148,163,184,.35)" },
+  D1: { color: "#86efac", bg: "rgba(34,197,94,.16)", border: "rgba(34,197,94,.48)" },
+  D2: { color: "#fde68a", bg: "rgba(250,204,21,.16)", border: "rgba(250,204,21,.50)" },
+  D3: { color: "#fdba74", bg: "rgba(249,115,22,.16)", border: "rgba(249,115,22,.50)" },
+  D4: { color: "#fca5a5", bg: "rgba(239,68,68,.16)", border: "rgba(239,68,68,.50)" }
+};
 
 export function fmtPct(value) {
   const n = Number(value);
@@ -30,6 +37,34 @@ export function Metric({ label, value, signed }) {
   </div>;
 }
 
+function absDepth(value) {
+  return Math.abs(Number(value || 0));
+}
+
+function nextTierProgress(row) {
+  const depths = (row?.rules || []).map(absDepth);
+  const level = Math.max(1, Number(row?.signalLevel || 0));
+  const current = absDepth(row?.discount);
+  const from = depths[level - 1] ?? 0;
+  const to = depths[level] ?? depths[depths.length - 1] ?? from;
+  const span = Math.max(0.000001, to - from);
+  const pct = Math.max(0, Math.min(100, ((current - from) / span) * 100));
+  return { fromTier: `D${level}`, toTier: depths[level] ? `D${level + 1}` : "MAX", pct };
+}
+
+export function TierProgress({ row }) {
+  if (!row || Number(row.signalLevel || 0) <= 0) return null;
+  const p = nextTierProgress(row);
+  return <div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(15,23,42,.86)", border: "1px solid rgba(148,163,184,.14)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", color: "#cbd5e1", fontWeight: 950, fontSize: 12 }}>
+      <span>{p.fromTier}</span><span>{p.pct.toFixed(0)}%</span><span>{p.toTier}</span>
+    </div>
+    <div style={{ marginTop: 8, height: 9, borderRadius: 999, background: "rgba(148,163,184,.18)", overflow: "hidden" }}>
+      <div style={{ width: `${p.pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg, #22c55e, #facc15)" }} />
+    </div>
+  </div>;
+}
+
 export function LayerRules({ rules = [], amounts = [], activeTier }) {
   return <details style={{ marginTop: 10 }}>
     <summary style={{ fontWeight: 900, color: "#e2e8f0" }}>層級規則</summary>
@@ -47,34 +82,35 @@ export function LayerRules({ rules = [], amounts = [], activeTier }) {
   </details>;
 }
 
-export function HoldingMetrics({ holding }) {
-  if (!holding) return null;
-  const pnl = Number(holding.currentValue || 0) - Number(holding.totalCost || 0);
-  const pnlPct = Number(holding.totalCost || 0) > 0 ? pnl / Number(holding.totalCost || 0) : 0;
+export function HoldingMetrics({ holding, row }) {
+  const pnl = Number(holding?.currentValue || 0) - Number(holding?.totalCost || 0);
+  const pnlPct = Number(holding?.totalCost || 0) > 0 ? pnl / Number(holding?.totalCost || 0) : 0;
   return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-    <Metric label="數量" value={Number(holding.quantity || 0).toFixed(4)} />
-    <Metric label="成本" value={fmtUsd(holding.totalCost, 2)} />
-    <Metric label="市值" value={fmtUsd(holding.currentValue, 2)} />
-    <Metric label="損益" value={`${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}`} signed={pnl} />
-    <Metric label="報酬率" value={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%`} signed={pnlPct} />
-    <Metric label="來源" value={holding.quantitySource === "bsc_rpc_balanceOf_live" ? "Wallet LIVE" : "Ledger"} />
+    {holding && <Metric label="數量" value={Number(holding.quantity || 0).toFixed(4)} />}
+    {holding && <Metric label="成本" value={fmtUsd(holding.totalCost, 2)} />}
+    {holding && <Metric label="市值" value={fmtUsd(holding.currentValue, 2)} />}
+    {holding && <Metric label="損益" value={`${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}`} signed={pnl} />}
+    {holding && <Metric label="報酬率" value={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%`} signed={pnlPct} />}
+    <Metric label="距52週高點降幅" value={fmtPct(row?.discount)} signed={row?.discount} />
   </div>;
 }
 
 export function AssetCard({ row, children }) {
-  return <article style={{ padding: 14, borderRadius: 16, background: "linear-gradient(135deg, #0f172a, #020617)", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+  const tone = TIER_TONE[row.tier] || TIER_TONE.D0;
+  return <article style={{ position: "relative", overflow: "hidden", padding: 14, borderRadius: 16, background: "radial-gradient(circle at 0% 0%, rgba(250,204,21,.16), transparent 34%), linear-gradient(135deg, #0f172a, #020617)", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, position: "relative" }}>
       <div>
-        <div style={{ fontSize: 20, fontWeight: 1000 }}>{TIER_ICON[row.tier] || "⚪"} {row.symbol} {row.tier}</div>
+        <div style={{ fontSize: 20, fontWeight: 1000 }}>{TIER_ICON[row.tier] || "⚪"} {row.symbol}</div>
         <div style={{ color: "#94a3b8", fontWeight: 800, fontSize: 12 }}>{row.name || "--"}</div>
       </div>
-      <strong style={{ color: Number(row.discount || 0) < 0 ? "#fca5a5" : "#cbd5e1" }}>{fmtPct(row.discount)}</strong>
+      <strong style={{ alignSelf: "flex-start", padding: "5px 10px", borderRadius: 999, background: tone.bg, border: `1px solid ${tone.border}`, color: tone.color, fontSize: 15 }}>{row.tier}</strong>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
       <Metric label="現價" value={fmtUsd(row.price, 4)} />
       <Metric label="高點" value={fmtUsd(row.high || row.cycleHigh, 2)} />
     </div>
     {children}
+    <TierProgress row={row} />
     <LayerRules rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
   </article>;
 }
