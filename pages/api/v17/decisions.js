@@ -29,9 +29,11 @@ export default async function handler(req, res) {
     const assets = getAssetRegistry({ status });
     const body = req.method === "POST" ? (req.body || {}) : {};
     const markets = body.markets || body.marketData || {};
-    const events = body.events || [];
-    const stored = await readV17State(V17_STORAGE_KEYS.ACTION_STATE, { states: {} });
-    const previousStates = body.previousStates || stored.states || {};
+    const storedAction = await readV17State(V17_STORAGE_KEYS.ACTION_STATE, { states: {} });
+    const storedEvents = await readV17State(V17_STORAGE_KEYS.EVENT_LOG, { events: [] });
+    const hasRequestEvents = Array.isArray(body.events);
+    const events = hasRequestEvents ? body.events : (storedEvents.events || []);
+    const previousStates = body.previousStates || storedAction.states || {};
     const result = buildV17Decisions({ assets, markets, events, previousStates, now });
     const nextStates = compactStates(result.decisions);
     const shouldPersist = req.method === "POST" && body.persistState === true;
@@ -40,6 +42,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ...result,
       previousStateSource: body.previousStates ? "request" : "storage",
+      eventSource: hasRequestEvents ? "request" : "storage",
+      eventCountUsed: events.length,
       statePersisted: Boolean(write),
       stateWrite: write,
       nextStates,
