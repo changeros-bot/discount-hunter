@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { classifyUniverse } from "../lib/v17-state-classifier";
-import { AssetCard, fmtAmount, HoldingMetrics, Metric, PageShell, Section } from "../components/v17-dashboard-ui";
+import { AssetCard, fmtAmount, Metric, PageShell, Section, TierProgress } from "../components/v17-dashboard-ui";
 
 const REFRESH_MS = 10000;
 
@@ -86,7 +86,7 @@ export default function V17Dashboard() {
       <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
     </section>
-    <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><HoldingMetrics holding={row.walletHolding} row={row} /><div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(34,197,94,.10)", color: "#bbf7d0", fontWeight: 900 }}>{completedTierText(row)}</div></AssetCard>} />
+    <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(34,197,94,.10)", color: "#bbf7d0", fontWeight: 900 }}>{completedTierText(row)}</div><TierProgress row={row} /></AssetCard>} />
     <Collapsible title="📋 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row} />} />
     <StateMachineCheck classified={classified} />
     <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "等待同步"}｜Ledger：{ledgerStatus}｜V17 Exclusive State Machine</footer>
