@@ -57,11 +57,13 @@ export function TierProgress({ row }) {
   const p = nextTierProgress(row);
   return <div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(15,23,42,.86)", border: "1px solid rgba(148,163,184,.14)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", color: "#cbd5e1", fontWeight: 950, fontSize: 12 }}>
-      <span>{p.fromTier}</span><span>{p.pct.toFixed(0)}%</span><span>{p.toTier}</span>
+      <span>{p.fromTier}</span><span>{p.toTier}</span>
     </div>
-    <div style={{ marginTop: 8, height: 9, borderRadius: 999, background: "rgba(148,163,184,.18)", overflow: "hidden" }}>
+    <div style={{ position: "relative", marginTop: 8, height: 9, borderRadius: 999, background: "rgba(148,163,184,.18)" }}>
       <div style={{ width: `${p.pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg, #22c55e, #facc15)" }} />
+      <span style={{ position: "absolute", left: `calc(${p.pct}% - 5px)`, top: -3, width: 15, height: 15, borderRadius: 999, background: "#facc15", boxShadow: "0 0 12px rgba(250,204,21,.85)" }} />
     </div>
+    <div style={{ marginTop: 6, color: "#fde68a", fontSize: 12, fontWeight: 1000, textAlign: "left" }}>{p.pct.toFixed(0)}%</div>
   </div>;
 }
 
@@ -97,7 +99,7 @@ export function HoldingMetrics({ holding, row }) {
 
 export function AssetCard({ row, children }) {
   const tone = TIER_TONE[row.tier] || TIER_TONE.D0;
-  return <article style={{ position: "relative", overflow: "hidden", padding: 14, borderRadius: 16, background: "radial-gradient(circle at 0% 0%, rgba(250,204,21,.16), transparent 34%), linear-gradient(135deg, #0f172a, #020617)", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
+  return <article style={{ position: "relative", overflow: "hidden", padding: 14, borderRadius: 16, background: "radial-gradient(circle at 0% 0%, rgba(250,204,21,.30), rgba(34,197,94,.10) 22%, transparent 43%), linear-gradient(135deg, #0f172a, #020617)", border: "1px solid rgba(148,163,184,.22)", color: "#f8fafc" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, position: "relative" }}>
       <div>
         <div style={{ fontSize: 20, fontWeight: 1000 }}>{TIER_ICON[row.tier] || "⚪"} {row.symbol}</div>
