@@ -31,6 +31,15 @@ function completedTierText(row) {
   return `已完成：${done}`;
 }
 
+function DecisionActions({ row, onAction, busy }) {
+  const decision = row.decision || {};
+  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+    <button disabled={busy} onClick={() => onAction(row, "complete")} style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(34,197,94,.45)", background: "rgba(34,197,94,.16)", color: "#bbf7d0", fontWeight: 1000 }}>已完成</button>
+    <button disabled={busy} onClick={() => onAction(row, "skip")} style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(250,204,21,.45)", background: "rgba(250,204,21,.13)", color: "#fde68a", fontWeight: 1000 }}>略過本層</button>
+    <div style={{ gridColumn: "1 / -1", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Action：{decision.tier || row.tier}｜{decision.amountText || fmtAmount(decision.amount)}</div>
+  </div>;
+}
+
 function Collapsible({ title, count, rows, render, open = false }) {
   return <details style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", border: "1px solid rgba(243,186,47,.22)" }} open={open}>
     <summary style={{ color: "#e2e8f0", fontWeight: 1000, fontSize: 19 }}>{title}（{count}）</summary>
@@ -60,6 +69,7 @@ export default function V17Dashboard() {
   const [updatedAt, setUpdatedAt] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState("");
 
   async function load() {
     setLoading(true);
@@ -74,6 +84,20 @@ export default function V17Dashboard() {
     } catch (err) { setError(err.message || "V17 讀取失敗"); } finally { setLoading(false); }
   }
 
+  async function handleDecisionAction(row, action) {
+    const decision = row.decision || {};
+    const id = `${row.symbol}-${row.tier}-${action}`;
+    setActionBusy(id);
+    try {
+      await jsonFetch("/api/v17/action-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, symbol: row.symbol, layer: decision.level || row.signalLevel, amount: decision.amount, price: row.price })
+      });
+      await load();
+    } catch (err) { setError(err.message || "Action failed"); } finally { setActionBusy(""); }
+  }
+
   useEffect(() => { load(); const timer = setInterval(load, REFRESH_MS); return () => clearInterval(timer); }, []);
 
   const classified = useMemo(() => classifyUniverse({ assets, ledger, holdings: wallet?.holdings || [], decisions }), [assets, ledger, wallet, decisions]);
@@ -81,7 +105,7 @@ export default function V17Dashboard() {
   const ledgerStatus = classified.summary.duplicateSymbols.length || classified.summary.missingSymbols.length ? "CHECK" : "PASS";
 
   return <PageShell loading={loading} updatedAt={updatedAt} error={error}>
-    <Section title="今日決策" count={classified.decisionRows.length} rows={classified.decisionRows} empty="暫無待執行買點" render={(row) => <AssetCard key={`decision-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(245,158,11,.12)", color: "#fde68a", fontWeight: 900 }}>待處理：{row.decision?.statusLabel || row.decision?.status || "queued"}｜建議 {row.decision?.amountText || fmtAmount(row.decision?.amount)}</div></AssetCard>} />
+    <Section title="今日決策" count={classified.decisionRows.length} rows={classified.decisionRows} empty="暫無待執行買點" render={(row) => <AssetCard key={`decision-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(245,158,11,.12)", color: "#fde68a", fontWeight: 900 }}>待處理：{row.decision?.statusLabel || row.decision?.status || "queued"}｜建議 {row.decision?.amountText || fmtAmount(row.decision?.amount)}</div><DecisionActions row={row} onAction={handleDecisionAction} busy={Boolean(actionBusy)} /></AssetCard>} />
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
       <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
