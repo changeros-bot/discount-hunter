@@ -12,7 +12,7 @@ function signedColor(v) { const n = Number(v || 0); return n > 0 ? "#22c55e" : n
 function signedClass(v) { const n = Number(v || 0); return n > 0 ? "signed-positive" : n < 0 ? "signed-negative" : ""; }
 function normalizeSymbol(s) { return String(s || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function stripOnSuffix(symbol) { return normalizeSymbol(symbol).replace(/ON$/, ""); }
-function decisionKey(d) { return `${normalizeSymbol(d?.symbol)}_${String(d?.tier || "").toUpperCase()}`; }
+function decisionKey(d) { return d?.key || `${normalizeSymbol(d?.symbol)}_${String(d?.tier || "").toUpperCase()}`; }
 function isLiveHolding(h) { return h && Number(h.quantity) > 0 && h.quantitySource === "bsc_rpc_balanceOf_live"; }
 function timeText(iso) { if (!iso) return "讀取中"; const d = new Date(iso); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`; }
 function decisionTimeText(iso) { return iso ? timeText(iso) : "本次更新"; }
@@ -22,13 +22,23 @@ function dedupeDecisions(items = []) {
   for (const item of items || []) {
     const key = decisionKey(item);
     if (!key || key === "_") continue;
-    const previous = map.get(key);
-    if (!previous || new Date(item.triggeredAt || 0).getTime() >= new Date(previous.triggeredAt || 0).getTime()) map.set(key, item);
+    map.set(key, item);
   }
   return Array.from(map.values()).sort((a, b) => {
     if (Number(a.level || 0) !== Number(b.level || 0)) return Number(b.level || 0) - Number(a.level || 0);
     return Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0));
   });
+}
+
+function marketMapFromRows(rows = []) {
+  return Object.fromEntries((rows || []).map((row) => [row.symbol, {
+    symbol: row.symbol,
+    price: row.price,
+    high: row.high,
+    high52w: row.high52w,
+    cycleHigh: row.high || row.cycleHigh || row.high52w,
+    discount: row.discount
+  }]));
 }
 
 async function jsonFetch(url, options = {}) {
@@ -133,6 +143,7 @@ function makeLedgerCheck({ wallet, ledger, displayDecisions, completedHoldingRow
 export default function V16FullHome() {
   const [assets, setAssets] = useState([]);
   const [decisions, setDecisions] = useState([]);
+  const [decisionSummary, setDecisionSummary] = useState({ actionCount: 0, totalAmount: 0, totalAmountText: "0U" });
   const [ledger, setLedger] = useState({});
   const [wallet, setWallet] = useState(null);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -144,9 +155,14 @@ export default function V16FullHome() {
   const [reconciling, setReconciling] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState("");
 
-  async function calculateDecisions(rows, currentLedger) {
-    const today = await jsonFetch(`/api/today-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets: rows, ledger: currentLedger }) });
-    setDecisions(dedupeDecisions(today.decisions || []));
+  async function calculateDecisions(rows) {
+    const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: true })
+    });
+    setDecisions(dedupeDecisions(today.cards || []));
+    setDecisionSummary(today.summary || { actionCount: 0, totalAmount: 0, totalAmountText: "0U" });
     setUpdatedAt(today.updatedAt || "");
     return today;
   }
@@ -160,9 +176,9 @@ export default function V16FullHome() {
       const currentLedger = ledgerData.ledger || {};
       setAssets(rows);
       setLedger(currentLedger);
-      const today = await calculateDecisions(rows, currentLedger);
+      const today = await calculateDecisions(rows);
       setUpdatedAt(prices.updatedAt || today.updatedAt || "");
-      setSource(prices.source || "");
+      setSource(`${prices.source || ""}｜V17 Action Queue`);
       setError("");
     } catch (e) {
       setError(e.message || "讀取失敗");
@@ -199,7 +215,7 @@ export default function V16FullHome() {
       const holdings = requireLiveHoldings(currentWallet?.holdings);
       const result = await jsonFetch(`/api/reconcile-tiers?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets: safeAssets, holdings, dryRun: true, source: "ledger-check-button" }) });
       setLedger(result.ledger || ledger);
-      await calculateDecisions(safeAssets, result.ledger || ledger);
+      await calculateDecisions(safeAssets);
       setReconcileMessage(`Ledger 檢查完成｜未寫入｜可補登候選 ${result.addedCount || 0} 筆`);
     } catch (e) {
       const msg = e.message || "Ledger 檢查失敗";
@@ -219,9 +235,10 @@ export default function V16FullHome() {
   }, []);
 
   const walletMap = useMemo(() => walletHoldingMap(wallet?.holdings), [wallet]);
-  const displayDecisions = useMemo(() => dedupeDecisions(decisions).map((d) => ({ ...d, walletOwned: walletOwns(walletMap, d.symbol), isLedgerDone: ledgerHasTier(ledger, d.symbol, d.tier), isPendingPurchase: Boolean(d.pendingPurchase || d.purchasePending || d.manualBought) })), [decisions, walletMap, ledger]);
-  const executableDecisions = displayDecisions.filter((d) => !d.isLedgerDone && !d.isPendingPurchase);
-  const boughtPendingDecisions = displayDecisions.filter((d) => !d.isLedgerDone && d.isPendingPurchase);
+  const displayDecisions = useMemo(() => dedupeDecisions(decisions), [decisions]);
+  const executableDecisions = displayDecisions.filter((d) => d.status === "queued");
+  const boughtPendingDecisions = displayDecisions.filter((d) => ["partial", "suspect"].includes(d.status));
+  const issueDecisions = displayDecisions.filter((d) => ["mismatch", "failed"].includes(d.status));
   const decisionMap = useMemo(() => new Map(displayDecisions.map((d) => [decisionKey(d), d])), [displayDecisions]);
   const assetMap = useMemo(() => new Map(assets.map((a) => [normalizeSymbol(a.symbol), a])), [assets]);
   const rows = useMemo(() => assets.map((a) => {
@@ -230,21 +247,20 @@ export default function V16FullHome() {
     const decision = decisionMap.get(`${normalizeSymbol(a.symbol)}_${tier}`);
     const walletOwned = walletOwns(walletMap, a.symbol);
     const isLedgerDoneForTier = ledgerHasTier(ledger, a.symbol, tier);
-    const isPendingPurchase = Boolean(decision?.isPendingPurchase);
-    return { ...a, signalLevel: level, tier, decision, walletOwned, isLedgerDoneForTier, isActionable: !!decision && !isLedgerDoneForTier && !isPendingPurchase, isLedgerPending: !!decision && !isLedgerDoneForTier && isPendingPurchase };
+    return { ...a, signalLevel: level, tier, decision, walletOwned, isLedgerDoneForTier, isActionable: !!decision, isLedgerPending: false };
   }).sort((a,b) => a.signalLevel !== b.signalLevel ? b.signalLevel - a.signalLevel : Math.abs(Number(b.discount || 0)) - Math.abs(Number(a.discount || 0))), [assets, decisionMap, walletMap, ledger]);
 
   const completedHoldingRows = rows.filter((r) => r.signalLevel > 0 && r.isLedgerDoneForTier);
   const watchRows = rows.filter((r) => r.signalLevel <= 0);
-  const totalAmount = executableDecisions.reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalAmount = Number(decisionSummary.totalAmount || displayDecisions.reduce((s, d) => s + Number(d.amount || 0), 0));
   const ws = walletSummary(wallet?.holdings);
   const ledgerCheck = makeLedgerCheck({ wallet, ledger, displayDecisions, completedHoldingRows, updatedAt });
 
   return <main className="page">
     <section className="hero compactHero" style={{ textAlign: "center", padding: "18px 12px 10px", background: "linear-gradient(135deg, rgba(10,14,39,.96), rgba(3,7,18,.96))" }}>
-      <div style={{ textAlign: "right", color: "rgba(243,186,47,.75)", fontSize: 10, fontWeight: 900 }}>V16-M</div>
+      <div style={{ textAlign: "right", color: "rgba(243,186,47,.75)", fontSize: 10, fontWeight: 900 }}>V17-Q</div>
       <h1 style={{ fontSize: "clamp(48px, 14vw, 78px)", fontWeight: 1000, margin: "6px 0", lineHeight: .95, background: "linear-gradient(180deg, #fff6b7, #ffd700, #b8860b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>美股DCA<br />折價追蹤</h1>
-      <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks｜Ledger 決策版</h2>
+      <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks｜V17 Action Queue</h2>
       {error && <div className="dataGuard">{error}</div>}
       {walletError && <div className="dataGuard">Wallet：{walletError}</div>}
       {reconcileMessage && <div className="dataGuard" style={{ color: reconcileMessage.includes("不會自動") ? "#fde68a" : "#bbf7d0" }}>{reconcileMessage}</div>}
@@ -255,12 +271,13 @@ export default function V16FullHome() {
       <h2 style={{ fontSize: 20, fontWeight: 950, color: "#f59e0b", margin: "0 0 10px" }}>今日決策</h2>
       {displayDecisions.length ? <>
         <div style={{ display: "grid", gap: 8, color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 }}>
-          <div>可手動買入：{executableDecisions.length}筆</div>
-          <div>已買入待補登：{boughtPendingDecisions.length}筆</div>
+          <div>待買入：{executableDecisions.length}筆</div>
+          <div>部分/疑似：{boughtPendingDecisions.length}筆</div>
+          <div>異常：{issueDecisions.length}筆</div>
           <div>建議新增投入：<span className="signed-positive" style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div>
         </div>
         <div style={{ display: "grid", gap: 12 }}>{displayDecisions.map((d) => <DecisionCard key={decisionKey(d)} decision={d} asset={assetMap.get(normalizeSymbol(d.symbol))} />)}</div>
-      </> : <div style={{ textAlign: "center", padding: "34px 0 36px", color: "#cbd5e1", fontWeight: 1000, fontSize: 18 }}>暫無未登帳買點</div>}
+      </> : <div style={{ textAlign: "center", padding: "34px 0 36px", color: "#cbd5e1", fontWeight: 1000, fontSize: 18 }}>暫無待執行買點</div>}
     </section>
 
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
@@ -277,7 +294,7 @@ export default function V16FullHome() {
     {completedHoldingRows.length > 0 && <details className="idleGroup" style={{ marginTop: 16 }}><summary>✅ 已登帳持倉區（{completedHoldingRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{completedHoldingRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>}
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📋 觀察區（{watchRows.length}）</summary><section className="list" style={{ marginTop: 12 }}>{watchRows.map((a) => <AssetCard key={a.symbol} asset={a} ledger={ledger} />)}</section></details>
     <details className="idleGroup" style={{ marginTop: 16 }}><summary>📘 Ledger 檢查｜{ledgerCheck.issues.length ? `FAIL ${ledgerCheck.issues.length}` : "PASS"}</summary><LedgerCheckPanel check={ledgerCheck} ledger={ledger} /></details>
-    <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : walletLoading ? "同步中" : "等待同步"}｜V16-M Full Ledger Safe</footer>
+    <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : walletLoading ? "同步中" : "等待同步"}｜V17 Action Queue</footer>
   </main>;
 }
 
@@ -288,24 +305,29 @@ function Metric({ label, value, signed }) {
 
 function DecisionCard({ decision, asset }) {
   const rule = Number(decision.rule ?? asset?.rules?.[(Number(decision.level || 1) - 1)]);
-  const status = decision.isLedgerDone ? "已登帳" : decision.isPendingPurchase ? "已買入，Ledger待補登" : "待手動買入";
-  const statusColor = decision.isLedgerDone ? "#22c55e" : decision.isPendingPurchase ? "#fde68a" : "#f8fafc";
-  return <article style={{ padding: 14, background: "#0f172a", borderRadius: 14, border: "1px solid rgba(148,163,184,.22)", color: statusColor, fontWeight: 900 }}>
+  const toneColor = decision.tone === "danger" ? "#fecaca" : decision.tone === "warning" ? "#fde68a" : "#f8fafc";
+  const borderColor = decision.tone === "danger" ? "rgba(239,68,68,.55)" : decision.tone === "warning" ? "rgba(245,158,11,.55)" : "rgba(148,163,184,.22)";
+  return <article style={{ padding: 14, background: "#0f172a", borderRadius: 14, border: `1px solid ${borderColor}`, color: toneColor, fontWeight: 900 }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
       <div><div style={{ fontSize: 19, fontWeight: 1000 }}>{tierIcon[decision.tier] || "⚪"} {decision.symbol} {decision.tier}</div><div style={{ marginTop: 4, color: "#94a3b8", fontSize: 12 }}>{decision.name || asset?.name || "--"}</div></div>
-      <strong style={{ color: "#22c55e", fontSize: 20 }}>{money(decision.amount)}</strong>
+      <strong style={{ color: "#22c55e", fontSize: 20 }}>{decision.amountText || money(decision.amount)}</strong>
     </div>
     <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
       <Metric label="現價" value={`$${Number(decision.price || asset?.price || 0).toFixed(4)}`} />
-      <Metric label="高點" value={`$${Number(asset?.high || 0).toFixed(2)}`} />
-      <Metric label="目前跌幅" value={pct(decision.discount)} signed={Number(decision.discount || 0)} />
-      <Metric label="觸發規則" value={Number.isFinite(rule) ? pct(rule) : "--"} />
+      <Metric label="高點" value={`$${Number(decision.high || asset?.high || 0).toFixed(2)}`} />
+      <Metric label="目前跌幅" value={decision.discountText || pct(decision.discount)} signed={Number(decision.discount || 0)} />
+      <Metric label="觸發規則" value={decision.ruleText || (Number.isFinite(rule) ? pct(rule) : "--")} />
+    </div>
+    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <Metric label="建議金額" value={decision.requiredText || money(decision.requiredAmount || decision.amount)} />
+      <Metric label="已偵測" value={decision.filledText || money(decision.filledAmount || 0)} />
     </div>
     <div style={{ marginTop: 10, padding: 10, background: "rgba(15,23,42,.9)", borderRadius: 10, color: "#cbd5e1", fontSize: 13, lineHeight: 1.55 }}>
-      <div>狀態：<strong style={{ color: statusColor }}>{status}</strong></div>
-      <div>進買點：{decisionTimeText(decision.triggeredAt)}</div>
-      <div>指令：<code style={{ color: "#fde68a" }}>{decision.command || `/buy ${decision.symbol} ${decision.tier} ${decision.amount}`}</code></div>
-      {decision.walletOwned && !decision.isPendingPurchase && <div style={{ color: "#fde68a" }}>錢包已有同標的持倉，但不代表本層已買入。</div>}
+      <div>狀態：<strong style={{ color: toneColor }}>{decision.statusLabel || decision.status}</strong></div>
+      <div>更新：{decisionTimeText(decision.updatedAt)}</div>
+      <div>原因：{decision.reason || "V17 Action Queue"}</div>
+      {decision.amountLow && <div style={{ color: "#fde68a" }}>⚠️ 買入金額不足，仍需補足。</div>}
+      {decision.amountHigh && <div style={{ color: "#fde68a" }}>⚠️ 買入金額超過建議，請檢查是否符合策略。</div>}
     </div>
   </article>;
 }
@@ -335,6 +357,6 @@ function AssetCard({ asset, ledger }) {
   const progress = progressFor(asset);
   const rows = (asset.rules || []).map((rule, i) => ({ level: `D${i + 1}`, rule, amount: asset.amounts?.[i] || 0 }));
   const doneText = ledgerText(ledger, asset.symbol);
-  const statusText = asset.isLedgerPending ? `⚠️ ${asset.decision?.tier} 已買入，Ledger待補登｜進買點：${decisionTimeText(asset.decision?.triggeredAt)}` : asset.isActionable ? `✅ ${asset.decision?.tier} 未登帳，可手動買入 ${money(asset.decision?.amount)}｜進買點：${decisionTimeText(asset.decision?.triggeredAt)}${asset.walletOwned ? "｜錢包已有同標的持倉" : ""}` : doneText;
-  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: asset.isLedgerPending ? "#fde68a" : asset.isActionable ? "#f8fafc" : "#cbd5e1", fontWeight: 850 }}>{statusText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
+  const statusText = asset.isActionable ? `✅ ${asset.decision?.tier} 位於 V17 今日決策｜${asset.decision?.statusLabel || asset.decision?.status}` : doneText;
+  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: asset.isActionable ? "#f8fafc" : "#cbd5e1", fontWeight: 850 }}>{statusText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
 }
