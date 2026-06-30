@@ -103,9 +103,7 @@ async function getBinanceTokenList() {
 async function getBinanceDynamic(item) {
   const chainId = item?.chainId || item?.chainID || item?.chain?.id || 56;
   const contractAddress = item?.contractAddress || item?.address || item?.tokenAddress;
-
   if (!contractAddress) throw new Error(`missing contractAddress for ${getSymbol(item) || "unknown"}`);
-
   const url = `${BINANCE_DYNAMIC_URL}?chainId=${encodeURIComponent(chainId)}&contractAddress=${encodeURIComponent(contractAddress)}`;
   const result = await fetchJson(url);
   return { ...result, chainId, contractAddress };
@@ -116,31 +114,20 @@ function normalize(asset, tokenMeta, dynamicResult) {
   const root = dynamicRaw?.data || dynamicRaw || {};
   const tokenInfo = root.tokenInfo || root.token || {};
   const stockInfo = root.stockInfo || root.stock || {};
-
   const rawTokenPrice = firstNumber(tokenInfo.price, root.price);
   const stockPrice = firstNumber(stockInfo.price);
-  const sharesMultiplier = firstNumber(
-    tokenInfo.sharesMultiplier,
-    stockInfo.sharesMultiplier,
-    tokenInfo.multiplier,
-    stockInfo.multiplier,
-    tokenMeta?.sharesMultiplier,
-    tokenMeta?.multiplier
-  ) || 1;
-
+  const sharesMultiplier = firstNumber(tokenInfo.sharesMultiplier, stockInfo.sharesMultiplier, tokenInfo.multiplier, stockInfo.multiplier, tokenMeta?.sharesMultiplier, tokenMeta?.multiplier) || 1;
   const displayPrice = rawTokenPrice > 0 ? rawTokenPrice / sharesMultiplier : stockPrice;
   const high = firstNumber(stockInfo.priceHigh52w, stockInfo.week52High, stockInfo.fiftyTwoWeekHigh);
   const low = firstNumber(stockInfo.priceLow52w, stockInfo.week52Low, stockInfo.fiftyTwoWeekLow);
   const marketCap = firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap);
   const volume = firstNumber(stockInfo.volume, tokenInfo.volume24h, root.volume);
-
   const stockDiffPct = pctDiff(displayPrice, stockPrice);
   const rawDiffPct = pctDiff(rawTokenPrice, displayPrice);
   const priceAuditAbsPct = stockDiffPct === null ? null : Math.abs(stockDiffPct);
-
-  const discount = high > 0 && displayPrice > 0 ? Number((((displayPrice - high) / high) * 100).toFixed(1)) : null;
+  const discountRaw = high > 0 && displayPrice > 0 ? ((displayPrice - high) / high) * 100 : null;
+  const discount = discountRaw === null ? null : Number(discountRaw.toFixed(1));
   const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
-
   return {
     ...asset,
     price: displayPrice,
@@ -156,6 +143,7 @@ function normalize(asset, tokenMeta, dynamicResult) {
     lowType: "Binance 52週低點",
     priceSource: "Binance tokenInfo.price / sharesMultiplier",
     discount,
+    discountRaw,
     signal,
     binanceAudit: {
       status: auditStatus(priceAuditAbsPct),
@@ -179,63 +167,21 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-
   try {
     const watchlist = getWatchlist();
     const tokenListResult = await getBinanceTokenList();
     const tokenList = tokenListResult.list;
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
-
-    const data = await Promise.all(
-      watchlist.map(async (asset) => {
-        const tokenMeta = bySymbol.get(asset.symbol);
-
-        if (!tokenMeta) {
-          return {
-            ...asset,
-            price: 0,
-            rawTokenPrice: 0,
-            tokenPrice: 0,
-            stockPrice: 0,
-            high: 0,
-            low: 0,
-            marketCap: 0,
-            volume: 0,
-            sharesMultiplier: 1,
-            highType: "Binance 52週高點",
-            lowType: "Binance 52週低點",
-            priceSource: "Binance tokenInfo.price / sharesMultiplier",
-            discount: null,
-            signal: { text: "資料未就緒", amount: "0U", level: 0 },
-            binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() }
-          };
-        }
-
-        const dynamic = await getBinanceDynamic(tokenMeta);
-        return normalize(asset, tokenMeta, dynamic);
-      })
-    );
-
-    const auditSummary = data.reduce((summary, item) => {
-      const status = item.binanceAudit?.status || "UNKNOWN";
-      summary[status] = (summary[status] || 0) + 1;
-      return summary;
-    }, {});
-
-    res.status(200).json({
-      updatedAt: new Date().toISOString(),
-      source: "Binance xStocks public API｜V17 Asset Registry",
-      sourceOfTruth: "lib/v17-asset-registry.js",
-      count: data.length,
-      cachePolicy: "no-store",
-      binanceHealth: {
-        ok: true,
-        listStatus: tokenListResult.status,
-        listLatencyMs: tokenListResult.latencyMs,
-        auditSummary
-      },
-      data
-    });
+    const data = await Promise.all(watchlist.map(async (asset) => {
+      const tokenMeta = bySymbol.get(asset.symbol);
+      if (!tokenMeta) {
+        return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: 0, low: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "Binance 52週高點", lowType: "Binance 52週低點", priceSource: "Binance tokenInfo.price / sharesMultiplier", discount: null, discountRaw: null, signal: { text: "資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() } };
+      }
+      const dynamic = await getBinanceDynamic(tokenMeta);
+      return normalize(asset, tokenMeta, dynamic);
+    }));
+    const auditSummary = data.reduce((summary, item) => { const status = item.binanceAudit?.status || "UNKNOWN"; summary[status] = (summary[status] || 0) + 1; return summary; }, {});
+    res.status(200).json({ updatedAt: new Date().toISOString(), source: "Binance xStocks public API｜V17 Asset Registry", sourceOfTruth: "lib/v17-asset-registry.js", count: data.length, cachePolicy: "no-store", binanceHealth: { ok: true, listStatus: tokenListResult.status, listLatencyMs: tokenListResult.latencyMs, auditSummary }, data });
   } catch (error) {
     res.status(500).json({ error: "binance_xstocks_fetch_failed", message: error.message });
   }
