@@ -4,7 +4,7 @@ const REFRESH_MS = 5000;
 const tierIcon = { D1: "🟢", D2: "🟡", D3: "🟠", D4: "🔴" };
 
 function pct(v) { const n = Number(v); return Number.isFinite(n) ? `${n.toFixed(1)}%` : "--"; }
-function money(v) { const n = Number(v); return Number.isFinite(n) ? `${n.toFixed(2).replace(".00", "")}U` : "--"; }
+function money(v) { const n = Number(v || 0); return Number.isFinite(n) ? `${n.toFixed(2).replace(".00", "")}U` : "--"; }
 function usd(v) { const n = Number(v || 0); return `$${n.toFixed(2)}`; }
 function signedUsd(v) { const n = Number(v || 0); return `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`; }
 function signedPct(v) { const n = Number(v || 0) * 100; return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`; }
@@ -154,6 +154,7 @@ export default function V16FullHome() {
   const [walletError, setWalletError] = useState("");
   const [reconciling, setReconciling] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState("");
+  const [skipLoadingKey, setSkipLoadingKey] = useState("");
 
   async function calculateDecisions(rows) {
     const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, {
@@ -226,6 +227,43 @@ export default function V16FullHome() {
     }
   }
 
+  async function skipLayer(decision) {
+    const key = decisionKey(decision);
+    setSkipLoadingKey(key);
+    setError("");
+    setReconcileMessage("");
+    try {
+      await jsonFetch(`/api/v17/events?t=${Date.now()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: {
+            id: `${normalizeSymbol(decision.symbol)}-${decision.tier}-skip-${Date.now()}`,
+            symbol: decision.symbol,
+            type: "skip_layer",
+            status: "skipped",
+            layer: Number(decision.level || String(decision.tier || "").replace("D", "")),
+            price: decision.price,
+            amount: 0,
+            source: "ui_skip_layer",
+            time: new Date().toISOString(),
+            raw: {
+              button: "略過本層",
+              rule: "Skip applies only to current symbol and current layer. It must not write Ledger or create holdings."
+            }
+          }
+        })
+      });
+      const safeAssets = requireNonEmptyArray(assets, "prices_data");
+      await calculateDecisions(safeAssets);
+      setReconcileMessage(`${decision.symbol} ${decision.tier} 已略過本層｜不寫 Ledger`);
+    } catch (e) {
+      setError(e.message || "略過本層失敗");
+    } finally {
+      setSkipLoadingKey("");
+    }
+  }
+
   useEffect(() => {
     loadAll();
     syncWallet({ clearError: false });
@@ -263,7 +301,7 @@ export default function V16FullHome() {
       <h2 style={{ fontSize: 14, margin: 0, color: "rgba(248,250,252,.68)", fontWeight: 750 }}>Binance xStocks｜V17 Action Queue</h2>
       {error && <div className="dataGuard">{error}</div>}
       {walletError && <div className="dataGuard">Wallet：{walletError}</div>}
-      {reconcileMessage && <div className="dataGuard" style={{ color: reconcileMessage.includes("不會自動") ? "#fde68a" : "#bbf7d0" }}>{reconcileMessage}</div>}
+      {reconcileMessage && <div className="dataGuard" style={{ color: reconcileMessage.includes("不會自動") || reconcileMessage.includes("略過") ? "#fde68a" : "#bbf7d0" }}>{reconcileMessage}</div>}
     </section>
 
     <section style={{ margin: "12px 0", padding: 14, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", borderRadius: 16, border: displayDecisions.length ? "2px solid #f59e0b" : "1px solid rgba(243,186,47,.22)" }}>
@@ -276,7 +314,7 @@ export default function V16FullHome() {
           <div>異常：{issueDecisions.length}筆</div>
           <div>建議新增投入：<span className="signed-positive" style={{ color: "#22c55e", fontWeight: 950 }}>{money(totalAmount)}</span></div>
         </div>
-        <div style={{ display: "grid", gap: 12 }}>{displayDecisions.map((d) => <DecisionCard key={decisionKey(d)} decision={d} asset={assetMap.get(normalizeSymbol(d.symbol))} />)}</div>
+        <div style={{ display: "grid", gap: 12 }}>{displayDecisions.map((d) => <DecisionCard key={decisionKey(d)} decision={d} asset={assetMap.get(normalizeSymbol(d.symbol))} onSkip={skipLayer} skipLoading={skipLoadingKey === decisionKey(d)} />)}</div>
       </> : <div style={{ textAlign: "center", padding: "34px 0 36px", color: "#cbd5e1", fontWeight: 1000, fontSize: 18 }}>暫無待執行買點</div>}
     </section>
 
@@ -303,7 +341,24 @@ function Metric({ label, value, signed }) {
   return <div style={{ padding: 10, background: "#0f172a", borderRadius: 12 }}><span style={{ color: "#94a3b8", fontWeight: 900, fontSize: 12 }}>{label}</span><strong className={hasSigned ? signedClass(signed) : ""} style={{ display: "block", color: hasSigned ? signedColor(signed) : "#f8fafc", marginTop: 4, fontSize: 16 }}>{value}</strong></div>;
 }
 
-function DecisionCard({ decision, asset }) {
+function LayerRules({ rules = [], amounts = [], activeTier }) {
+  return <details style={{ marginTop: 10 }} open>
+    <summary style={{ color: "#e2e8f0", fontWeight: 950 }}>層級規則</summary>
+    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+      {(rules || []).map((rule, i) => {
+        const tier = `D${i + 1}`;
+        const active = tier === activeTier;
+        return <div key={tier} style={{ display: "grid", gridTemplateColumns: "48px 1fr 58px", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, background: active ? "rgba(245,158,11,.18)" : "rgba(15,23,42,.9)", border: active ? "1px solid rgba(245,158,11,.65)" : "1px solid rgba(148,163,184,.14)", color: active ? "#fde68a" : "#cbd5e1", fontWeight: 950 }}>
+          <span>{active ? "▶ " : ""}{tier}</span>
+          <span>{pct(rule)}</span>
+          <span style={{ textAlign: "right" }}>{money(amounts?.[i] || 0)}</span>
+        </div>;
+      })}
+    </div>
+  </details>;
+}
+
+function DecisionCard({ decision, asset, onSkip, skipLoading }) {
   const rule = Number(decision.rule ?? asset?.rules?.[(Number(decision.level || 1) - 1)]);
   const toneColor = decision.tone === "danger" ? "#fecaca" : decision.tone === "warning" ? "#fde68a" : "#f8fafc";
   const borderColor = decision.tone === "danger" ? "rgba(239,68,68,.55)" : decision.tone === "warning" ? "rgba(245,158,11,.55)" : "rgba(148,163,184,.22)";
@@ -322,6 +377,7 @@ function DecisionCard({ decision, asset }) {
       <Metric label="建議金額" value={decision.requiredText || money(decision.requiredAmount || decision.amount)} />
       <Metric label="已偵測" value={decision.filledText || money(decision.filledAmount || 0)} />
     </div>
+    <LayerRules rules={asset?.rules || []} amounts={asset?.amounts || []} activeTier={decision.tier} />
     <div style={{ marginTop: 10, padding: 10, background: "rgba(15,23,42,.9)", borderRadius: 10, color: "#cbd5e1", fontSize: 13, lineHeight: 1.55 }}>
       <div>狀態：<strong style={{ color: toneColor }}>{decision.statusLabel || decision.status}</strong></div>
       <div>更新：{decisionTimeText(decision.updatedAt)}</div>
@@ -329,6 +385,10 @@ function DecisionCard({ decision, asset }) {
       {decision.amountLow && <div style={{ color: "#fde68a" }}>⚠️ 買入金額不足，仍需補足。</div>}
       {decision.amountHigh && <div style={{ color: "#fde68a" }}>⚠️ 買入金額超過建議，請檢查是否符合策略。</div>}
     </div>
+    <button onClick={() => onSkip?.(decision)} disabled={skipLoading} style={{ width: "100%", marginTop: 10, padding: "11px 12px", borderRadius: 12, border: "1px solid rgba(245,158,11,.55)", background: skipLoading ? "#475569" : "rgba(245,158,11,.12)", color: "#fde68a", fontWeight: 1000, fontSize: 15 }}>
+      {skipLoading ? "略過中..." : "略過本層"}
+    </button>
+    <div style={{ marginTop: 6, color: "#94a3b8", fontSize: 11, lineHeight: 1.45 }}>只略過目前 {decision.tier}；若跌到更深層，會重新進入今日決策。不寫 Ledger。</div>
   </article>;
 }
 
@@ -355,8 +415,7 @@ function ProgressBar({ progress }) {
 
 function AssetCard({ asset, ledger }) {
   const progress = progressFor(asset);
-  const rows = (asset.rules || []).map((rule, i) => ({ level: `D${i + 1}`, rule, amount: asset.amounts?.[i] || 0 }));
   const doneText = ledgerText(ledger, asset.symbol);
   const statusText = asset.isActionable ? `✅ ${asset.decision?.tier} 位於 V17 今日決策｜${asset.decision?.statusLabel || asset.decision?.status}` : doneText;
-  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: asset.isActionable ? "#f8fafc" : "#cbd5e1", fontWeight: 850 }}>{statusText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><details style={{ marginTop: 10 }}><summary>層級規則</summary>{rows.map((r) => <div key={r.level} style={{ color: "#cbd5e1", fontWeight: 850 }}>{r.level}：{pct(r.rule)}｜{money(r.amount)}</div>)}</details></article>;
+  return <article className={`card level-${asset.signalLevel || 0}`}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ fontSize: 21, fontWeight: 1000 }}>{asset.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850 }}>{asset.name}</div></div><strong>{asset.grade}</strong></div><div className="miniGrid" style={{ marginTop: 10 }}><Metric label="價格" value={`$${Number(asset.price || 0).toFixed(4)}`} /><Metric label="高點" value={`$${Number(asset.high || 0).toFixed(2)}`} /><Metric label="跌幅" value={pct(asset.discount)} signed={Number(asset.discount || 0)} /><Metric label="Ledger" value={doneText} /></div><div style={{ marginTop: 10, color: asset.isActionable ? "#f8fafc" : "#cbd5e1", fontWeight: 850 }}>{statusText}</div><div style={{ marginTop: 10 }}><ProgressBar progress={progress} /></div><LayerRules rules={asset.rules || []} amounts={asset.amounts || []} activeTier={asset.tier} /></article>;
 }
