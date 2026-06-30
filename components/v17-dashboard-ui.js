@@ -90,15 +90,19 @@ export function LayerRules({ rules = [], amounts = [], activeTier }) {
   </details>;
 }
 
-export function HoldingMetrics({ holding, row }) {
+export function CardMetrics({ row }) {
+  const holding = row?.walletHolding;
   const pnl = Number(holding?.currentValue || 0) - Number(holding?.totalCost || 0);
   const pnlPct = Number(holding?.totalCost || 0) > 0 ? pnl / Number(holding?.totalCost || 0) : 0;
+  const dash = "—";
   return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-    {holding && <Metric label="數量" value={Number(holding.quantity || 0).toFixed(4)} />}
-    {holding && <Metric label="成本" value={fmtUsd(holding.totalCost, 2)} />}
-    {holding && <Metric label="市值" value={fmtUsd(holding.currentValue, 2)} />}
-    {holding && <Metric label="損益" value={`${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}`} signed={pnl} />}
-    {holding && <Metric label="報酬率" value={`${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%`} signed={pnlPct} />}
+    <Metric label="現價" value={fmtUsd(row.price, 4)} />
+    <Metric label="高點" value={fmtUsd(row.high || row.cycleHigh, 2)} />
+    <Metric label="數量" value={holding ? Number(holding.quantity || 0).toFixed(4) : dash} />
+    <Metric label="成本" value={holding ? fmtUsd(holding.totalCost, 2) : dash} />
+    <Metric label="市值" value={holding ? fmtUsd(holding.currentValue, 2) : dash} />
+    <Metric label="損益" value={holding ? `${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}` : dash} signed={holding ? pnl : undefined} />
+    <Metric label="報酬率" value={holding ? `${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%` : dash} signed={holding ? pnlPct : undefined} />
     <Metric label="距52週高點降幅" value={fmtPct(row?.discount)} signed={row?.discount} />
   </div>;
 }
@@ -113,12 +117,8 @@ export function AssetCard({ row, children }) {
       </div>
       <strong style={{ alignSelf: "flex-start", padding: "5px 10px", borderRadius: 999, background: tone.bg, border: `1px solid ${tone.border}`, color: tone.color, fontSize: 15 }}>{row.tier}</strong>
     </div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-      <Metric label="現價" value={fmtUsd(row.price, 4)} />
-      <Metric label="高點" value={fmtUsd(row.high || row.cycleHigh, 2)} />
-    </div>
+    <CardMetrics row={row} />
     {children}
-    <TierProgress row={row} />
     <LayerRules rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
   </article>;
 }
