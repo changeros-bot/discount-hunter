@@ -41,10 +41,16 @@ function absDepth(value) {
   return Math.abs(Number(value || 0));
 }
 
+function currentDiscountDepth(row) {
+  const raw = Number(row?.discountRaw);
+  if (Number.isFinite(raw)) return Math.abs(raw);
+  return absDepth(row?.discount);
+}
+
 function nextTierProgress(row) {
   const depths = (row?.rules || []).map(absDepth);
   const level = Math.max(1, Number(row?.signalLevel || 0));
-  const current = absDepth(row?.discount);
+  const current = currentDiscountDepth(row);
   const from = depths[level - 1] ?? 0;
   const to = depths[level] ?? depths[depths.length - 1] ?? from;
   const span = Math.max(0.000001, to - from);
@@ -63,7 +69,7 @@ export function TierProgress({ row }) {
       <div style={{ width: `${p.pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg, #22c55e, #facc15)" }} />
       <span style={{ position: "absolute", left: `calc(${p.pct}% - 5px)`, top: -3, width: 15, height: 15, borderRadius: 999, background: "#facc15", boxShadow: "0 0 12px rgba(250,204,21,.85)" }} />
     </div>
-    <div style={{ marginTop: 6, color: "#fde68a", fontSize: 12, fontWeight: 1000, textAlign: "left" }}>{p.pct.toFixed(0)}%</div>
+    <div style={{ marginTop: 6, color: "#fde68a", fontSize: 12, fontWeight: 1000, textAlign: "left" }}>{Math.round(p.pct)}%</div>
   </div>;
 }
 
