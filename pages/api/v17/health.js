@@ -29,6 +29,8 @@ export default function handler(req, res) {
     "missing_price_suspect",
     "layer_mismatch_stays_in_queue",
     "failed_event_returns_queue",
+    "skip_current_layer_leaves_queue",
+    "deeper_layer_reenters_after_skip",
     "same_state_no_notify",
     "price_change_notify"
   ];
