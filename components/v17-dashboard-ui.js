@@ -70,16 +70,15 @@ export function Section({ title, count, rows, empty, render }) {
   </section>;
 }
 
-export function PageShell({ loading, updatedAt, error, stats, children }) {
-  const strip = `今日決策 ${stats?.decision ?? 0} 筆｜持倉 ${stats?.holding ?? 0} 檔｜觀察 ${stats?.watch ?? 0} 檔`;
+export function PageShell({ loading, updatedAt, error, children }) {
   return <main style={{ minHeight: "100vh", padding: 14, background: "#020617", color: "#f8fafc", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" }}>
     <header style={{ padding: "18px 12px 14px", textAlign: "center", borderRadius: 22, background: "linear-gradient(135deg, rgba(10,14,39,.96), rgba(3,7,18,.96))", border: "1px solid rgba(250,204,21,.18)" }}>
-      <div style={{ textAlign: "right", color: "rgba(250,204,21,.8)", fontSize: 11, fontWeight: 1000 }}>V17</div>
-      <h1 style={{ margin: "6px 0", fontSize: "clamp(48px, 14vw, 78px)", lineHeight: .95, fontWeight: 1000, color: "#facc15" }}>美股DCA<br />折價追蹤</h1>
-      <div style={{ color: "rgba(248,250,252,.68)", fontWeight: 850 }}>V17 State Machine｜{loading ? "更新中" : "LIVE"}｜{timeText(updatedAt)}</div>
-      <div style={{ margin: "12px auto 0", maxWidth: 430, padding: "10px 12px", borderRadius: 14, background: "rgba(127,29,29,.28)", border: "1px solid rgba(248,113,113,.25)", color: "#bbf7d0", fontWeight: 900 }}>{strip}</div>
+      <div style={{ textAlign: "right", color: "rgba(250,204,21,.8)", fontSize: 11, fontWeight: 1000 }}>V17-M</div>
+      <h1 style={{ margin: "6px 0", fontSize: "clamp(48px, 14vw, 78px)", lineHeight: .95, fontWeight: 1000, background: "linear-gradient(180deg, #fff6b7, #ffd700, #b8860b)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>美股DCA<br />折價追蹤</h1>
+      <div style={{ color: "rgba(248,250,252,.68)", fontWeight: 850 }}>Binance xStocks｜Ledger 決策版</div>
       {error && <div style={{ marginTop: 10, padding: 10, borderRadius: 12, color: "#fecaca", background: "rgba(127,29,29,.35)", fontWeight: 900 }}>{error}</div>}
     </header>
+    <div style={{ margin: "12px 0", textAlign: "right", color: "#cbd5e1", fontWeight: 850, fontSize: 12 }}><span style={{ color: loading ? "#facc15" : "#22c55e" }}>●</span> {loading ? "更新中" : "LIVE"}｜{timeText(updatedAt)}</div>
     {children}
   </main>;
 }
