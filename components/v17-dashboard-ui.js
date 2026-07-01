@@ -1,10 +1,11 @@
-const TIER_ICON = { D1: "D1", D2: "D2", D3: "D3", D4: "D4", D0: "D0" };
+const TIER_ICON = { D1: "D1", D2: "D2", D3: "D3", D4: "D4", D5: "D5", D0: "D0" };
 const TIER_TONE = {
   D0: { color: "#94a3b8", bg: "rgba(148,163,184,.10)", border: "rgba(148,163,184,.30)" },
   D1: { color: "#35f59a", bg: "rgba(53,245,154,.12)", border: "rgba(53,245,154,.45)" },
   D2: { color: "#ffc857", bg: "rgba(255,200,87,.12)", border: "rgba(255,200,87,.45)" },
   D3: { color: "#ff9f43", bg: "rgba(255,159,67,.12)", border: "rgba(255,159,67,.45)" },
-  D4: { color: "#ff5c7a", bg: "rgba(255,92,122,.12)", border: "rgba(255,92,122,.45)" }
+  D4: { color: "#ff5c7a", bg: "rgba(255,92,122,.12)", border: "rgba(255,92,122,.45)" },
+  D5: { color: "#ef4444", bg: "rgba(239,68,68,.12)", border: "rgba(239,68,68,.45)" }
 };
 const CYAN = "#31e7ff";
 
@@ -65,6 +66,16 @@ export function LayerRules({ rules = [], amounts = [], activeTier }) {
   </div>;
 }
 
+function highLabel(row) {
+  if (row?.referenceMode === "cycle_high" || row?.discountModel === "btc_cycle_high_v1" || row?.assetType === "crypto") return "Cycle High";
+  return "高點";
+}
+
+function drawdownLabel(row) {
+  if (row?.referenceMode === "cycle_high" || row?.discountModel === "btc_cycle_high_v1" || row?.assetType === "crypto") return "距Cycle High降幅";
+  return "距52週高點降幅";
+}
+
 export function CardMetrics({ row }) {
   const holding = row?.walletHolding;
   const pnl = Number(holding?.currentValue || 0) - Number(holding?.totalCost || 0);
@@ -72,13 +83,13 @@ export function CardMetrics({ row }) {
   const dash = "—";
   return <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", overflow: "hidden", borderRadius: 16, border: "1px solid rgba(49,231,255,.14)", background: "rgba(2,6,23,.38)" }}>
     <Metric label="現價" value={fmtUsd(row.price, 4)} />
-    <Metric label="高點" value={fmtUsd(row.high || row.cycleHigh, 2)} />
+    <Metric label={highLabel(row)} value={fmtUsd(row.high || row.cycleHigh, 2)} />
     <Metric label="數量" value={holding ? Number(holding.quantity || 0).toFixed(4) : dash} />
     <Metric label="成本" value={holding ? fmtUsd(holding.totalCost, 2) : dash} />
     <Metric label="市值" value={holding ? fmtUsd(holding.currentValue, 2) : dash} />
     <Metric label="損益" value={holding ? `${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}` : dash} signed={holding ? pnl : undefined} />
     <Metric label="報酬率" value={holding ? `${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%` : dash} signed={holding ? pnlPct : undefined} />
-    <Metric label="距52週高點降幅" value={fmtPct(row?.discount)} signed={row?.discount} />
+    <Metric label={drawdownLabel(row)} value={fmtPct(row?.discount)} signed={row?.discount} />
   </div>;
 }
 
@@ -117,7 +128,7 @@ export function PageShell({ loading, updatedAt, error, children }) {
       <div style={{ position: "relative", display: "flex", justifyContent: "flex-end", margin: "0 0 14px" }}>
         <div style={{ padding: "8px 12px", borderRadius: 16, color: "#a5f3fc", background: "rgba(49,231,255,.08)", border: "1px solid rgba(49,231,255,.24)", fontSize: 11, fontWeight: 950, letterSpacing: 1.4, boxShadow: "0 0 20px rgba(49,231,255,.10)" }}>BINANCE XSTOCKS</div>
       </div>
-      <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 10px", borderRadius: 16, background: "rgba(3,9,20,.52)", border: "1px solid rgba(49,231,255,.16)" }}>
+      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 18, background: "rgba(2,6,23,.54)", border: "1px solid rgba(49,231,255,.18)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, color: liveColor, fontWeight: 1000, fontSize: 12, letterSpacing: .8 }}><span style={{ width: 9, height: 9, borderRadius: 999, background: liveColor, boxShadow: `0 0 16px ${liveColor}` }} />{loading ? "SYNC" : "LIVE"}</div>
         <div style={{ color: "#cbd5e1", fontWeight: 900, fontSize: 12, letterSpacing: .4 }}>{timeText(updatedAt)}</div>
       </div>
