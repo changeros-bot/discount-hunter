@@ -38,15 +38,18 @@ function sanitizeBinanceError(error) {
   return {
     message: error?.message || "Binance exchange position sync failed",
     httpStatus: error?.status || null,
+    restBaseUrl: error?.restBaseUrl || null,
     binanceCode: payload?.code ?? null,
-    binanceMessage: payload?.msg || null,
+    binanceMessage: payload?.msg || payload?.raw || null,
     hint: payload?.code === -2015
       ? "API key permission, IP restriction, or invalid key problem. Confirm Enable Reading and IP restriction settings."
       : payload?.code === -1022
         ? "Signature verification failed. Check API secret and signing logic."
         : payload?.code === -1021
           ? "Timestamp outside recvWindow. Check server clock / recvWindow."
-          : null
+          : error?.status === 451
+            ? "Route is still blocked by Binance location policy. Check restBaseUrl; if it is the Worker URL, Cloudflare is also blocked and needs another proxy region."
+            : null
   };
 }
 
@@ -87,19 +90,20 @@ export default async function handler(req, res) {
     envConfigured: env.configured,
     apiKeyPresent: Boolean(env.apiKey),
     apiSecretPresent: Boolean(env.apiSecret),
+    restBaseUrl: env.restBaseUrl,
     directProviderCall: true
   };
 
   if (env.configured) {
     try {
       exchange = await fetchBinanceExchangePositions({ marketPrices: { BTC: { price: btcPrice } } });
-      diagnostics = { ...diagnostics, binanceSignedRequest: "success" };
+      diagnostics = { ...diagnostics, providerBaseUrl: exchange.providerBaseUrl, binanceSignedRequest: "success" };
     } catch (error) {
       diagnostics = { ...diagnostics, ...sanitizeBinanceError(error), binanceSignedRequest: "failed" };
-      exchange = { ok: false, configured: true, source: "binance_exchange_readonly", holdings: [] };
+      exchange = { ok: false, configured: true, source: "binance_exchange_readonly", providerBaseUrl: diagnostics.restBaseUrl, holdings: [] };
     }
   } else {
-    exchange = { ok: false, configured: false, source: "binance_exchange_readonly", holdings: [] };
+    exchange = { ok: false, configured: false, source: "binance_exchange_readonly", providerBaseUrl: diagnostics.restBaseUrl, holdings: [] };
   }
 
   const holdings = Array.isArray(exchange?.holdings) ? exchange.holdings : [];
@@ -108,7 +112,7 @@ export default async function handler(req, res) {
 
   return res.status(pass ? 200 : 500).json({
     ok: pass,
-    version: "V17-BTC-check-v2-direct-provider",
+    version: "V17-BTC-check-v3-route-visible",
     checkedAt: new Date().toISOString(),
     market: {
       btcPrice,
@@ -120,12 +124,13 @@ export default async function handler(req, res) {
       configured: env.configured,
       ok: Boolean(exchange.ok),
       source: exchange?.source || "binance_exchange_readonly",
+      providerBaseUrl: exchange?.providerBaseUrl || diagnostics.restBaseUrl,
       message: diagnostics.message || null
     },
     diagnostics,
     btc: sanitizeBtcHolding(btc),
     next: pass
       ? "BTC provider is reading Binance Spot account data. Dashboard can use binance_exchange_readonly."
-      : "Use diagnostics.binanceCode / binanceMessage to fix Binance API permission, IP, key, secret, signature, or timestamp problem."
+      : "Check diagnostics.restBaseUrl first. If it is Worker URL but still 451, Cloudflare Worker egress is also restricted and we need another proxy region."
   });
 }
