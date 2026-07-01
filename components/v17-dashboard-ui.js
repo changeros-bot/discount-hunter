@@ -18,12 +18,13 @@ export function timeText(iso) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
-export function Metric({ label, value, signed }) {
+export function Metric({ label, value, signed, subValue }) {
   const hasSigned = signed !== undefined;
   const color = !hasSigned ? "#f8fafc" : Number(signed) > 0 ? "#35f59a" : Number(signed) < 0 ? "#ff5c7a" : "#f8fafc";
   return <div style={{ padding: 10, minHeight: 62, background: "rgba(3,9,20,.54)", borderRight: "1px solid rgba(49,231,255,.10)", borderBottom: "1px solid rgba(49,231,255,.10)", minWidth: 0 }}>
     <div style={{ color: "#7dd3fc", fontWeight: 900, fontSize: 10, letterSpacing: .7, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
     <strong style={{ display: "block", marginTop: 5, fontSize: 15, lineHeight: 1.1, color, textShadow: hasSigned ? `0 0 12px ${color}44` : "none", overflowWrap: "anywhere" }}>{value}</strong>
+    {subValue ? <div style={{ marginTop: 4, color: "#94a3b8", fontSize: 10, fontWeight: 850 }}>{subValue}</div> : null}
   </div>;
 }
 
@@ -83,6 +84,24 @@ function drawdownLabel(row) {
   return "距52週高點降幅";
 }
 
+function quantityText(holding) {
+  if (!holding) return "—";
+  const qty = Number(holding.quantity || 0);
+  if (!Number.isFinite(qty)) return "—";
+  const symbol = String(holding.symbol || "").toUpperCase();
+  if (symbol === "BTC") return qty.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+  return qty.toFixed(4);
+}
+
+function avgCostText(holding) {
+  const avg = Number(holding?.averageCost || 0);
+  return avg > 0 ? `均價 ${fmtUsd(avg, 2)}` : null;
+}
+
+function cycleHighDate(row) {
+  return row?.cycleHighDate ? `(${row.cycleHighDate})` : null;
+}
+
 export function CardMetrics({ row }) {
   const holding = row?.walletHolding;
   const pnl = Number(holding?.currentValue || 0) - Number(holding?.totalCost || 0);
@@ -90,9 +109,9 @@ export function CardMetrics({ row }) {
   const dash = "—";
   return <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", overflow: "hidden", borderRadius: 16, border: "1px solid rgba(49,231,255,.14)", background: "rgba(2,6,23,.38)" }}>
     <Metric label="現價" value={fmtUsd(row.price, 4)} />
-    <Metric label={highLabel(row)} value={fmtUsd(row.high || row.cycleHigh, 2)} />
-    <Metric label="數量" value={holding ? Number(holding.quantity || 0).toFixed(4) : dash} />
-    <Metric label="成本" value={holding ? fmtUsd(holding.totalCost, 2) : dash} />
+    <Metric label={highLabel(row)} value={fmtUsd(row.high || row.cycleHigh, 2)} subValue={cycleHighDate(row)} />
+    <Metric label="數量" value={holding ? quantityText(holding) : dash} />
+    <Metric label="成本" value={holding ? fmtUsd(holding.totalCost, 2) : dash} subValue={holding ? avgCostText(holding) : null} />
     <Metric label="市值" value={holding ? fmtUsd(holding.currentValue, 2) : dash} />
     <Metric label="損益" value={holding ? `${pnl >= 0 ? "+" : "-"}${fmtUsd(Math.abs(pnl), 2)}` : dash} signed={holding ? pnl : undefined} />
     <Metric label="報酬率" value={holding ? `${pnlPct >= 0 ? "+" : ""}${(pnlPct * 100).toFixed(2)}%` : dash} signed={holding ? pnlPct : undefined} />
