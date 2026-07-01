@@ -25,6 +25,11 @@ function marketMapFromRows(rows = []) {
   return Object.fromEntries((rows || []).map((row) => [row.symbol, { symbol: row.symbol, price: row.price, high: row.high, high52w: row.high52w, cycleHigh: row.high || row.cycleHigh || row.high52w, discount: row.discount }]));
 }
 
+function btcPriceFromRows(rows = []) {
+  const btc = (rows || []).find((row) => String(row.symbol || "").toUpperCase() === "BTC");
+  return Number(btc?.price || 0);
+}
+
 function enrichManualBtcHolding(rows = []) {
   const btcMarket = (rows || []).find((row) => String(row.symbol).toUpperCase() === "BTC");
   const price = Number(btcMarket?.price || 0);
@@ -61,12 +66,33 @@ function enrichManualBtcHolding(rows = []) {
   };
 }
 
-function withManualBtcPosition(walletData, rows = []) {
+function mergeHoldingsBySymbol(...groups) {
+  const map = new Map();
+  for (const group of groups || []) {
+    for (const holding of group || []) {
+      const symbol = String(holding?.symbol || "").toUpperCase();
+      if (!symbol || Number(holding.quantity || 0) <= 0) continue;
+      map.set(symbol, holding);
+    }
+  }
+  return [...map.values()];
+}
+
+function withBtcPosition({ walletData, rows = [], exchangeData }) {
   const base = walletData || { ok: true, holdings: [] };
-  const holdings = Array.isArray(base.holdings) ? [...base.holdings] : [];
-  const hasBtc = holdings.some((h) => String(h.symbol || "").toUpperCase() === "BTC" && Number(h.quantity) > 0);
-  if (!hasBtc) holdings.push(enrichManualBtcHolding(rows));
-  return { ...base, holdings, btcPositionSource: hasBtc ? "binance_account_or_existing_wallet" : "manual_fallback" };
+  const walletHoldings = Array.isArray(base.holdings) ? base.holdings : [];
+  const exchangeHoldings = Array.isArray(exchangeData?.holdings) ? exchangeData.holdings : [];
+  const manualBtc = enrichManualBtcHolding(rows);
+  const hasExchangeBtc = exchangeHoldings.some((h) => String(h.symbol || "").toUpperCase() === "BTC" && Number(h.quantity) > 0);
+  const holdings = hasExchangeBtc
+    ? mergeHoldingsBySymbol(walletHoldings, exchangeHoldings)
+    : mergeHoldingsBySymbol(walletHoldings, [manualBtc]);
+  return {
+    ...base,
+    holdings,
+    btcPositionSource: hasExchangeBtc ? "binance_exchange_readonly" : "manual_fallback",
+    binanceExchange: exchangeData || { ok: false, configured: false }
+  };
 }
 
 function usd(value) { const n = Number(value || 0); return `$${n.toFixed(2)}`; }
@@ -148,7 +174,9 @@ export default function V17Dashboard() {
       const rows = Array.isArray(prices.data) ? prices.data : [];
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
       const walletRaw = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null);
-      const walletData = withManualBtcPosition(walletRaw, rows);
+      const btcPrice = btcPriceFromRows(rows);
+      const exchangeData = await jsonFetch(`/api/binance-exchange-position?btcPrice=${encodeURIComponent(btcPrice)}&t=${Date.now()}`).catch(() => null);
+      const walletData = withBtcPosition({ walletData: walletRaw, rows, exchangeData });
       const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: true }) });
       setAssets(rows); setLedger(ledgerData.ledger || {}); setWallet(walletData); setDecisions(today.cards || []); setDecisionStates(today.states || []);
       setUpdatedAt(prices.updatedAt || today.updatedAt || new Date().toISOString()); setSource(prices.source || "Binance xStocks public API"); setError("");
@@ -184,6 +212,6 @@ export default function V17Dashboard() {
     <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
     <Collapsible title="📋 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...watchStatusStyle() }}>等待進入 D1</div><TierProgress row={row} /></AssetCard>} />
     <StateMachineCheck classified={classified} />
-    <footer style={{ marginTop: 12, padding: "9px 10px", background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 11, fontWeight: 850, lineHeight: 1.35 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "WAIT"}｜Ledger：{ledgerStatus}</footer>
+    <footer style={{ marginTop: 12, padding: "9px 10px", background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 11, fontWeight: 850, lineHeight: 1.35 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "WAIT"}｜BTC：{wallet?.btcPositionSource || "WAIT"}｜Ledger：{ledgerStatus}</footer>
   </PageShell>;
 }
