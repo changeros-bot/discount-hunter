@@ -3,6 +3,14 @@ import { classifyUniverse } from "../lib/v17-state-classifier";
 import { AssetCard, fmtAmount, Metric, PageShell, Section, TierProgress } from "../components/v17-dashboard-ui";
 
 const REFRESH_MS = 10000;
+const BTC_MANUAL_POSITION = {
+  symbol: "BTC",
+  quantity: 0.0002699,
+  averageCost: 36189.37,
+  quantitySource: "binance_manual_fallback",
+  costBasisSource: "binance_screenshot_manual_fallback",
+  source: "Binance account screenshot fallback"
+};
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
@@ -13,6 +21,47 @@ async function jsonFetch(url, options = {}) {
 
 function marketMapFromRows(rows = []) {
   return Object.fromEntries((rows || []).map((row) => [row.symbol, { symbol: row.symbol, price: row.price, high: row.high, high52w: row.high52w, cycleHigh: row.high || row.cycleHigh || row.high52w, discount: row.discount }]));
+}
+
+function enrichManualBtcHolding(rows = []) {
+  const btcMarket = (rows || []).find((row) => String(row.symbol).toUpperCase() === "BTC");
+  const price = Number(btcMarket?.price || 0);
+  const quantity = BTC_MANUAL_POSITION.quantity;
+  const averageCost = BTC_MANUAL_POSITION.averageCost;
+  const totalCost = quantity * averageCost;
+  const currentValue = price > 0 ? quantity * price : 0;
+  const unrealizedPnL = currentValue - totalCost;
+  const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
+  return {
+    ...BTC_MANUAL_POSITION,
+    quantity,
+    valuationQuantity: quantity,
+    averageCost,
+    totalCost,
+    rawTotalCost: totalCost,
+    tokenPrice: price,
+    marketPrice: price,
+    currentValue,
+    rawCurrentValue: currentValue,
+    marketValue: currentValue,
+    positionValue: currentValue,
+    unrealizedPnL,
+    pnlPct,
+    returnPct: pnlPct,
+    officialHolding: true,
+    costBasisEstimated: true,
+    costBasisWarning: "BTC position uses manual Binance screenshot fallback until read-only Binance Account API is connected.",
+    priceSource: btcMarket?.priceSource || "Binance Web BTCUSDT",
+    checkedAt: new Date().toISOString()
+  };
+}
+
+function withManualBtcPosition(walletData, rows = []) {
+  const base = walletData || { ok: true, holdings: [] };
+  const holdings = Array.isArray(base.holdings) ? [...base.holdings] : [];
+  const hasBtc = holdings.some((h) => String(h.symbol || "").toUpperCase() === "BTC" && Number(h.quantity) > 0);
+  if (!hasBtc) holdings.push(enrichManualBtcHolding(rows));
+  return { ...base, holdings, btcPositionSource: hasBtc ? "binance_account_or_existing_wallet" : "manual_fallback" };
 }
 
 function usd(value) { const n = Number(value || 0); return `$${n.toFixed(2)}`; }
@@ -93,7 +142,8 @@ export default function V17Dashboard() {
       const prices = await jsonFetch(`/api/prices?t=${Date.now()}`);
       const rows = Array.isArray(prices.data) ? prices.data : [];
       const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
-      const walletData = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null);
+      const walletRaw = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null);
+      const walletData = withManualBtcPosition(walletRaw, rows);
       const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: true }) });
       setAssets(rows); setLedger(ledgerData.ledger || {}); setWallet(walletData); setDecisions(today.cards || []); setDecisionStates(today.states || []);
       setUpdatedAt(prices.updatedAt || today.updatedAt || new Date().toISOString()); setSource(prices.source || "Binance xStocks public API"); setError("");
