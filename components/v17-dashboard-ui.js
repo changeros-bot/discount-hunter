@@ -29,6 +29,13 @@ export function Metric({ label, value, signed }) {
 
 function absDepth(value) { return Math.abs(Number(value || 0)); }
 function currentDiscountDepth(row) { const raw = Number(row?.discountRaw); return Number.isFinite(raw) ? Math.abs(raw) : absDepth(row?.discount); }
+function referenceHigh(row) { return Number(row?.high || row?.cycleHigh || row?.high52w || 0); }
+function layerPricePoint(row, rule) {
+  const high = referenceHigh(row);
+  const pct = Number(rule || 0);
+  if (!high || !Number.isFinite(pct)) return "--";
+  return fmtUsd(high * (1 + pct / 100), 0);
+}
 function nextTierProgress(row) {
   const depths = (row?.rules || []).map(absDepth);
   const level = Math.max(0, Number(row?.signalLevel || 0));
@@ -52,14 +59,14 @@ export function TierProgress({ row }) {
   </div>;
 }
 
-export function LayerRules({ rules = [], amounts = [], activeTier }) {
+export function LayerRules({ row, rules = [], amounts = [], activeTier }) {
   return <div style={{ marginTop: 10 }}>
     <div style={{ color: CYAN, fontWeight: 950, fontSize: 13, marginBottom: 8 }}>層級規則</div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6 }}>
       {(rules || []).map((rule, index) => {
         const tier = `D${index + 1}`; const active = tier === activeTier;
-        return <div key={tier} style={{ padding: "8px 3px", minHeight: 52, borderRadius: 12, textAlign: "center", background: active ? "rgba(49,231,255,.10)" : "rgba(8,18,35,.58)", border: active ? "1px solid rgba(49,231,255,.48)" : "1px solid rgba(148,163,184,.18)", color: active ? CYAN : "#94a3b8", fontWeight: 900 }}>
-          <div>{tier}</div><div style={{ fontSize: 10 }}>{fmtPct(rule).replace(".0", "")}</div><div style={{ fontSize: 10 }}>{fmtAmount(amounts?.[index] || 0)}</div>
+        return <div key={tier} style={{ padding: "8px 3px", minHeight: 64, borderRadius: 12, textAlign: "center", background: active ? "rgba(49,231,255,.10)" : "rgba(8,18,35,.58)", border: active ? "1px solid rgba(49,231,255,.48)" : "1px solid rgba(148,163,184,.18)", color: active ? CYAN : "#94a3b8", fontWeight: 900 }}>
+          <div>{tier}</div><div style={{ fontSize: 10 }}>{fmtPct(rule).replace(".0", "")}</div><div style={{ fontSize: 10 }}>{fmtAmount(amounts?.[index] || 0)}</div><div style={{ marginTop: 3, fontSize: 10, color: active ? "#e0fbff" : "#64748b" }}>{layerPricePoint(row, rule)}</div>
         </div>;
       })}
     </div>
@@ -105,7 +112,7 @@ export function AssetCard({ row, children }) {
     </div>
     <CardMetrics row={row} />
     <div style={{ marginTop: 10 }}>{children}</div>
-    <LayerRules rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
+    <LayerRules row={row} rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
   </article>;
 }
 
