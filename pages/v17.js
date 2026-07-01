@@ -66,10 +66,9 @@ function Collapsible({ title, count, rows, render, open = false }) {
 function StateMachineCheck({ classified }) {
   const status = classified.ok ? "PASS" : "CHECK";
   const color = classified.ok ? "#22c55e" : "#f59e0b";
-  return <details style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", border: `1px solid ${color}` }}>
-    <summary style={{ color, fontWeight: 1000, fontSize: 19 }}>📘 V17 State Machine｜{status}</summary>
-    <div style={{ marginTop: 10, display: "grid", gap: 8, color: "#cbd5e1", fontWeight: 850, fontSize: 13 }}>
-      <div>Universe：{classified.summary.universeCount}｜Decision：{classified.summary.decisionCount}｜Holding：{classified.summary.holdingCount}｜Watch：{classified.summary.watchCount}</div>
+  return <details style={{ marginTop: 16, padding: 12, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.88), rgba(15,23,42,.94))", border: `1px solid ${color}` }}>
+    <summary style={{ color, fontWeight: 1000, fontSize: 16 }}>📘 State Machine｜{status}｜U{classified.summary.universeCount} D{classified.summary.decisionCount} H{classified.summary.holdingCount} W{classified.summary.watchCount}</summary>
+    <div style={{ marginTop: 8, display: "grid", gap: 6, color: "#cbd5e1", fontWeight: 850, fontSize: 12 }}>
       <div>Missing：{classified.summary.missingSymbols.join(", ") || "none"}</div>
       <div>Duplicate：{classified.summary.duplicateSymbols.join(", ") || "none"}</div>
     </div>
@@ -130,6 +129,6 @@ export default function V17Dashboard() {
     <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
     <Collapsible title="📋 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...watchStatusStyle() }}>等待進入 D1</div><TierProgress row={row} /></AssetCard>} />
     <StateMachineCheck classified={classified} />
-    <footer style={{ marginTop: 18, padding: 12, background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "等待同步"}｜Ledger：{ledgerStatus}｜V17 Exclusive State Machine</footer>
+    <footer style={{ marginTop: 12, padding: "9px 10px", background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 11, fontWeight: 850, lineHeight: 1.35 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "WAIT"}｜Ledger：{ledgerStatus}</footer>
   </PageShell>;
 }
