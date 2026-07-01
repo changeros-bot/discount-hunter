@@ -17,7 +17,13 @@ function mapAsset(asset) {
     assetType: asset.assetType,
     engine: asset.engine,
     strategy: asset.strategy,
-    discountModel: asset.discountModel
+    discountModel: asset.discountModel,
+    referenceMode: asset.referenceMode,
+    updatePolicy: asset.updatePolicy,
+    cycleHigh: asset.cycleHigh,
+    cycleHighSource: asset.cycleHighSource,
+    unitAmount: asset.unitAmount,
+    capitalUnits: asset.capitalUnits
   };
 }
 
@@ -183,12 +189,13 @@ async function getBtcMarket(asset) {
   ]);
   const price = firstNumber(priceResult.json?.price);
   const weeklyRows = Array.isArray(klinesResult.json) ? klinesResult.json : [];
-  const high = weeklyRows.reduce((max, row) => Math.max(max, firstNumber(row?.[2])), 0);
+  const rolling52wHigh = weeklyRows.reduce((max, row) => Math.max(max, firstNumber(row?.[2])), 0);
   const low = weeklyRows.reduce((min, row) => {
     const value = firstNumber(row?.[3]);
     return value > 0 ? Math.min(min || value, value) : min;
   }, 0);
-  const discountRaw = high > 0 && price > 0 ? ((price - high) / high) * 100 : null;
+  const cycleHigh = firstNumber(asset.cycleHigh, rolling52wHigh);
+  const discountRaw = cycleHigh > 0 && price > 0 ? ((price - cycleHigh) / cycleHigh) * 100 : null;
   const discount = discountRaw === null ? null : Number(discountRaw.toFixed(1));
   const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
   return {
@@ -197,27 +204,28 @@ async function getBtcMarket(asset) {
     rawTokenPrice: price,
     tokenPrice: price,
     stockPrice: price,
-    high,
-    cycleHigh: high,
+    high: cycleHigh,
+    cycleHigh,
+    rolling52wHigh,
     low,
     marketCap: 0,
     volume: 0,
     sharesMultiplier: 1,
-    highType: "Binance BTCUSDT 52週週K高點",
+    highType: "BTC Cycle High",
     lowType: "Binance BTCUSDT 52週週K低點",
     priceSource: "Binance Spot BTCUSDT",
     discount,
     discountRaw,
     signal,
     binanceAudit: {
-      status: price > 0 && high > 0 ? "PASS" : "MISSING_BTC_DATA",
+      status: price > 0 && cycleHigh > 0 ? "PASS" : "MISSING_BTC_DATA",
       appPrice: price,
       rawTokenPrice: price,
       stockPrice: price,
       sharesMultiplier: 1,
       latencyMs: Math.max(priceResult.latencyMs || 0, klinesResult.latencyMs || 0),
       checkedAt: new Date().toISOString(),
-      note: "BTC 已納入 V17 Investment Engine；v1 使用 Binance BTCUSDT 現價與 52週週K高點，後續可替換為 BTC 專屬週期模型。"
+      note: `BTC 使用 Registry Cycle High=${cycleHigh} 作為 V17 anchor；52週高點僅作參考 rolling52wHigh=${rolling52wHigh}。`
     }
   };
 }
