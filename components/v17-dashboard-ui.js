@@ -30,16 +30,16 @@ function absDepth(value) { return Math.abs(Number(value || 0)); }
 function currentDiscountDepth(row) { const raw = Number(row?.discountRaw); return Number.isFinite(raw) ? Math.abs(raw) : absDepth(row?.discount); }
 function nextTierProgress(row) {
   const depths = (row?.rules || []).map(absDepth);
-  const level = Math.max(1, Number(row?.signalLevel || 0));
+  const level = Math.max(0, Number(row?.signalLevel || 0));
   const current = currentDiscountDepth(row);
-  const from = depths[level - 1] ?? 0;
-  const to = depths[level] ?? depths[depths.length - 1] ?? from;
+  const from = level === 0 ? 0 : depths[level - 1] ?? 0;
+  const to = level === 0 ? depths[0] ?? 0 : depths[level] ?? depths[depths.length - 1] ?? from;
   const pct = Math.max(0, Math.min(100, ((current - from) / Math.max(.000001, to - from)) * 100));
-  return { fromTier: `D${level}`, toTier: depths[level] ? `D${level + 1}` : "MAX", pct };
+  return { fromTier: level === 0 ? "D0" : `D${level}`, toTier: level === 0 ? "D1" : depths[level] ? `D${level + 1}` : "MAX", pct };
 }
 
 export function TierProgress({ row }) {
-  if (!row || Number(row.signalLevel || 0) <= 0) return null;
+  if (!row) return null;
   const p = nextTierProgress(row);
   return <div style={{ marginTop: 10, padding: 10, borderRadius: 16, background: "rgba(3,9,20,.35)", border: "1px solid rgba(49,231,255,.12)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", color: "#e2e8f0", fontWeight: 950, fontSize: 13 }}><span>{p.fromTier}</span><span>{p.toTier}</span></div>
