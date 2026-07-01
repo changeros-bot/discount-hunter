@@ -106,14 +106,22 @@ export function Section({ title, count, rows, empty, render }) {
 }
 
 export function PageShell({ loading, updatedAt, error, children }) {
+  const liveColor = loading ? "#ffc857" : "#35f59a";
   return <main style={{ minHeight: "100vh", padding: 12, background: "radial-gradient(circle at 12% 0%, rgba(49,231,255,.16), transparent 28%), radial-gradient(circle at 90% 8%, rgba(53,245,154,.10), transparent 24%), linear-gradient(180deg, #050b18, #020617)", color: "#f8fafc", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" }}>
-    <header style={{ padding: "20px 14px 16px", textAlign: "left", borderRadius: 28, background: "linear-gradient(135deg, rgba(11,19,36,.84), rgba(5,11,24,.70))", border: "1px solid rgba(49,231,255,.20)", boxShadow: "0 0 42px rgba(49,231,255,.08), inset 0 1px 0 rgba(255,255,255,.06)", backdropFilter: "blur(20px)" }}>
-      <div style={{ textAlign: "right", color: CYAN, fontSize: 11, fontWeight: 1000, letterSpacing: 2 }}>V17-M</div>
-      <h1 style={{ margin: "8px 0", fontSize: "clamp(46px, 14vw, 80px)", lineHeight: .92, fontWeight: 1000, letterSpacing: -2, background: "linear-gradient(180deg, #f8fdff, #31e7ff, #35f59a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textShadow: "0 0 32px rgba(49,231,255,.24)" }}>美股DCA<br />折價追蹤</h1>
-      <div style={{ color: "#94a3b8", fontWeight: 900, letterSpacing: 1 }}>BINANCE XSTOCKS｜LEDGER DECISION</div>
-      {error && <div style={{ marginTop: 10, padding: 10, borderRadius: 14, color: "#fecaca", background: "rgba(127,29,29,.35)", fontWeight: 900 }}>{error}</div>}
+    <header style={{ position: "relative", overflow: "hidden", padding: "18px 14px 14px", textAlign: "left", borderRadius: 28, background: "radial-gradient(circle at 88% 28%, rgba(49,231,255,.20), transparent 24%), radial-gradient(circle at 16% 0%, rgba(53,245,154,.16), transparent 28%), linear-gradient(135deg, rgba(11,19,36,.92), rgba(5,11,24,.76))", border: "1px solid rgba(49,231,255,.26)", boxShadow: "0 0 46px rgba(49,231,255,.10), inset 0 1px 0 rgba(255,255,255,.07)", backdropFilter: "blur(20px)" }}>
+      <div style={{ position: "absolute", inset: 0, opacity: .24, backgroundImage: "linear-gradient(rgba(49,231,255,.10) 1px, transparent 1px), linear-gradient(90deg, rgba(49,231,255,.10) 1px, transparent 1px)", backgroundSize: "18px 18px" }} />
+      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ padding: "5px 9px", borderRadius: 999, color: "#a5f3fc", background: "rgba(49,231,255,.08)", border: "1px solid rgba(49,231,255,.22)", fontSize: 10, fontWeight: 950, letterSpacing: 1.4 }}>BINANCE XSTOCKS</div>
+        <div style={{ padding: "6px 10px", borderRadius: 999, color: CYAN, background: "rgba(49,231,255,.08)", border: "1px solid rgba(49,231,255,.30)", fontSize: 11, fontWeight: 1000, letterSpacing: 1.7, boxShadow: "0 0 20px rgba(49,231,255,.14)" }}>V17-M</div>
+      </div>
+      <h1 style={{ position: "relative", margin: "12px 0 8px", fontSize: "clamp(46px, 14vw, 80px)", lineHeight: .9, fontWeight: 1000, letterSpacing: -2.2, background: "linear-gradient(180deg, #f8fdff 0%, #31e7ff 52%, #35f59a 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textShadow: "0 0 36px rgba(49,231,255,.30)" }}>美股DCA<br />折價追蹤</h1>
+      <div style={{ position: "relative", color: "#94a3b8", fontWeight: 900, letterSpacing: 1 }}>Ledger 決策版｜Exclusive State Machine</div>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14, padding: "9px 10px", borderRadius: 16, background: "rgba(3,9,20,.52)", border: "1px solid rgba(49,231,255,.16)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, color: liveColor, fontWeight: 1000, fontSize: 12, letterSpacing: .8 }}><span style={{ width: 9, height: 9, borderRadius: 999, background: liveColor, boxShadow: `0 0 16px ${liveColor}` }} />{loading ? "SYNC" : "LIVE"}</div>
+        <div style={{ color: "#cbd5e1", fontWeight: 900, fontSize: 12, letterSpacing: .4 }}>{timeText(updatedAt)}</div>
+      </div>
+      {error && <div style={{ position: "relative", marginTop: 10, padding: 10, borderRadius: 14, color: "#fecaca", background: "rgba(127,29,29,.35)", fontWeight: 900 }}>{error}</div>}
     </header>
-    <div style={{ margin: "12px 0", textAlign: "right", color: "#cbd5e1", fontWeight: 900, fontSize: 12, letterSpacing: .8 }}><span style={{ color: loading ? "#ffc857" : "#35f59a", textShadow: `0 0 12px ${loading ? "#ffc857" : "#35f59a"}` }}>●</span> {loading ? "SYNC" : "LIVE"}｜{timeText(updatedAt)}</div>
     {children}
   </main>;
 }
