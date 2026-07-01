@@ -1,8 +1,57 @@
 import { runV17SelfTest } from "../../../lib/v17-self-test";
 import { getV17StorageStatus } from "../../../lib/v17-storage";
+import { getAssetRegistry } from "../../../lib/v17-asset-registry";
 
 function gate(name, ok, details = {}) {
   return { name, ok: Boolean(ok), details };
+}
+
+function hasValue(value) {
+  return Boolean(String(value || "").trim());
+}
+
+function maskAddress(value) {
+  const s = String(value || "").trim();
+  if (s.length < 10) return "";
+  return `${s.slice(0, 6)}...${s.slice(-4)}`;
+}
+
+function getV17UniverseStatus() {
+  const assets = getAssetRegistry().filter((asset) => ["crypto", "tokenized_stock", "tokenized_stock_etf"].includes(asset.assetType));
+  const symbols = assets.map((asset) => asset.symbol);
+  const btc = assets.find((asset) => asset.symbol === "BTC") || null;
+  return {
+    count: assets.length,
+    expected: 10,
+    pass: assets.length === 10 && Boolean(btc),
+    symbols,
+    btc: {
+      included: Boolean(btc),
+      referenceMode: btc?.referenceMode || null,
+      discountModel: btc?.discountModel || null,
+      cycleHigh: btc?.cycleHigh || null,
+      cycleHighDate: btc?.cycleHighDate || null,
+      updatePolicy: btc?.updatePolicy || null,
+      pass: Boolean(btc && btc.referenceMode === "cycle_high" && btc.cycleHigh && btc.cycleHighDate)
+    }
+  };
+}
+
+function getProviderStatus() {
+  const walletAddress = process.env.WALLET_ADDRESS || "";
+  return {
+    binanceExchange: {
+      configured: hasValue(process.env.BINANCE_API_KEY) && hasValue(process.env.BINANCE_API_SECRET),
+      apiKeyPresent: hasValue(process.env.BINANCE_API_KEY),
+      apiSecretPresent: hasValue(process.env.BINANCE_API_SECRET),
+      purpose: "BTC spot account read-only sync"
+    },
+    bscWallet: {
+      configured: hasValue(walletAddress),
+      walletAddress: maskAddress(walletAddress),
+      purpose: "xStocks BSC wallet balanceOf sync"
+    }
+  };
 }
 
 export default function handler(req, res) {
@@ -14,6 +63,8 @@ export default function handler(req, res) {
 
   const selfTest = runV17SelfTest();
   const storage = getV17StorageStatus();
+  const universe = getV17UniverseStatus();
+  const providers = getProviderStatus();
   const failedTests = selfTest.tests.filter((test) => !test.ok);
   const failedNames = failedTests.map((test) => test.name);
   const productionUnsafe = storage.requiresDurable && !storage.durable;
@@ -40,12 +91,14 @@ export default function handler(req, res) {
     gate("G1_storage_safety", !productionUnsafe, storage),
     gate("G2_architecture_integrity", failedTests.every((test) => !architectureTests.includes(test.name)), { failedTests: failedNames }),
     gate("G3_action_queue_correctness", failedTests.every((test) => !decisionTests.includes(test.name)), { failedTests: failedNames }),
-    gate("G4_v16_regression_safety", true, { note: "V17 health check does not validate V16 runtime behavior; manual smoke test still required." }),
-    gate("G5_release_candidate", false, { note: "Not ready. Build test, deployed API test, mobile UI test, and release notes are still pending." }),
-    gate("G6_seal_freeze", false, { note: "Not sealed. Universe Freeze and new discount rule migration are not approved yet." })
+    gate("G4_universe_u10", universe.pass, universe),
+    gate("G5_btc_cycle_high", universe.btc.pass, universe.btc),
+    gate("G6_provider_visibility", true, providers),
+    gate("G7_release_candidate", false, { note: "Not ready. Build test, deployed API test, mobile UI test, and release notes are still pending." }),
+    gate("G8_seal_freeze", false, { note: "Not sealed. Binance Exchange sync needs production environment verification before final freeze." })
   ];
 
-  const ok = selfTest.ok && !productionUnsafe;
+  const ok = selfTest.ok && !productionUnsafe && universe.pass && universe.btc.pass;
 
   return res.status(ok ? 200 : 500).json({
     ok,
@@ -53,15 +106,17 @@ export default function handler(req, res) {
     mode: "health_check",
     checkedAt: new Date().toISOString(),
     storage,
+    universe,
+    providers,
     selfTestSummary: selfTest.summary,
     gates,
     failedTests,
     nextRequiredActions: [
       "Run this endpoint after deployment.",
-      "Run /api/v17/assets and /api/v17/decisions smoke tests.",
-      "Run Next build verification.",
-      "Run V16 smoke test before any V17 UI integration.",
-      "Approve V17 Universe Freeze before replacing old discount-buy tiers."
+      "Run /api/prices and confirm BTC cycleHighDate is present.",
+      "Run /api/binance-exchange-position after Vercel env variables are configured.",
+      "Run /api/sync-wallet and confirm xStocks wallet holdings still load.",
+      "Run mobile UI smoke test before V17 seal."
     ]
   });
 }
