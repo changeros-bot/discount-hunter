@@ -6,9 +6,11 @@ const REFRESH_MS = 10000;
 const BTC_MANUAL_POSITION = {
   symbol: "BTC",
   quantity: 0.0002699,
-  averageCost: 36189.37,
+  costPrice: 36189.37,
+  averageBuyPrice: 59877.77,
   quantitySource: "binance_manual_fallback",
   costBasisSource: "binance_screenshot_manual_fallback",
+  averageBuyPriceSource: "binance_chart_average_buy_price_manual_fallback",
   source: "Binance account screenshot fallback"
 };
 
@@ -27,8 +29,9 @@ function enrichManualBtcHolding(rows = []) {
   const btcMarket = (rows || []).find((row) => String(row.symbol).toUpperCase() === "BTC");
   const price = Number(btcMarket?.price || 0);
   const quantity = BTC_MANUAL_POSITION.quantity;
-  const averageCost = BTC_MANUAL_POSITION.averageCost;
-  const totalCost = quantity * averageCost;
+  const averageCost = BTC_MANUAL_POSITION.averageBuyPrice;
+  const costPrice = BTC_MANUAL_POSITION.costPrice;
+  const totalCost = quantity * costPrice;
   const currentValue = price > 0 ? quantity * price : 0;
   const unrealizedPnL = currentValue - totalCost;
   const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
@@ -37,6 +40,8 @@ function enrichManualBtcHolding(rows = []) {
     quantity,
     valuationQuantity: quantity,
     averageCost,
+    averageBuyPrice: averageCost,
+    costPrice,
     totalCost,
     rawTotalCost: totalCost,
     tokenPrice: price,
