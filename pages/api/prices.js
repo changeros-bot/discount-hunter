@@ -20,7 +20,9 @@ function mapAsset(asset) {
     referenceMode: asset.referenceMode,
     updatePolicy: asset.updatePolicy,
     cycleHigh: asset.cycleHigh,
+    cycleHighDate: asset.cycleHighDate,
     cycleHighSource: asset.cycleHighSource,
+    cycleHighUpdateRule: asset.cycleHighUpdateRule,
     unitAmount: asset.unitAmount,
     capitalUnits: asset.capitalUnits
   };
@@ -206,6 +208,9 @@ async function getBtcMarket(asset) {
       stockPrice: price,
       high: cycleHigh,
       cycleHigh,
+      cycleHighDate: asset.cycleHighDate,
+      cycleHighSource: asset.cycleHighSource,
+      cycleHighUpdateRule: asset.cycleHighUpdateRule,
       low: 0,
       marketCap: 0,
       volume: 0,
@@ -224,7 +229,7 @@ async function getBtcMarket(asset) {
         sharesMultiplier: 1,
         latencyMs: priceResult.latencyMs || 0,
         checkedAt: new Date().toISOString(),
-        note: `BTC 使用 Binance Web BTCUSDT 價格；Registry Cycle High=${cycleHigh} 作為 V17 anchor。`
+        note: `BTC 使用 Binance Web BTCUSDT 價格；Registry Cycle High=${cycleHigh} (${asset.cycleHighDate || "date missing"}) 作為 V17 anchor。`
       }
     };
   } catch (error) {
@@ -237,6 +242,9 @@ async function getBtcMarket(asset) {
       stockPrice: 0,
       high: cycleHigh,
       cycleHigh,
+      cycleHighDate: asset.cycleHighDate,
+      cycleHighSource: asset.cycleHighSource,
+      cycleHighUpdateRule: asset.cycleHighUpdateRule,
       low: 0,
       marketCap: 0,
       volume: 0,
