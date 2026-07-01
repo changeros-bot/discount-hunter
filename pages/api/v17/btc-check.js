@@ -1,3 +1,5 @@
+import { fetchBinanceExchangePositions, requiredEnv } from "../../../lib/v17/binance-exchange-provider";
+
 async function callJson(baseUrl, path) {
   const startedAt = Date.now();
   try {
@@ -31,6 +33,23 @@ function pickBtcPrice(pricesResult) {
   return Number(btc?.price || 0);
 }
 
+function sanitizeBinanceError(error) {
+  const payload = error?.payload || null;
+  return {
+    message: error?.message || "Binance exchange position sync failed",
+    httpStatus: error?.status || null,
+    binanceCode: payload?.code ?? null,
+    binanceMessage: payload?.msg || null,
+    hint: payload?.code === -2015
+      ? "API key permission, IP restriction, or invalid key problem. Confirm Enable Reading and IP restriction settings."
+      : payload?.code === -1022
+        ? "Signature verification failed. Check API secret and signing logic."
+        : payload?.code === -1021
+          ? "Timestamp outside recvWindow. Check server clock / recvWindow."
+          : null
+  };
+}
+
 function sanitizeBtcHolding(holding) {
   if (!holding) return null;
   return {
@@ -61,16 +80,35 @@ export default async function handler(req, res) {
   const baseUrl = baseUrlFromReq(req);
   const prices = await callJson(baseUrl, "/api/prices");
   const btcPrice = pickBtcPrice(prices);
-  const exchange = await callJson(baseUrl, `/api/binance-exchange-position?btcPrice=${encodeURIComponent(btcPrice)}`);
-  const holdings = Array.isArray(exchange?.json?.holdings) ? exchange.json.holdings : [];
-  const btc = holdings.find((holding) => String(holding.symbol || "").toUpperCase() === "BTC") || null;
+  const env = requiredEnv();
 
-  const configured = exchange?.json?.configured ?? null;
-  const pass = Boolean(exchange.ok && configured && btc && Number(btc.quantity) > 0);
+  let exchange = null;
+  let diagnostics = {
+    envConfigured: env.configured,
+    apiKeyPresent: Boolean(env.apiKey),
+    apiSecretPresent: Boolean(env.apiSecret),
+    directProviderCall: true
+  };
+
+  if (env.configured) {
+    try {
+      exchange = await fetchBinanceExchangePositions({ marketPrices: { BTC: { price: btcPrice } } });
+      diagnostics = { ...diagnostics, binanceSignedRequest: "success" };
+    } catch (error) {
+      diagnostics = { ...diagnostics, ...sanitizeBinanceError(error), binanceSignedRequest: "failed" };
+      exchange = { ok: false, configured: true, source: "binance_exchange_readonly", holdings: [] };
+    }
+  } else {
+    exchange = { ok: false, configured: false, source: "binance_exchange_readonly", holdings: [] };
+  }
+
+  const holdings = Array.isArray(exchange?.holdings) ? exchange.holdings : [];
+  const btc = holdings.find((holding) => String(holding.symbol || "").toUpperCase() === "BTC") || null;
+  const pass = Boolean(exchange.ok && env.configured && btc && Number(btc.quantity) > 0);
 
   return res.status(pass ? 200 : 500).json({
     ok: pass,
-    version: "V17-BTC-check-v1",
+    version: "V17-BTC-check-v2-direct-provider",
     checkedAt: new Date().toISOString(),
     market: {
       btcPrice,
@@ -79,16 +117,15 @@ export default async function handler(req, res) {
       pricesLatencyMs: prices.latencyMs
     },
     exchange: {
-      configured,
-      ok: exchange.ok,
-      status: exchange.status,
-      latencyMs: exchange.latencyMs,
-      source: exchange?.json?.source || "binance_exchange_readonly",
-      message: exchange?.json?.message || exchange?.json?.error || null
+      configured: env.configured,
+      ok: Boolean(exchange.ok),
+      source: exchange?.source || "binance_exchange_readonly",
+      message: diagnostics.message || null
     },
+    diagnostics,
     btc: sanitizeBtcHolding(btc),
     next: pass
       ? "BTC provider is reading Binance Spot account data. Dashboard can use binance_exchange_readonly."
-      : "Check Vercel BINANCE_API_KEY / BINANCE_API_SECRET, Binance API permissions, and whether BTC is in Spot."
+      : "Use diagnostics.binanceCode / binanceMessage to fix Binance API permission, IP, key, secret, signature, or timestamp problem."
   });
 }
