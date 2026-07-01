@@ -2,22 +2,35 @@ import { getAssetRegistry } from "../../lib/v17-asset-registry";
 
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
 const BINANCE_DYNAMIC_URL = "https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/market/token/rwa/dynamic/ai";
+const BINANCE_BTC_PRICE_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
+const BINANCE_BTC_KLINES_URL = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=52";
+
+function mapAsset(asset) {
+  return {
+    symbol: asset.symbol,
+    name: asset.name,
+    grade: asset.conviction,
+    description: asset.description || asset.name,
+    rules: asset.rules || [],
+    amounts: asset.amounts || [],
+    assetStatus: asset.status,
+    assetType: asset.assetType,
+    engine: asset.engine,
+    strategy: asset.strategy,
+    discountModel: asset.discountModel
+  };
+}
 
 function getWatchlist() {
   return getAssetRegistry()
     .filter((asset) => String(asset.assetType || "").startsWith("tokenized_stock"))
-    .map((asset) => ({
-      symbol: asset.symbol,
-      name: asset.name,
-      grade: asset.conviction,
-      description: asset.description || asset.name,
-      rules: asset.rules || [],
-      amounts: asset.amounts || [],
-      assetStatus: asset.status,
-      engine: asset.engine,
-      strategy: asset.strategy,
-      discountModel: asset.discountModel
-    }));
+    .map(mapAsset);
+}
+
+function getCryptoWatchlist() {
+  return getAssetRegistry()
+    .filter((asset) => asset.assetType === "crypto")
+    .map(mapAsset);
 }
 
 const headers = {
@@ -163,16 +176,63 @@ function normalize(asset, tokenMeta, dynamicResult) {
   };
 }
 
+async function getBtcMarket(asset) {
+  const [priceResult, klinesResult] = await Promise.all([
+    fetchJson(BINANCE_BTC_PRICE_URL),
+    fetchJson(BINANCE_BTC_KLINES_URL)
+  ]);
+  const price = firstNumber(priceResult.json?.price);
+  const weeklyRows = Array.isArray(klinesResult.json) ? klinesResult.json : [];
+  const high = weeklyRows.reduce((max, row) => Math.max(max, firstNumber(row?.[2])), 0);
+  const low = weeklyRows.reduce((min, row) => {
+    const value = firstNumber(row?.[3]);
+    return value > 0 ? Math.min(min || value, value) : min;
+  }, 0);
+  const discountRaw = high > 0 && price > 0 ? ((price - high) / high) * 100 : null;
+  const discount = discountRaw === null ? null : Number(discountRaw.toFixed(1));
+  const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
+  return {
+    ...asset,
+    price,
+    rawTokenPrice: price,
+    tokenPrice: price,
+    stockPrice: price,
+    high,
+    cycleHigh: high,
+    low,
+    marketCap: 0,
+    volume: 0,
+    sharesMultiplier: 1,
+    highType: "Binance BTCUSDT 52週週K高點",
+    lowType: "Binance BTCUSDT 52週週K低點",
+    priceSource: "Binance Spot BTCUSDT",
+    discount,
+    discountRaw,
+    signal,
+    binanceAudit: {
+      status: price > 0 && high > 0 ? "PASS" : "MISSING_BTC_DATA",
+      appPrice: price,
+      rawTokenPrice: price,
+      stockPrice: price,
+      sharesMultiplier: 1,
+      latencyMs: Math.max(priceResult.latencyMs || 0, klinesResult.latencyMs || 0),
+      checkedAt: new Date().toISOString(),
+      note: "BTC 已納入 V17 Investment Engine；v1 使用 Binance BTCUSDT 現價與 52週週K高點，後續可替換為 BTC 專屬週期模型。"
+    }
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   try {
     const watchlist = getWatchlist();
+    const cryptoWatchlist = getCryptoWatchlist();
     const tokenListResult = await getBinanceTokenList();
     const tokenList = tokenListResult.list;
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
-    const data = await Promise.all(watchlist.map(async (asset) => {
+    const xstockData = await Promise.all(watchlist.map(async (asset) => {
       const tokenMeta = bySymbol.get(asset.symbol);
       if (!tokenMeta) {
         return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: 0, low: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "Binance 52週高點", lowType: "Binance 52週低點", priceSource: "Binance tokenInfo.price / sharesMultiplier", discount: null, discountRaw: null, signal: { text: "資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() } };
@@ -180,9 +240,11 @@ export default async function handler(req, res) {
       const dynamic = await getBinanceDynamic(tokenMeta);
       return normalize(asset, tokenMeta, dynamic);
     }));
+    const cryptoData = await Promise.all(cryptoWatchlist.map(getBtcMarket));
+    const data = [...cryptoData, ...xstockData];
     const auditSummary = data.reduce((summary, item) => { const status = item.binanceAudit?.status || "UNKNOWN"; summary[status] = (summary[status] || 0) + 1; return summary; }, {});
-    res.status(200).json({ updatedAt: new Date().toISOString(), source: "Binance xStocks public API｜V17 Asset Registry", sourceOfTruth: "lib/v17-asset-registry.js", count: data.length, cachePolicy: "no-store", binanceHealth: { ok: true, listStatus: tokenListResult.status, listLatencyMs: tokenListResult.latencyMs, auditSummary }, data });
+    res.status(200).json({ updatedAt: new Date().toISOString(), source: "Binance xStocks + BTCUSDT public API｜V17 Asset Registry", sourceOfTruth: "lib/v17-asset-registry.js", count: data.length, cachePolicy: "no-store", binanceHealth: { ok: true, listStatus: tokenListResult.status, listLatencyMs: tokenListResult.latencyMs, auditSummary }, data });
   } catch (error) {
-    res.status(500).json({ error: "binance_xstocks_fetch_failed", message: error.message });
+    res.status(500).json({ error: "binance_prices_fetch_failed", message: error.message });
   }
 }
