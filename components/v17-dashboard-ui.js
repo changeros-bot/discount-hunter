@@ -8,9 +8,16 @@ const TIER_TONE = {
   D5: { color: "#ef4444", bg: "rgba(239,68,68,.12)", border: "rgba(239,68,68,.45)" }
 };
 const CYAN = "#31e7ff";
+const usdFmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usd0Fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 export function fmtPct(value) { const n = Number(value); return Number.isFinite(n) ? `${n.toFixed(1)}%` : "--"; }
-export function fmtUsd(value, digits = 2) { const n = Number(value || 0); return Number.isFinite(n) ? `$${n.toFixed(digits)}` : "--"; }
+export function fmtUsd(value, digits = 2) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return "--";
+  if (digits === 0) return `$${usd0Fmt.format(n)}`;
+  return `$${usdFmt.format(n)}`;
+}
 export function fmtAmount(value) { const n = Number(value || 0); return Number.isFinite(n) ? `${n.toFixed(2).replace(".00", "")}U` : "--"; }
 export function timeText(iso) {
   if (!iso) return "讀取中";
@@ -94,8 +101,8 @@ function quantityText(holding) {
 }
 
 function avgCostText(holding) {
-  const avg = Number(holding?.averageCost || 0);
-  return avg > 0 ? `均價 ${fmtUsd(avg, 2)}` : null;
+  const avg = Number(holding?.averageCost || holding?.averageBuyPrice || 0);
+  return avg > 0 ? `(均價 ${fmtUsd(avg, 2)})` : null;
 }
 
 function cycleHighDate(row) {
