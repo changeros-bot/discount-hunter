@@ -1,12 +1,30 @@
-const { requiredEnv, fetchBinanceExchangePositions } = require("../../lib/v17/binance-exchange-provider");
+const {
+  requiredEnv,
+  getBinanceRestUrl,
+  fetchBinanceExchangePositions
+} = require("../../lib/v17/binance-exchange-provider");
 
 function safeNumber(value) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
 }
 
-function parseMarketPrices(req) {
-  const btcPrice = safeNumber(req.query?.btcPrice || req.body?.btcPrice);
+async function fetchBtcMarketPrice() {
+  try {
+    const baseUrl = getBinanceRestUrl();
+    const response = await fetch(`${baseUrl}/api/v3/ticker/price?symbol=BTCUSDT`, {
+      cache: "no-store"
+    });
+    const json = await response.json();
+    return safeNumber(json?.price);
+  } catch {
+    return 0;
+  }
+}
+
+async function parseMarketPrices(req) {
+  const manualPrice = safeNumber(req.query?.btcPrice || req.body?.btcPrice);
+  const btcPrice = manualPrice > 0 ? manualPrice : await fetchBtcMarketPrice();
   return btcPrice > 0 ? { BTC: { price: btcPrice } } : {};
 }
 
@@ -35,6 +53,7 @@ async function handler(req, res) {
   }
 
   const env = requiredEnv();
+
   if (!env.configured) {
     return res.status(200).json({
       ok: false,
@@ -51,12 +70,15 @@ async function handler(req, res) {
   }
 
   try {
-    const result = await fetchBinanceExchangePositions({ marketPrices: parseMarketPrices(req) });
+    const marketPrices = await parseMarketPrices(req);
+    const result = await fetchBinanceExchangePositions({ marketPrices });
+
     return res.status(200).json({
       ...result,
       diagnostics: {
         envConfigured: true,
-        binanceSignedRequest: "success"
+        binanceSignedRequest: "success",
+        btcMarketPrice: marketPrices?.BTC?.price || 0
       }
     });
   } catch (error) {
