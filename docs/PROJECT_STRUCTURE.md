@@ -1,148 +1,98 @@
-# Project Structure
+# PROJECT_STRUCTURE.md
 
-## Current principle
-
-V16 is the stable release line.
-V17 is the architecture cleanup line.
-
-Do not mix V16 hotfixes with V17 refactors.
-
-## Recommended structure
+## Current Line
 
 ```text
-pages/
-  index.js
-  v16-full.js
-  v17.js
-
-lib/
-  v17/
-    index.js
-    state.js
-    symbol.js
-    ledger.js
-    wallet.js
-    decision.js
-    tier.js
-    summary.js
-    notification.js
-
-pages/api/
-  prices.js
-  today-decisions.js
-  buy-ledger.js
-  sync-wallet.js
-  reconcile-tiers.js
-  regression-v16.js
+V17 Oracle Production Candidate
 ```
 
-## pages/
-
-Pages should compose UI and call APIs.
-
-They should not contain core business logic.
-
-## lib/v17/state.js
-
-Owns the Single Source of Truth.
-
-Expected output shape:
-
-```js
-{
-  symbol,
-  signalLevel,
-  signalTier,
-  ledgerDoneTiers,
-  pendingTiers,
-  walletOwned,
-  isLedgerDone,
-  isPendingPurchase,
-  isExecutable,
-  suggestedAmount
-}
-```
-
-## lib/v17/ledger.js
-
-Owns:
-
-- ledger rows
-- done tier detection
-- pending tier calculation
-- ledger display text
-
-## lib/v17/decision.js
-
-Owns:
-
-- decision dedupe
-- executable decision filtering
-- pending purchase filtering
-- suggested amount calculation
-
-## lib/v17/wallet.js
-
-Owns:
-
-- wallet holding map
-- symbol-normalized ownership checks
-- live holding validation
-
-## lib/v17/tier.js
-
-Owns:
-
-- D1-D4 signal calculation
-- progress calculation
-- tier label helpers
-
-## lib/v17/summary.js
-
-Owns:
-
-- homepage counts
-- wallet summary
-- suggested amount summary
-
-## lib/v17/notification.js
-
-Owns:
-
-- Telegram payload preparation
-- duplicate notification guard
-- notification text formatting
-
-## docs/
-
-Docs are part of the release system.
-
-Important docs:
+## Top Level
 
 ```text
-docs/V16_FINAL_HANDOFF.md
-docs/V17_ARCHITECTURE.md
-docs/V17_MIGRATION_PLAN.md
-docs/CODING_STANDARDS.md
-docs/REGRESSION_TESTS.md
-docs/PROJECT_STRUCTURE.md
+pages/        Next.js pages and API routes
+lib/          Core business logic and providers
+components/   UI components
+public/       Static assets
+styles/       CSS
+scripts/      Operations scripts
+docs/         Runbooks, handoff, recovery, release docs
 ```
 
-## New module rule
+## Runtime Services
 
-Before adding a new module:
+```text
+discount-hunter        Next.js app, port 3000
+oracle-binance-proxy   Binance proxy, port 3001
+```
 
-1. Define responsibility.
-2. Confirm no existing module owns it.
-3. Add regression if the module changes behavior.
-4. Keep file under 200 lines.
+## Key API Routes
 
-## Anti-patterns
+```text
+pages/api/prices.js
+pages/api/binance-exchange-position.js
+pages/api/sync-wallet.js
+pages/api/debug-transfers.js
+pages/api/debug-live-holdings.js
+pages/api/debug-pnl.js
+pages/api/v17/health.js
+pages/api/v17/decisions.js
+pages/api/v17/events.js
+pages/api/v17/action-state.js
+```
 
-Do not recreate:
+## Key Libraries
 
-- one giant page file
-- duplicated decision logic
-- wallet logic inside UI components
-- ledger logic inside UI components
-- notification logic inside page rendering
+```text
+lib/v17/binance-exchange-provider.js
+lib/state/kv.js
+lib/xstocks/transfer-source.js
+lib/xstocks/rpcBalances.js
+lib/telegram/notify.js
+```
+
+## Data Flow
+
+```text
+Mobile browser
+  -> /v17
+  -> API routes
+  -> Upstash Redis REST
+  -> Oracle Binance Proxy
+  -> Binance API
+  -> BSC wallet balanceOf
+```
+
+## Storage Rule
+
+Production mutable V17 state must use durable storage.
+
+```text
+Upstash Redis REST = required
+runtime file writes = not allowed for production mutable state
+```
+
+## Current Verified Providers
+
+```text
+BTC Binance account sync: working
+BTC live market price: working
+BSC wallet live balance: working
+xStocks live price: working
+```
+
+## Current Known Gap
+
+```text
+xStocks cost basis still needs transfer-history provider.
+Moralis / NodeReal / MegaNode should be integrated next.
+```
+
+## Module Responsibility Rule
+
+Before changing a module:
+
+1. Identify its owner responsibility.
+2. Confirm no existing module already owns the behavior.
+3. Add or run regression checks.
+4. Do not mix Investment Engine and Tactical Engine cost basis.
+5. Do not move wallet or ledger logic into UI rendering.
