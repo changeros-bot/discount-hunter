@@ -51,6 +51,8 @@ xStocks live wallet balance
 xStocks live market value
 V17 mobile UI
 PM2 production start
+Recovery docs
+Transfer package docs
 ```
 
 ## Pending
@@ -59,7 +61,7 @@ PM2 production start
 xStocks transfer history provider
 real xStocks cost basis
 Moralis / NodeReal / MegaNode integration
-Telegram decision push
+Telegram decision push verification
 four V17 state-machine self-test failures
 HTTPS / domain binding
 secret rotation before final seal
@@ -73,4 +75,15 @@ curl http://localhost:3000/api/v17/health
 curl http://localhost:3000/api/binance-exchange-position
 curl http://localhost:3000/api/sync-wallet
 curl http://localhost:3000/api/debug-transfers
+```
+
+## Handoff Docs
+
+```text
+docs/AI_HANDOFF.md
+docs/MIGRATION_PLAYBOOK.md
+docs/V17_TRANSFER_PACKAGE.md
+docs/ONE_CLICK_RECOVERY.md
+docs/KNOWN_ISSUES.md
+docs/TROUBLESHOOTING.md
 ```
