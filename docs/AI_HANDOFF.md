@@ -1,147 +1,231 @@
-# AI 交接文件：DCA 折價獵人 V16
+# AI_HANDOFF.md
 
-更新日期：2026-06-25
+> 給下一位 GPT / AI / 工程師的交接文件。請先讀本檔，再操作 DCA 折價獵人。
 
-## 1. 接手前必讀
+## 1. Project Identity
 
-請先閱讀：
-
-1. `docs/V16_SPEC.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/PROGRESS.md`
-4. `docs/TEST_CASES.md`
-
-不要直接改程式。
-
-## 2. 專案一句話
-
-DCA 折價獵人是長期 DCA + 逢低加碼決策系統，不是自動交易系統。
-
-## 3. 不可再誤解的核心邏輯
-
-### 3.1 DCA 與折價買入分離
-
-- `N` = DCA 定期買入
-- `D1-D4` = 折價買入
-
-兩者互不干擾。
-
-### 3.2 Ledger 的定位
-
-Ledger 是：
-
-- 歷史紀錄
-- 去重依據
-- 成本分類依據
-
-Ledger 不是：
-
-- 目前價格區間
-- 當下是否仍在 D2 / D3 的唯一來源
-
-### 3.3 價格區間是動態的
-
-價格跌深，畫面前進；價格反彈，畫面退回。
-
-例如 RKLBon：
-
-- -42% 顯示 D2 → D3
-- -30% 顯示 D1 → D2
-
-即使 Ledger 歷史仍有 D2。
-
-### 3.4 今日決策公式
+Project name:
 
 ```text
-目前已觸發層級 - Ledger 已登帳層級 = 今日決策
+DCA 折價獵人 / Discount Hunter V17
 ```
 
-已登帳層級不可再出現在今日決策，除非符合同層重新觸發規則。
+Primary goal:
 
-### 3.5 同層重新觸發
+```text
+建立一個可長期執行的 Financial OS，用於監控 BTC + xStocks 折價買點、持倉、成本、PnL、今日決策與狀態機。
+```
 
-必須同時滿足：
+Current production URL:
 
-1. 離開該買點區
-2. 離開後超過 24 小時
-3. 再次跌回該買點區
+```text
+http://158.179.185.67:3000/v17
+```
 
-24 小時以 `leftBuyZoneAt` 計算。
+Oracle Binance Proxy:
 
-## 4. 封板區：除非使用者明確要求，禁止修改
+```text
+http://158.179.185.67:3001
+```
 
-- DCA `N` 與 D1-D4 分帳規則
-- 今日決策公式
-- Gap Down 多層觸發規則
-- 水壺式進度條
-- 同層重新觸發三條件
-- Wallet Cost Gap 防呆
+Repo:
 
-## 5. 可修改區
+```text
+https://github.com/changeros-bot/discount-hunter
+```
 
-- UI 文案
-- 區塊順序
-- 顏色與 icon
-- Telegram 訊息格式
-- Debug 顯示
-- 文件內容
+## 2. Current Architecture
 
-但修改前仍需確認不影響 V16 規格。
+```text
+Mobile Browser / Android shortcut
+  -> Oracle VPS 158.179.185.67:3000
+  -> Next.js Discount Hunter
+  -> Upstash Redis REST for durable V17 state
+  -> Oracle Binance Proxy 158.179.185.67:3001
+  -> Binance API
+  -> BSC RPC balanceOf for xStocks wallet holdings
+```
 
-## 6. 已知問題
+## 3. Server State
 
-### P0
+```text
+SSH user: ubuntu
+Project path: ~/discount-hunter
+Proxy path: ~/binance-proxy
+PM2 services:
+  - discount-hunter
+  - oracle-binance-proxy
+```
 
-- 首頁 `pages/v16-full.js` 尚未完成三區重構。
-- RKLB D2 補登後，需要重新驗證今日決策是否消失。
+Check:
 
-### P1
+```bash
+pm2 status
+```
 
-- Telegram 發送工具存在，但尚未完整串入 Today Decision 新增層級流程。
+## 4. Environment Variables
 
-### P2
+Real secrets are in:
 
-- 舊 API `pages/api/reconcile-ledger.js` 只補 D1，後續應改用 `pages/api/reconcile-tiers.js`。
+```bash
+~/discount-hunter/.env.local
+```
 
-## 7. 下次接手第一件事
+Template is in:
 
-先不要改 UI。
+```text
+docs/ENV_TEMPLATE.md
+```
 
-第一步：
+Required:
 
-1. 打開首頁。
-2. 按 `補登Ledger`。
-3. 展開 Ledger 檢查。
-4. 確認 RKLBon 是否同時有 D1 和 D2。
-5. 確認今日決策是否消失。
+```env
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+BINANCE_REST_BASE_URL=http://158.179.185.67:3001
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
+WALLET_ADDRESS=0x657f5cbBC1FBE274299a6be52b5e46C3C6a9AD76
+```
 
-如果未消失，先查：
+Never commit real secrets.
 
-- `pages/api/reconcile-tiers.js`
-- `lib/v16-ledger.js`
-- `pages/api/today-decisions.js`
+## 5. Known Current Status
 
-## 8. 驗證順序
+Completed:
 
-1. Price API 正常回傳。
-2. Today Decision 正確列出未登帳層級。
-3. Ledger 補登成功。
-4. 已登帳層級從今日決策消失。
-5. 價格反彈時進度條退回。
-6. Gap Down 同時列出多層。
-7. Telegram 只通知新增未登帳層級。
+```text
+Oracle VPS: working
+Node.js 22: installed
+PM2: working
+Next.js production build: working
+Upstash KV: working
+Binance Proxy: working
+Binance signed API: working
+BTC quantity/cost/PnL: working
+BSC wallet address: configured
+xStocks live balanceOf: working
+xStocks live prices: working
+```
 
-## 9. 封板標準
+Known gap:
 
-以下全部通過才可稱 V16 封板：
+```text
+xStocks cost basis is still fallback 5U because transfer history provider is not configured.
+Need Moralis / NodeReal / MegaNode to make xStocks cost real.
+```
 
-- Buy Ledger 正常
-- DCA/N 分帳正常
-- D1-D4 分帳正常
-- Today Decision 正確
-- Progress Bar 動態正確
-- Gap Down 正確
-- 同層 24 小時重開正確
-- Reconcile 不誤補
-- Telegram 正確通知
-- 首頁三區完成
+Known V17 self-test failures:
+
+```text
+btc_uses_dedicated_model
+d2_reenters_after_d1_complete
+missing_price_suspect
+deeper_layer_reenters_after_skip
+```
+
+These are action queue / state machine logic issues, not infrastructure issues.
+
+## 6. Do Not Break These Rules
+
+1. Do not commit `.env.local`.
+2. Do not expose Binance API Secret.
+3. Do not replace live wallet address unless user confirms.
+4. Do not remove Upstash requirement for production mutable state.
+5. Do not mix Investment Engine and Tactical Engine cost basis.
+6. Do not treat xStocks fallback cost as final truth.
+7. Do not assume Cloudflare Worker can call Binance; it failed with 451.
+8. Do not use runtime file writes for production V17 mutable state.
+
+## 7. Fast Health Check
+
+Run:
+
+```bash
+curl http://158.179.185.67:3001/health
+curl http://158.179.185.67:3001/api/v3/ticker/price?symbol=BTCUSDT
+curl http://158.179.185.67:3000/api/v17/health
+curl http://158.179.185.67:3000/api/binance-exchange-position
+curl http://158.179.185.67:3000/api/sync-wallet
+```
+
+Expected:
+
+```text
+Proxy health ok
+BTC price > 0
+Upstash durable true
+Binance configured true
+BSC wallet configured true
+BTC marketPrice > 0
+xStocks holdingsCount > 0
+```
+
+## 8. Next Recommended Work
+
+Priority 1:
+
+```text
+Rotate exposed Binance API key and Upstash token.
+Update .env.local.
+pm2 restart discount-hunter --update-env
+```
+
+Priority 2:
+
+```text
+Connect Moralis / NodeReal / MegaNode for xStocks transfer history.
+Goal: totalTransfers > 0, buyRecordCount > 0, costBasisEstimated false.
+```
+
+Priority 3:
+
+```text
+Fix 4 V17 self-test failures.
+```
+
+Priority 4:
+
+```text
+Add HTTPS / domain name.
+```
+
+## 9. Common Commands
+
+```bash
+cd ~/discount-hunter
+git pull
+npm install
+npm run build
+pm2 restart discount-hunter --update-env
+pm2 save
+```
+
+Proxy:
+
+```bash
+cd ~/binance-proxy
+pm2 restart oracle-binance-proxy
+pm2 save
+```
+
+Logs:
+
+```bash
+pm2 logs discount-hunter --lines 50
+pm2 logs oracle-binance-proxy --lines 50
+```
+
+## 10. Human Context
+
+User works mostly from Android phone. Avoid requiring desktop-only workflows. Prefer:
+
+```text
+copy/paste shell commands
+short terminal outputs
+no long screenshot dependency
+no nano unless necessary
+cat > file <<EOF pattern is preferred
+```
+
+User wants this project to be stable, repeatable, and transferable. Treat docs as production assets, not optional notes.
