@@ -28,7 +28,15 @@ export default async function handler(req, res) {
     const status = req.method === "GET" && req.query?.status ? String(req.query.status) : undefined;
     const assets = getAssetRegistry({ status });
     const body = req.method === "POST" ? (req.body || {}) : {};
-    const markets = body.markets || body.marketData || {};
+    let markets = body.markets || body.marketData || {};
+    if (!Object.keys(markets || {}).length) {
+      const host = req.headers.host;
+      const protocol = req.headers["x-forwarded-proto"] || "http";
+      const priceRes = await fetch(`${protocol}://${host}/api/prices?t=${Date.now()}`);
+      const priceData = await priceRes.json().catch(() => null);
+      const rows = Array.isArray(priceData?.assets) ? priceData.assets : Array.isArray(priceData?.data) ? priceData.data : [];
+      markets = Object.fromEntries(rows.filter((item) => item?.symbol).map((item) => [item.symbol, item]));
+    }
     const storedAction = await readV17State(V17_STORAGE_KEYS.ACTION_STATE, { states: {} });
     const storedEvents = await readV17State(V17_STORAGE_KEYS.EVENT_LOG, { events: [] });
     const hasRequestEvents = Array.isArray(body.events);
@@ -47,6 +55,7 @@ export default async function handler(req, res) {
       statePersisted: Boolean(write),
       stateWrite: write,
       nextStates,
+      marketCount: Object.keys(markets || {}).length,
       storage: getV17StorageStatus(),
       guardrails: {
         readOnly: !shouldPersist,

@@ -1,3 +1,3 @@
-import V17Dashboard from "./v17";
+import ProjectPagerShell from "../components/ProjectPagerShell";
 
-export default V17Dashboard;
+export default ProjectPagerShell;

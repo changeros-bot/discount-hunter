@@ -16,7 +16,15 @@ export default async function handler(req, res) {
     const assets = getAssetRegistry({ status: body.status });
     const storedAction = await readV17State(V17_STORAGE_KEYS.ACTION_STATE, { states: {} });
     const storedEvents = await readV17State(V17_STORAGE_KEYS.EVENT_LOG, { events: [] });
-    const markets = body.markets || body.marketData || {};
+    let markets = body.markets || body.marketData || {};
+    if (!Object.keys(markets || {}).length) {
+      const host = req.headers.host;
+      const protocol = req.headers["x-forwarded-proto"] || "http";
+      const priceRes = await fetch(`${protocol}://${host}/api/prices?t=${Date.now()}`);
+      const priceData = await priceRes.json().catch(() => null);
+      const rows = Array.isArray(priceData?.assets) ? priceData.assets : Array.isArray(priceData?.data) ? priceData.data : [];
+      markets = Object.fromEntries(rows.filter((item) => item?.symbol).map((item) => [item.symbol, item]));
+    }
     const events = Array.isArray(body.events) ? body.events : (storedEvents.events || []);
     const previousStates = body.previousStates || storedAction.states || {};
     const result = buildV17Decisions({ assets, markets, events, previousStates, now });
@@ -24,11 +32,13 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "v17-notify-candidates-v1",
+      version: "v17-notify-candidates-v2",
       mode: "dry_run_candidates_only",
       updatedAt: now,
       notifyCount: candidates.length,
       candidates,
+      marketCount: Object.keys(markets || {}).length,
+      actionCount: result.actionCount,
       guardrails: {
         sendsTelegram: false,
         writesLedger: false,
