@@ -3,16 +3,6 @@ import { classifyUniverse } from "../lib/v17-state-classifier";
 import { AssetCard, fmtAmount, Metric, PageShell, Section, TierProgress } from "../components/v17-dashboard-ui";
 
 const REFRESH_MS = 10000;
-const BTC_MANUAL_POSITION = {
-  symbol: "BTC",
-  quantity: 0.0002699,
-  costPrice: 36189.37,
-  averageBuyPrice: 59877.77,
-  quantitySource: "binance_manual_fallback",
-  costBasisSource: "binance_screenshot_manual_fallback",
-  averageBuyPriceSource: "binance_chart_average_buy_price_manual_fallback",
-  source: "Binance account screenshot fallback"
-};
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
@@ -30,42 +20,6 @@ function btcPriceFromRows(rows = []) {
   return Number(btc?.price || 0);
 }
 
-function enrichManualBtcHolding(rows = []) {
-  const btcMarket = (rows || []).find((row) => String(row.symbol).toUpperCase() === "BTC");
-  const price = Number(btcMarket?.price || 0);
-  const quantity = BTC_MANUAL_POSITION.quantity;
-  const averageCost = BTC_MANUAL_POSITION.averageBuyPrice;
-  const costPrice = BTC_MANUAL_POSITION.costPrice;
-  const totalCost = quantity * costPrice;
-  const currentValue = price > 0 ? quantity * price : 0;
-  const unrealizedPnL = currentValue - totalCost;
-  const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
-  return {
-    ...BTC_MANUAL_POSITION,
-    quantity,
-    valuationQuantity: quantity,
-    averageCost,
-    averageBuyPrice: averageCost,
-    costPrice,
-    totalCost,
-    rawTotalCost: totalCost,
-    tokenPrice: price,
-    marketPrice: price,
-    currentValue,
-    rawCurrentValue: currentValue,
-    marketValue: currentValue,
-    positionValue: currentValue,
-    unrealizedPnL,
-    pnlPct,
-    returnPct: pnlPct,
-    officialHolding: true,
-    costBasisEstimated: true,
-    costBasisWarning: "BTC position uses manual Binance screenshot fallback until read-only Binance Account API is connected.",
-    priceSource: btcMarket?.priceSource || "Binance Web BTCUSDT",
-    checkedAt: new Date().toISOString()
-  };
-}
-
 function mergeHoldingsBySymbol(...groups) {
   const map = new Map();
   for (const group of groups || []) {
@@ -78,20 +32,18 @@ function mergeHoldingsBySymbol(...groups) {
   return [...map.values()];
 }
 
-function withBtcPosition({ walletData, rows = [], exchangeData }) {
+function withStrictRealPositions({ walletData, exchangeData }) {
   const base = walletData || { ok: true, holdings: [] };
   const walletHoldings = Array.isArray(base.holdings) ? base.holdings : [];
   const exchangeHoldings = Array.isArray(exchangeData?.holdings) ? exchangeData.holdings : [];
-  const manualBtc = enrichManualBtcHolding(rows);
-  const hasExchangeBtc = exchangeHoldings.some((h) => String(h.symbol || "").toUpperCase() === "BTC" && Number(h.quantity) > 0);
-  const holdings = hasExchangeBtc
-    ? mergeHoldingsBySymbol(walletHoldings, exchangeHoldings)
-    : mergeHoldingsBySymbol(walletHoldings, [manualBtc]);
   return {
     ...base,
-    holdings,
-    btcPositionSource: hasExchangeBtc ? "binance_exchange_readonly" : "manual_fallback",
-    binanceExchange: exchangeData || { ok: false, configured: false }
+    holdings: mergeHoldingsBySymbol(walletHoldings, exchangeHoldings),
+    btcPositionSource: exchangeHoldings.some((h) => String(h.symbol || "").toUpperCase() === "BTC" && Number(h.quantity) > 0)
+      ? "binance_exchange_readonly"
+      : "not_available_no_manual_fallback",
+    binanceExchange: exchangeData || { ok: false, configured: false },
+    strictRealPositionMode: true
   };
 }
 
@@ -100,60 +52,28 @@ function signedUsd(value) { const n = Number(value || 0); return `${n > 0 ? "+" 
 function signedPct(value) { const n = Number(value || 0) * 100; return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`; }
 function walletSummary(holdings = []) {
   const live = (holdings || []).filter((h) => Number(h.quantity) > 0);
-  const cost = live.reduce((s, h) => s + Number(h.totalCost || 0), 0);
+  const costKnown = live.filter((h) => Number(h.totalCost || 0) > 0 && !h.costBasisMissing);
+  const cost = costKnown.reduce((s, h) => s + Number(h.totalCost || 0), 0);
   const value = live.reduce((s, h) => s + Number(h.currentValue || 0), 0);
-  const pnl = value - cost;
-  return { cost, value, pnl, pnlPct: cost > 0 ? pnl / cost : 0 };
+  const pnl = cost > 0 ? value - cost : null;
+  return { cost, value, pnl, pnlPct: cost > 0 ? pnl / cost : null, costMissingCount: live.length - costKnown.length };
 }
-
 function tierStatusText(row) {
   if (row.skippedTiers?.includes(row.tier)) return `已略過：${row.tier}`;
   const done = row.ledgerDoneTiers?.length ? row.ledgerDoneTiers.join(" / ") : row.tier;
   return `已完成：${done}`;
 }
-
 function tierStatusStyle(row) {
   if (row.skippedTiers?.includes(row.tier)) {
     return { background: "rgba(51,65,85,.55)", color: "#cbd5e1", border: "1px solid rgba(148,163,184,.24)" };
   }
   return { background: "rgba(34,197,94,.10)", color: "#bbf7d0", border: "1px solid rgba(34,197,94,.12)" };
 }
-
-function watchStatusStyle() {
-  return { background: "rgba(14,165,233,.10)", color: "#bae6fd", border: "1px solid rgba(14,165,233,.18)" };
-}
-
-function decisionStatusStyle() {
-  return { background: "rgba(245,158,11,.12)", color: "#fde68a", border: "1px solid rgba(245,158,11,.24)" };
-}
-
-function DecisionActions({ row, onAction, busy }) {
-  const decision = row.decision || {};
-  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-    <button disabled={busy} onClick={() => onAction(row, "complete")} style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(34,197,94,.45)", background: "rgba(34,197,94,.16)", color: "#bbf7d0", fontWeight: 1000 }}>已完成</button>
-    <button disabled={busy} onClick={() => onAction(row, "skip")} style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(250,204,21,.45)", background: "rgba(250,204,21,.13)", color: "#fde68a", fontWeight: 1000 }}>略過本層</button>
-    <div style={{ gridColumn: "1 / -1", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Action：{decision.tier || row.tier}｜{decision.amountText || fmtAmount(decision.amount)}</div>
-  </div>;
-}
-
-function Collapsible({ title, count, rows, render, open = false }) {
-  return <details style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", border: "1px solid rgba(243,186,47,.22)" }} open={open}>
-    <summary style={{ color: "#e2e8f0", fontWeight: 1000, fontSize: 19 }}>{title}（{count}）</summary>
-    <section style={{ marginTop: 12, display: "grid", gap: 12 }}>{rows.map(render)}</section>
-  </details>;
-}
-
-function StateMachineCheck({ classified }) {
-  const status = classified.ok ? "PASS" : "CHECK";
-  const color = classified.ok ? "#22c55e" : "#f59e0b";
-  return <details style={{ marginTop: 16, padding: 12, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.88), rgba(15,23,42,.94))", border: `1px solid ${color}` }}>
-    <summary style={{ color, fontWeight: 1000, fontSize: 16 }}>📘 State Machine｜{status}｜U{classified.summary.universeCount} D{classified.summary.decisionCount} H{classified.summary.holdingCount} W{classified.summary.watchCount}</summary>
-    <div style={{ marginTop: 8, display: "grid", gap: 6, color: "#cbd5e1", fontWeight: 850, fontSize: 12 }}>
-      <div>Missing：{classified.summary.missingSymbols.join(", ") || "none"}</div>
-      <div>Duplicate：{classified.summary.duplicateSymbols.join(", ") || "none"}</div>
-    </div>
-  </details>;
-}
+function watchStatusStyle() { return { background: "rgba(14,165,233,.10)", color: "#bae6fd", border: "1px solid rgba(14,165,233,.18)" }; }
+function decisionStatusStyle() { return { background: "rgba(245,158,11,.12)", color: "#fde68a", border: "1px solid rgba(245,158,11,.24)" }; }
+function DecisionActions({ row, onAction, busy }) { const decision = row.decision || {}; return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}><button disabled={busy} onClick={() => onAction(row, "complete")} style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(34,197,94,.45)", background: "rgba(34,197,94,.16)", color: "#bbf7d0", fontWeight: 1000 }}>已完成</button><button disabled={busy} onClick={() => onAction(row, "skip")} style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(250,204,21,.45)", background: "rgba(250,204,21,.13)", color: "#fde68a", fontWeight: 1000 }}>略過本層</button><div style={{ gridColumn: "1 / -1", color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>Action：{decision.tier || row.tier}｜{decision.amountText || fmtAmount(decision.amount)}</div></div>; }
+function Collapsible({ title, count, rows, render, open = false }) { return <details style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.92), rgba(15,23,42,.96))", border: "1px solid rgba(243,186,47,.22)" }} open={open}><summary style={{ color: "#e2e8f0", fontWeight: 1000, fontSize: 19 }}>{title}（{count}）</summary><section style={{ marginTop: 12, display: "grid", gap: 12 }}>{rows.map(render)}</section></details>; }
+function StateMachineCheck({ classified }) { const status = classified.ok ? "PASS" : "CHECK"; const color = classified.ok ? "#22c55e" : "#f59e0b"; return <details style={{ marginTop: 16, padding: 12, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.88), rgba(15,23,42,.94))", border: `1px solid ${color}` }}><summary style={{ color, fontWeight: 1000, fontSize: 16 }}>📘 State Machine｜{status}｜U{classified.summary.universeCount} D{classified.summary.decisionCount} H{classified.summary.holdingCount} W{classified.summary.watchCount}</summary><div style={{ marginTop: 8, display: "grid", gap: 6, color: "#cbd5e1", fontWeight: 850, fontSize: 12 }}><div>Missing：{classified.summary.missingSymbols.join(", ") || "none"}</div><div>Duplicate：{classified.summary.duplicateSymbols.join(", ") || "none"}</div></div></details>; }
 
 export default function V17Dashboard() {
   const [assets, setAssets] = useState([]);
@@ -176,7 +96,7 @@ export default function V17Dashboard() {
       const walletRaw = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null);
       const btcPrice = btcPriceFromRows(rows);
       const exchangeData = await jsonFetch(`/api/binance-exchange-position?btcPrice=${encodeURIComponent(btcPrice)}&t=${Date.now()}`).catch(() => null);
-      const walletData = withBtcPosition({ walletData: walletRaw, rows, exchangeData });
+      const walletData = withStrictRealPositions({ walletData: walletRaw, exchangeData });
       const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: true }) });
       setAssets(rows); setLedger(ledgerData.ledger || {}); setWallet(walletData); setDecisions(today.cards || []); setDecisionStates(today.states || []);
       setUpdatedAt(prices.updatedAt || today.updatedAt || new Date().toISOString()); setSource(prices.source || "Binance xStocks public API"); setError("");
@@ -187,14 +107,7 @@ export default function V17Dashboard() {
     const decision = row.decision || {};
     const id = `${row.symbol}-${row.tier}-${action}`;
     setActionBusy(id);
-    try {
-      await jsonFetch("/api/v17/action-event", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, symbol: row.symbol, layer: decision.level || row.signalLevel, amount: decision.amount, price: row.price })
-      });
-      await load();
-    } catch (err) { setError(err.message || "Action failed"); } finally { setActionBusy(""); }
+    try { await jsonFetch("/api/v17/action-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, symbol: row.symbol, layer: decision.level || row.signalLevel, amount: decision.amount, price: row.price }) }); await load(); } catch (err) { setError(err.message || "Action failed"); } finally { setActionBusy(""); }
   }
 
   useEffect(() => { load(); const timer = setInterval(load, REFRESH_MS); return () => clearInterval(timer); }, []);
@@ -206,12 +119,15 @@ export default function V17Dashboard() {
   return <PageShell loading={loading} updatedAt={updatedAt} error={error}>
     <Section title="今日決策" count={classified.decisionRows.length} rows={classified.decisionRows} empty="已略過目前所有可執行買點，等待下一層" render={(row) => <AssetCard key={`decision-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...decisionStatusStyle() }}>待處理：{row.decision?.statusLabel || row.decision?.status || row.tier}｜建議 {row.decision?.amountText || fmtAmount(row.decision?.amount)}</div><TierProgress row={row} /><DecisionActions row={row} onAction={handleDecisionAction} busy={Boolean(actionBusy)} /></AssetCard>} />
     <section style={{ margin: "12px 0 16px", padding: 12, background: "#020617", borderRadius: 16, border: "1px solid rgba(34,197,94,.75)" }}>
-      <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>鏈上持倉</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="持倉成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={signedUsd(ws.pnl)} signed={ws.pnl} /><Metric label="報酬率" value={signedPct(ws.pnlPct)} signed={ws.pnlPct} /></div>
+      <h2 style={{ fontSize: 19, fontWeight: 950, color: "#4ade80", margin: 0 }}>真實持倉</h2>
+      <div style={{ marginTop: 6, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>xStocks：BNB Chain balanceOf()｜BTC：Binance read-only 或未來 BTC 鏈上地址；不再使用手動截圖 fallback。</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><Metric label="已知成本" value={usd(ws.cost)} /><Metric label="持倉市值" value={usd(ws.value)} /><Metric label="未實現損益" value={ws.pnl === null ? "N/A" : signedUsd(ws.pnl)} signed={ws.pnl || 0} /><Metric label="報酬率" value={ws.pnlPct === null ? "N/A" : signedPct(ws.pnlPct)} signed={ws.pnlPct || 0} /></div>
+      {ws.costMissingCount > 0 ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, color: "#fde68a", background: "rgba(245,158,11,.12)", border: "1px solid rgba(245,158,11,.24)", fontSize: 12, fontWeight: 850 }}>有 {ws.costMissingCount} 筆持倉缺少真實成本；已隱藏 PnL，不使用 5U fallback。</div> : null}
+      {wallet?.btcPositionSource === "not_available_no_manual_fallback" ? <div style={{ marginTop: 8, padding: 10, borderRadius: 12, color: "#bae6fd", background: "rgba(14,165,233,.10)", border: "1px solid rgba(14,165,233,.18)", fontSize: 12, fontWeight: 850 }}>BTC 持倉未顯示：未接到 Binance read-only 或 BTC 鏈上地址；已移除手動截圖 fallback。</div> : null}
     </section>
     <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
-    <Collapsible title="📋 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...watchStatusStyle() }}>等待進入 D1</div><TierProgress row={row} /></AssetCard>} />
+    <Collapsible title="👀 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...watchStatusStyle() }}>觀察中：尚未到第一買點</div><TierProgress row={row} /></AssetCard>} />
     <StateMachineCheck classified={classified} />
-    <footer style={{ marginTop: 12, padding: "9px 10px", background: "#020617", borderRadius: 14, color: "#94a3b8", fontSize: 11, fontWeight: 850, lineHeight: 1.35 }}>Market：{source || "--"}｜Wallet：{wallet ? "LIVE" : "WAIT"}｜BTC：{wallet?.btcPositionSource || "WAIT"}｜Ledger：{ledgerStatus}</footer>
+    <details style={{ marginTop: 14, padding: 12, borderRadius: 14, color: "#94a3b8", background: "rgba(15,23,42,.72)", border: "1px solid rgba(148,163,184,.16)" }}><summary style={{ fontWeight: 1000 }}>系統資訊｜{source}｜Ledger {ledgerStatus}</summary><div style={{ marginTop: 8, display: "grid", gap: 4, fontSize: 12 }}><div>Universe：BTC + QQQon + NVDAon + TSMon + AVGOon + SPCXon + GOOGLon + AMDon + MRVLon + RKLBon</div><div>Wallet Source：{wallet?.source || "loading"}</div><div>Wallet Sync：{wallet?.walletSyncSource || "strict real position mode"}</div><div>BTC Source：{wallet?.btcPositionSource || "loading"}</div><div>Strict Mode：no manual BTC fallback / no fake 5U cost</div><div>Last Sync：{wallet?.lastSyncTime || updatedAt}</div></div></details>
   </PageShell>;
 }
