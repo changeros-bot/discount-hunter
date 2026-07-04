@@ -12,9 +12,9 @@ const foodRows = [
 const quickItems = ["早餐 $80", "午餐 $120", "咖啡 $50", "菸 $85", "ChatGPT $660", "Google One $65"];
 
 const demoInvoices = [
-  { id: "demo-1", date: "2026-07-04", merchant: "全家", amount: 85, suggestedCategory: "菸", status: "待確認", confidence: 0.72 },
-  { id: "demo-2", date: "2026-07-04", merchant: "7-ELEVEN", amount: 80, suggestedCategory: "早餐", status: "待確認", confidence: 0.66 },
-  { id: "demo-3", date: "2026-07-03", merchant: "路易莎咖啡", amount: 55, suggestedCategory: "咖啡", status: "待確認", confidence: 0.9 }
+  { id: "demo-1", date: "2026-07-04", merchant: "全家", amount: 85, suggestedCategory: "菸", account: "自用", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", status: "待確認", confidence: 0.72 },
+  { id: "demo-2", date: "2026-07-04", merchant: "7-ELEVEN", amount: 80, suggestedCategory: "早餐", account: "自用", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", status: "待確認", confidence: 0.66 },
+  { id: "demo-3", date: "2026-07-03", merchant: "路易莎咖啡", amount: 55, suggestedCategory: "咖啡", account: "自用", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", status: "待確認", confidence: 0.9 }
 ];
 
 function money(n) {
@@ -23,15 +23,7 @@ function money(n) {
 }
 
 function Card({ children, style }) {
-  return <section style={{
-    background: "rgba(17,24,39,.92)",
-    border: "1px solid rgba(148,163,184,.18)",
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 12,
-    boxShadow: "0 12px 34px rgba(0,0,0,.26)",
-    ...style
-  }}>{children}</section>;
+  return <section style={{ background: "rgba(17,24,39,.92)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: "0 12px 34px rgba(0,0,0,.26)", ...style }}>{children}</section>;
 }
 
 function SectionTitle({ title, right }) {
@@ -78,12 +70,24 @@ function ListRow({ title, sub, value, tone }) {
   </div>;
 }
 
+function TinyButton({ children, onClick, disabled, tone = "blue" }) {
+  const bg = tone === "good" ? "rgba(34,197,94,.16)" : "rgba(56,189,248,.14)";
+  const border = tone === "good" ? "rgba(34,197,94,.36)" : "rgba(56,189,248,.34)";
+  const color = tone === "good" ? "#bbf7d0" : "#bae6fd";
+  return <button onClick={onClick} disabled={disabled} style={{ border: `1px solid ${border}`, background: disabled ? "rgba(51,65,85,.55)" : bg, color: disabled ? "#94a3b8" : color, borderRadius: 12, padding: "8px 10px", fontWeight: 950, fontSize: 12 }}>{children}</button>;
+}
+
 function InvoiceSyncCard() {
   const [syncState, setSyncState] = useState({ loading: false, data: null, error: "" });
-  const invoices = syncState.data?.invoices || demoInvoices;
-  const summary = syncState.data?.summary || {
+  const [confirmedMap, setConfirmedMap] = useState({});
+  const [transactions, setTransactions] = useState([]);
+  const [confirmingId, setConfirmingId] = useState("");
+
+  const sourceInvoices = syncState.data?.invoices || demoInvoices;
+  const invoices = sourceInvoices.map((item) => confirmedMap[item.id] ? { ...item, status: "已入帳" } : item);
+  const summary = {
     count: invoices.length,
-    pendingCount: invoices.filter((item) => item.status === "待確認").length,
+    pendingCount: invoices.filter((item) => item.status !== "已入帳").length,
     totalAmount: invoices.reduce((sum, item) => sum + Number(item.amount || 0), 0)
   };
 
@@ -96,6 +100,26 @@ function InvoiceSyncCard() {
       setSyncState({ loading: false, data, error: "" });
     } catch (err) {
       setSyncState((prev) => ({ ...prev, loading: false, error: err.message || "發票同步失敗" }));
+    }
+  }
+
+  async function confirmInvoice(item) {
+    setConfirmingId(item.id);
+    setSyncState((prev) => ({ ...prev, error: "" }));
+    try {
+      const res = await fetch("/api/financial-os/invoices/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice: item })
+      });
+      const data = await res.json();
+      if (!res.ok || data?.ok === false) throw new Error(data?.message || "確認入帳失敗");
+      setConfirmedMap((prev) => ({ ...prev, [item.id]: true }));
+      setTransactions((prev) => [data.transaction, ...prev.filter((tx) => tx.sourceInvoiceId !== item.id)]);
+    } catch (err) {
+      setSyncState((prev) => ({ ...prev, error: err.message || "確認入帳失敗" }));
+    } finally {
+      setConfirmingId("");
     }
   }
 
@@ -112,21 +136,32 @@ function InvoiceSyncCard() {
     {syncState.error ? <div style={{ color: "#fca5a5", fontSize: 13, fontWeight: 850, marginBottom: 10 }}>{syncState.error}</div> : null}
     {syncState.data?.message ? <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, lineHeight: 1.45, marginBottom: 10 }}>{syncState.data.message}</div> : null}
     <div style={{ display: "grid", gap: 8 }}>
-      {invoices.map((item) => <div key={item.id} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 14, padding: 11 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 950 }}>{item.merchant}</div>
-            <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, marginTop: 4 }}>{item.date}｜AI：{item.suggestedCategory}｜信心 {Math.round(Number(item.confidence || 0) * 100)}%</div>
+      {invoices.map((item) => {
+        const isBooked = item.status === "已入帳";
+        return <div key={item.id} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 14, padding: 11 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 950 }}>{item.merchant}</div>
+              <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, marginTop: 4 }}>{item.date}｜AI：{item.suggestedCategory}｜信心 {Math.round(Number(item.confidence || 0) * 100)}%</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 1000 }}>{money(item.amount)}</div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 1000 }}>{money(item.amount)}</div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-          <Pill tone="warn">{item.status}</Pill>
-          <Pill tone="blue">生活費 Y</Pill>
-          <Pill>確認後入帳</Pill>
-        </div>
-      </div>)}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            <Pill tone={isBooked ? "good" : "warn"}>{item.status}</Pill>
+            <Pill tone="blue">生活費 Y</Pill>
+            <Pill>{isBooked ? "已產生交易草稿" : "確認後入帳"}</Pill>
+          </div>
+          {!isBooked ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+            <TinyButton tone="good" disabled={confirmingId === item.id} onClick={() => confirmInvoice(item)}>{confirmingId === item.id ? "處理中..." : "確認入帳"}</TinyButton>
+            <TinyButton disabled>改分類</TinyButton>
+          </div> : null}
+        </div>;
+      })}
     </div>
+    {transactions.length ? <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(148,163,184,.16)" }}>
+      <SectionTitle title="已入帳交易草稿" right={`${transactions.length} 筆`} />
+      {transactions.map((tx) => <ListRow key={tx.id} title={`${tx.date}｜${tx.category}`} sub={`${tx.account}｜${tx.note}`} value={money(tx.amount)} tone="good" />)}
+    </div> : null}
   </Card>;
 }
 
@@ -257,7 +292,7 @@ export default function FinancialOSPage() {
       <section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 1000, letterSpacing: .2, lineHeight: 1.18 }}>Josh Financial OS</div>
-          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>Multi-Account Financial OS｜App Prototype V1.3</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>Multi-Account Financial OS｜App Prototype V1.4</div>
         </div>
         <div style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: 999, fontSize: 12, color: "#cbd5e1", background: "rgba(255,255,255,.04)", whiteSpace: "nowrap", fontWeight: 900 }}>2026-07</div>
       </section>
