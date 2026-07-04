@@ -11,6 +11,12 @@ const foodRows = [
 
 const quickItems = ["早餐 $80", "午餐 $120", "咖啡 $50", "菸 $85", "ChatGPT $660", "Google One $65"];
 
+const demoInvoices = [
+  { id: "demo-1", date: "2026-07-04", merchant: "全家", amount: 85, suggestedCategory: "菸", status: "待確認", confidence: 0.72 },
+  { id: "demo-2", date: "2026-07-04", merchant: "7-ELEVEN", amount: 80, suggestedCategory: "早餐", status: "待確認", confidence: 0.66 },
+  { id: "demo-3", date: "2026-07-03", merchant: "路易莎咖啡", amount: 55, suggestedCategory: "咖啡", status: "待確認", confidence: 0.9 }
+];
+
 function money(n) {
   if (n === null || n === undefined) return "$—";
   return `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -56,8 +62,8 @@ function BarRow({ row, max }) {
 }
 
 function Pill({ children, tone = "normal" }) {
-  const color = tone === "warn" ? "#fde68a" : tone === "blue" ? "#bae6fd" : "#cbd5e1";
-  const border = tone === "warn" ? "rgba(245,158,11,.35)" : tone === "blue" ? "rgba(56,189,248,.35)" : "rgba(148,163,184,.24)";
+  const color = tone === "warn" ? "#fde68a" : tone === "blue" ? "#bae6fd" : tone === "good" ? "#86efac" : "#cbd5e1";
+  const border = tone === "warn" ? "rgba(245,158,11,.35)" : tone === "blue" ? "rgba(56,189,248,.35)" : tone === "good" ? "rgba(34,197,94,.35)" : "rgba(148,163,184,.24)";
   return <span style={{ border: `1px solid ${border}`, color, borderRadius: 999, padding: "6px 9px", fontSize: 12, fontWeight: 850, background: "rgba(255,255,255,.04)" }}>{children}</span>;
 }
 
@@ -70,6 +76,58 @@ function ListRow({ title, sub, value, tone }) {
     </div>
     <div style={{ color, fontSize: 14, fontWeight: 1000, whiteSpace: "nowrap" }}>{value}</div>
   </div>;
+}
+
+function InvoiceSyncCard() {
+  const [syncState, setSyncState] = useState({ loading: false, data: null, error: "" });
+  const invoices = syncState.data?.invoices || demoInvoices;
+  const summary = syncState.data?.summary || {
+    count: invoices.length,
+    pendingCount: invoices.filter((item) => item.status === "待確認").length,
+    totalAmount: invoices.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  };
+
+  async function syncInvoices() {
+    setSyncState((prev) => ({ ...prev, loading: true, error: "" }));
+    try {
+      const res = await fetch("/api/financial-os/invoices/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || data?.ok === false) throw new Error(data?.message || "發票同步失敗");
+      setSyncState({ loading: false, data, error: "" });
+    } catch (err) {
+      setSyncState((prev) => ({ ...prev, loading: false, error: err.message || "發票同步失敗" }));
+    }
+  }
+
+  return <Card>
+    <SectionTitle title="載具發票同步" right={syncState.data ? syncState.data.mode : "Demo"} />
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
+      <Metric label="本次發票" value={summary.count} sub="同步筆數" />
+      <Metric label="待確認" value={summary.pendingCount} sub="不直接入帳" />
+      <Metric label="金額" value={money(summary.totalAmount)} sub="候選支出" />
+    </div>
+    <button onClick={syncInvoices} disabled={syncState.loading} style={{ display: "block", width: "100%", border: "none", borderRadius: 16, background: syncState.loading ? "#334155" : "linear-gradient(90deg,#38bdf8,#22c55e)", color: syncState.loading ? "#cbd5e1" : "#020617", fontWeight: 1000, padding: 14, fontSize: 15, marginBottom: 12 }}>
+      {syncState.loading ? "同步中..." : "立即同步載具發票"}
+    </button>
+    {syncState.error ? <div style={{ color: "#fca5a5", fontSize: 13, fontWeight: 850, marginBottom: 10 }}>{syncState.error}</div> : null}
+    {syncState.data?.message ? <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, lineHeight: 1.45, marginBottom: 10 }}>{syncState.data.message}</div> : null}
+    <div style={{ display: "grid", gap: 8 }}>
+      {invoices.map((item) => <div key={item.id} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 14, padding: 11 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 950 }}>{item.merchant}</div>
+            <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, marginTop: 4 }}>{item.date}｜AI：{item.suggestedCategory}｜信心 {Math.round(Number(item.confidence || 0) * 100)}%</div>
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 1000 }}>{money(item.amount)}</div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <Pill tone="warn">{item.status}</Pill>
+          <Pill tone="blue">生活費 Y</Pill>
+          <Pill>確認後入帳</Pill>
+        </div>
+      </div>)}
+    </div>
+  </Card>;
 }
 
 function DashboardScreen() {
@@ -86,7 +144,6 @@ function DashboardScreen() {
       <Metric label="生活費預算" value={money(livingBudget)} sub="日常可控消費" />
       <Metric label="生活費已用" value={money(livingUsed)} sub={`剩餘 ${money(livingBudget - livingUsed)}`} />
     </div>
-
     <Card>
       <SectionTitle title="飲食大類｜細項支出" right="本月" />
       {foodRows.map((row) => <BarRow key={row.name} row={row} max={maxFood} />)}
@@ -105,14 +162,12 @@ function DashboardScreen() {
         <Pill tone="blue">飲食</Pill><Pill tone="blue">咖啡</Pill><Pill tone="warn">菸：可獨立 KPI</Pill>
       </div>
     </Card>
-
     <Card>
       <SectionTitle title="三帳戶狀態" right="V1 固定" />
       <ListRow title="🏠 家用" sub="家庭支出 / 共用資金" value="$—" />
       <ListRow title="👤 自用" sub="薪水與日常生活費" value="$—" />
       <ListRow title="📈 投資" sub="富邦、Binance、xStocks" value="$—" />
     </Card>
-
     <Card>
       <SectionTitle title="Money Flow" right="V1.5 草稿" />
       <pre style={{ margin: 0, whiteSpace: "pre", overflowX: "auto", color: "#cbd5e1", background: "rgba(15,23,42,.65)", border: "1px solid rgba(148,163,184,.16)", padding: 12, borderRadius: 14, fontSize: 12, lineHeight: 1.55 }}>{`薪水
@@ -132,6 +187,7 @@ function DashboardScreen() {
 
 function EntryScreen() {
   return <>
+    <InvoiceSyncCard />
     <Card>
       <SectionTitle title="快速記帳" right="五交易類型" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
@@ -201,7 +257,7 @@ export default function FinancialOSPage() {
       <section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 1000, letterSpacing: .2, lineHeight: 1.18 }}>Josh Financial OS</div>
-          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>Multi-Account Financial OS｜App Prototype V1.2</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>Multi-Account Financial OS｜App Prototype V1.3</div>
         </div>
         <div style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: 999, fontSize: 12, color: "#cbd5e1", background: "rgba(255,255,255,.04)", whiteSpace: "nowrap", fontWeight: 900 }}>2026-07</div>
       </section>
