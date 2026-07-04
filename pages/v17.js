@@ -174,7 +174,11 @@ export default function V17Dashboard() {
       const snapshot = snap.snapshot || {};
       const prices = snapshot.prices || {};
       const rows = Array.isArray(prices.data) ? prices.data : [];
-      const walletData = snapshot.wallet || { ok: true, holdings: [] };
+      const walletData = withBtcPosition({
+        walletData: snapshot.wallet || { ok: true, holdings: [] },
+        rows,
+        exchangeData: null
+      });
       const decisionData = snapshot.decisions || {};
       const rawStates = decisionData.states || decisionData.nextStates || [];
       const states = Array.isArray(rawStates)
