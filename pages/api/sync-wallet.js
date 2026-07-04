@@ -1,17 +1,13 @@
-// DCA Discount Hunter V15.26 - Homepage Wallet Sync API
-// Source of truth for current holdings is live BNB Chain balanceOf().
-// Moralis transfer history is used for cost/PnL and contract hints only.
-// Verified RPC contracts prevent fake-contract pollution.
-// If a live holding has no cost basis because the stablecoin leg is missing from transfer history,
-// use a visible 5U fallback cost so the homepage does not silently understate invested capital.
+// DCA Discount Hunter - Strict Onchain Wallet Sync API
+// Source of truth for current xStocks holdings is live BNB Chain balanceOf().
+// Transfer history is used only when it can derive a real cost basis.
+// No fallback cost is injected in strict mode.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
 const { WATCHLIST } = require("../../lib/xstocks/constants");
-
-const FALLBACK_FIRST_LAYER_COST_USD = 5;
 
 function cleanAddress(value) {
   return String(value || "").trim();
@@ -177,7 +173,7 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
     const costQuantity = safeNumber(cost.quantity);
     const rawTotalCost = safeNumber(cost.totalCost);
     const hasRealCostBasis = rawTotalCost > 0;
-    const totalCost = hasRealCostBasis ? rawTotalCost : FALLBACK_FIRST_LAYER_COST_USD;
+    const totalCost = hasRealCostBasis ? rawTotalCost : 0;
     const costBasisAverageCost = costQuantity > 0 && rawTotalCost > 0 ? rawTotalCost / costQuantity : safeNumber(cost.averageCost);
 
     merged.push({
@@ -189,15 +185,16 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
       rawTotalCost,
       averageCost: liveQuantity > 0 && totalCost > 0 ? totalCost / liveQuantity : 0,
       costBasisAverageCost,
-      buyCount: cost.buyCount || (hasRealCostBasis ? 0 : 1),
+      buyCount: cost.buyCount || 0,
       sellCount: cost.sellCount || 0,
       firstBuyTimestamp: cost.firstBuyTimestamp || null,
       lastBuyTimestamp: cost.lastBuyTimestamp || null,
       lastSellTimestamp: cost.lastSellTimestamp || null,
       officialHolding: true,
-      costBasisSource: hasRealCostBasis ? "transfer_history" : "fallback_first_layer_cost_missing_transfer_stablecoin_leg",
-      costBasisEstimated: !hasRealCostBasis,
-      costBasisWarning: hasRealCostBasis ? null : `No transfer-history cost found for ${symbol}; using ${FALLBACK_FIRST_LAYER_COST_USD}U fallback first-layer cost.`,
+      costBasisSource: hasRealCostBasis ? "transfer_history" : "missing_real_cost_basis",
+      costBasisEstimated: false,
+      costBasisMissing: !hasRealCostBasis,
+      costBasisWarning: hasRealCostBasis ? null : `No real transfer-history cost found for ${symbol}; cost/PnL are hidden instead of using fallback cost.`,
       quantitySource: "bsc_rpc_balanceOf_live",
       liveBalanceContractAddress: live.contractAddress || null,
       liveBalanceContractAddresses: live.contractAddresses || (live.contractAddress ? [live.contractAddress] : []),
@@ -221,8 +218,9 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
     const referencePriceData = pickPrice(referencePrices, symbol);
     const tokenPrice = safeNumber(tokenPriceData?.price);
     const currentValue = quantity * tokenPrice;
-    const unrealizedPnL = currentValue - totalCost;
-    const pnlPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
+    const hasCost = totalCost > 0;
+    const unrealizedPnL = hasCost ? currentValue - totalCost : null;
+    const pnlPct = hasCost ? unrealizedPnL / totalCost : null;
     const referenceStockPrice = safeNumber(referencePriceData?.price);
     const premiumDiscount = tokenPrice - referenceStockPrice;
     const premiumDiscountPct = referenceStockPrice > 0 ? premiumDiscount / referenceStockPrice : 0;
@@ -233,7 +231,7 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
       quantity,
       valuationQuantity: quantity,
       totalCost,
-      averageCost: quantity > 0 && totalCost > 0 ? totalCost / quantity : safeNumber(h.averageCost),
+      averageCost: quantity > 0 && totalCost > 0 ? totalCost / quantity : 0,
       tokenPrice,
       marketPrice: tokenPrice,
       currentValue,
@@ -261,8 +259,9 @@ function summarize(holdings) {
   const portfolioTotalCost = holdings.reduce((sum, h) => sum + safeNumber(h.totalCost), 0);
   const portfolioMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.currentValue), 0);
   const portfolioRawMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.rawCurrentValue), 0);
-  const portfolioUnrealizedPnL = portfolioMarketValue - portfolioTotalCost;
-  const portfolioPnLPct = portfolioTotalCost > 0 ? portfolioUnrealizedPnL / portfolioTotalCost : 0;
+  const costBasisMissingCount = holdings.filter((h) => h.costBasisMissing).length;
+  const portfolioUnrealizedPnL = portfolioTotalCost > 0 ? portfolioMarketValue - portfolioTotalCost : null;
+  const portfolioPnLPct = portfolioTotalCost > 0 ? portfolioUnrealizedPnL / portfolioTotalCost : null;
   return {
     actualTotalInvested: portfolioTotalCost,
     portfolioTotalCost,
@@ -276,6 +275,7 @@ function summarize(holdings) {
     currentValue: portfolioMarketValue,
     unrealizedPnL: portfolioUnrealizedPnL,
     returnPct: portfolioPnLPct,
+    costBasisMissingCount,
   };
 }
 
@@ -325,7 +325,8 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "15.26-fallback-cost-for-missing-cost-basis",
+      version: "strict-onchain-no-fallback-cost-v17",
+      strictOnchain: true,
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
@@ -342,7 +343,7 @@ async function handler(req, res) {
         megaNode: hasMegaNodeKey(),
         legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
         rpcBalance: true,
-        fallbackFirstLayerCostUsd: FALLBACK_FIRST_LAYER_COST_USD,
+        fallbackFirstLayerCostUsd: 0,
       },
       debugCounts: {
         walletAddressLength: walletAddress.length,
@@ -360,13 +361,10 @@ async function handler(req, res) {
         liveBalanceErrors: liveBalanceResult.errors || [],
         liveBalanceBlockNumber: liveBalanceResult.checkedBlockNumber || null,
         holdingsCount: holdings.length,
-        estimatedCostBasisCount: holdings.filter((h) => h.costBasisEstimated).length,
-        estimatedCostBasisSymbols: holdings.filter((h) => h.costBasisEstimated).map((h) => h.symbol),
-        valuationGuardCount: 0,
+        costBasisMissingCount: holdings.filter((h) => h.costBasisMissing).length,
+        costBasisMissingSymbols: holdings.filter((h) => h.costBasisMissing).map((h) => h.symbol),
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
-        tokenPriceSources,
-        referencePriceSources,
         buyRecordSymbols: Array.from(new Set(buyRecords.map((r) => upper(r.symbol)))).sort(),
         costHoldingSymbols: costHoldings.map((h) => h.symbol),
         liveBalanceSymbols: (liveBalanceResult.holdings || []).map((h) => upper(h.symbol)),
@@ -379,7 +377,7 @@ async function handler(req, res) {
           valuationQuantity: h.valuationQuantity,
           costBasisQuantity: h.costBasisQuantity,
           costBasisSource: h.costBasisSource,
-          costBasisEstimated: h.costBasisEstimated,
+          costBasisMissing: h.costBasisMissing,
           costBasisWarning: h.costBasisWarning,
           quantitySource: h.quantitySource,
           liveBalanceSource: h.liveBalanceSource,
