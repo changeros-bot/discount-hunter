@@ -1,310 +1,66 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const foodRows = [
-  { name: "早餐", amount: 320, kind: "food" },
-  { name: "午餐", amount: 480, kind: "food" },
-  { name: "晚餐", amount: 400, kind: "food" },
-  { name: "飲料", amount: 150, kind: "food" },
-  { name: "咖啡", amount: 200, kind: "food" },
-  { name: "菸", amount: 510, kind: "habit" }
-];
-
-const quickItems = ["早餐 $80", "午餐 $120", "咖啡 $50", "菸 $85", "ChatGPT $660", "Google One $65"];
-
+const STORAGE_KEY = "josh-financial-os-transactions-v1";
+const MONTH = "2026-07";
+const LIVING_BUDGET = 8000;
+const FOOD_CATEGORIES = ["早餐", "午餐", "晚餐", "飲料", "咖啡", "菸", "點心/宵夜"];
+const ACCOUNTS = ["家用", "自用", "投資"];
+const TYPES = ["收入", "支出", "一般轉帳", "借款", "還款"];
 const demoInvoices = [
   { id: "demo-1", date: "2026-07-04", merchant: "全家", amount: 85, suggestedCategory: "菸", account: "自用", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", status: "待確認", confidence: 0.72 },
   { id: "demo-2", date: "2026-07-04", merchant: "7-ELEVEN", amount: 80, suggestedCategory: "早餐", account: "自用", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", status: "待確認", confidence: 0.66 },
   { id: "demo-3", date: "2026-07-03", merchant: "路易莎咖啡", amount: 55, suggestedCategory: "咖啡", account: "自用", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", status: "待確認", confidence: 0.9 }
 ];
-
-function money(n) {
-  if (n === null || n === undefined) return "$—";
-  return `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
-
-function Card({ children, style }) {
-  return <section style={{ background: "rgba(17,24,39,.92)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: "0 12px 34px rgba(0,0,0,.26)", ...style }}>{children}</section>;
-}
-
-function SectionTitle({ title, right }) {
-  return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
-    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{title}</h2>
-    {right ? <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{right}</span> : null}
-  </div>;
-}
-
-function Metric({ label, value, sub }) {
-  return <Card style={{ marginBottom: 0, padding: 14 }}>
-    <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>{label}</div>
-    <div style={{ color: "#f8fafc", fontSize: 24, fontWeight: 1000 }}>{value}</div>
-    {sub ? <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, marginTop: 6, lineHeight: 1.35 }}>{sub}</div> : null}
-  </Card>;
-}
-
-function BarRow({ row, max }) {
-  const pct = max > 0 ? Math.max(4, Math.round((row.amount / max) * 100)) : 0;
-  const isHabit = row.kind === "habit";
-  return <div style={{ display: "grid", gridTemplateColumns: "58px 1fr 64px", alignItems: "center", gap: 10, margin: "12px 0" }}>
-    <div style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 900 }}>{row.name}</div>
-    <div style={{ height: 14, borderRadius: 999, background: "#243044", overflow: "hidden" }}>
-      <div style={{ height: "100%", width: `${pct}%`, borderRadius: 999, background: isHabit ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "linear-gradient(90deg,#38bdf8,#22c55e)" }} />
-    </div>
-    <div style={{ textAlign: "right", fontSize: 13, fontWeight: 950 }}>{money(row.amount)}</div>
-  </div>;
-}
-
-function Pill({ children, tone = "normal" }) {
-  const color = tone === "warn" ? "#fde68a" : tone === "blue" ? "#bae6fd" : tone === "good" ? "#86efac" : "#cbd5e1";
-  const border = tone === "warn" ? "rgba(245,158,11,.35)" : tone === "blue" ? "rgba(56,189,248,.35)" : tone === "good" ? "rgba(34,197,94,.35)" : "rgba(148,163,184,.24)";
-  return <span style={{ border: `1px solid ${border}`, color, borderRadius: 999, padding: "6px 9px", fontSize: 12, fontWeight: 850, background: "rgba(255,255,255,.04)" }}>{children}</span>;
-}
-
-function ListRow({ title, sub, value, tone }) {
-  const color = tone === "good" ? "#86efac" : tone === "bad" ? "#fca5a5" : "#f8fafc";
-  return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid rgba(148,163,184,.12)" }}>
-    <div>
-      <div style={{ fontSize: 14, fontWeight: 950 }}>{title}</div>
-      {sub ? <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, marginTop: 4, lineHeight: 1.35 }}>{sub}</div> : null}
-    </div>
-    <div style={{ color, fontSize: 14, fontWeight: 1000, whiteSpace: "nowrap" }}>{value}</div>
-  </div>;
-}
-
-function TinyButton({ children, onClick, disabled, tone = "blue" }) {
-  const bg = tone === "good" ? "rgba(34,197,94,.16)" : "rgba(56,189,248,.14)";
-  const border = tone === "good" ? "rgba(34,197,94,.36)" : "rgba(56,189,248,.34)";
-  const color = tone === "good" ? "#bbf7d0" : "#bae6fd";
-  return <button onClick={onClick} disabled={disabled} style={{ border: `1px solid ${border}`, background: disabled ? "rgba(51,65,85,.55)" : bg, color: disabled ? "#94a3b8" : color, borderRadius: 12, padding: "8px 10px", fontWeight: 950, fontSize: 12 }}>{children}</button>;
-}
-
-function InvoiceSyncCard() {
-  const [syncState, setSyncState] = useState({ loading: false, data: null, error: "" });
-  const [confirmedMap, setConfirmedMap] = useState({});
-  const [transactions, setTransactions] = useState([]);
-  const [confirmingId, setConfirmingId] = useState("");
-
-  const sourceInvoices = syncState.data?.invoices || demoInvoices;
-  const invoices = sourceInvoices.map((item) => confirmedMap[item.id] ? { ...item, status: "已入帳" } : item);
-  const summary = {
-    count: invoices.length,
-    pendingCount: invoices.filter((item) => item.status !== "已入帳").length,
-    totalAmount: invoices.reduce((sum, item) => sum + Number(item.amount || 0), 0)
-  };
-
-  async function syncInvoices() {
-    setSyncState((prev) => ({ ...prev, loading: true, error: "" }));
-    try {
-      const res = await fetch("/api/financial-os/invoices/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || data?.ok === false) throw new Error(data?.message || "發票同步失敗");
-      setSyncState({ loading: false, data, error: "" });
-    } catch (err) {
-      setSyncState((prev) => ({ ...prev, loading: false, error: err.message || "發票同步失敗" }));
-    }
+const seedTransactions = [
+  { id: "seed-chatgpt", date: "2026-07-01", type: "支出", amount: 660, account: "自用", category: "ChatGPT", isLivingExpense: "Y", isFixedExpense: "Y", affectsBudget: "Y", note: "ChatGPT Plus 月費" },
+  { id: "seed-google", date: "2026-07-01", type: "支出", amount: 65, account: "自用", category: "Google One", isLivingExpense: "Y", isFixedExpense: "Y", affectsBudget: "Y", note: "Google One 月費" },
+  { id: "seed-phone", date: "2026-07-01", type: "支出", amount: 886.5, account: "自用", category: "手機月攤", isLivingExpense: "Y", isFixedExpense: "Y", affectsBudget: "Y", note: "手機費月攤" },
+  { id: "seed-shopee", date: "2026-07-04", type: "支出", amount: 163, account: "自用", category: "其他", isLivingExpense: "N", isFixedExpense: "N", affectsBudget: "Y", note: "蝦皮製冰盒" },
+  { id: "seed-glasses", date: "2026-07-04", type: "支出", amount: 107, account: "自用", category: "其他", isLivingExpense: "N", isFixedExpense: "N", affectsBudget: "Y", note: "眼鏡鏈條" }
+];
+function money(n) { return `$${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`; }
+function today() { return new Date().toISOString().slice(0, 10); }
+function isMonth(tx) { return String(tx.date || "").slice(0, 7) === MONTH; }
+function Card({ children, style }) { return <section style={{ background: "rgba(17,24,39,.92)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: "0 12px 34px rgba(0,0,0,.26)", ...style }}>{children}</section>; }
+function Title({ title, right }) { return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{title}</h2>{right ? <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800 }}>{right}</span> : null}</div>; }
+function Metric({ label, value, sub }) { return <Card style={{ marginBottom: 0, padding: 14 }}><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>{label}</div><div style={{ fontSize: 24, fontWeight: 1000 }}>{value}</div>{sub ? <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6, lineHeight: 1.35 }}>{sub}</div> : null}</Card>; }
+function Pill({ children, tone = "normal" }) { const map = { warn: ["#fde68a", "rgba(245,158,11,.35)"], blue: ["#bae6fd", "rgba(56,189,248,.35)"], good: ["#86efac", "rgba(34,197,94,.35)"], bad: ["#fca5a5", "rgba(239,68,68,.35)"], normal: ["#cbd5e1", "rgba(148,163,184,.24)"] }; const [color, border] = map[tone] || map.normal; return <span style={{ color, border: `1px solid ${border}`, borderRadius: 999, padding: "6px 9px", fontSize: 12, fontWeight: 850, background: "rgba(255,255,255,.04)" }}>{children}</span>; }
+function Field({ label, children }) { return <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 11, fontWeight: 850 }}><span>{label}</span>{children}</label>; }
+const inputStyle = { width: "100%", background: "rgba(15,23,42,.88)", border: "1px solid rgba(148,163,184,.24)", color: "#f8fafc", borderRadius: 14, padding: 12, fontSize: 15, outline: "none" };
+function Row({ title, sub, value, tone }) { const color = tone === "good" ? "#86efac" : tone === "bad" ? "#fca5a5" : "#f8fafc"; return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid rgba(148,163,184,.12)" }}><div><div style={{ fontSize: 14, fontWeight: 950 }}>{title}</div>{sub ? <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4, lineHeight: 1.35 }}>{sub}</div> : null}</div><div style={{ color, fontSize: 14, fontWeight: 1000, whiteSpace: "nowrap" }}>{value}</div></div>; }
+function calcStats(transactions) {
+  const monthTx = transactions.filter(isMonth);
+  const income = monthTx.filter((t) => t.type === "收入").reduce((s, t) => s + Number(t.amount || 0), 0);
+  const expense = monthTx.filter((t) => t.type === "支出").reduce((s, t) => s + Number(t.amount || 0), 0);
+  const living = monthTx.filter((t) => t.type === "支出" && t.isLivingExpense === "Y").reduce((s, t) => s + Number(t.amount || 0), 0);
+  const fixed = monthTx.filter((t) => t.type === "支出" && t.isFixedExpense === "Y").reduce((s, t) => s + Number(t.amount || 0), 0);
+  const foodRows = FOOD_CATEGORIES.map((name) => ({ name, amount: monthTx.filter((t) => t.type === "支出" && t.category === name).reduce((s, t) => s + Number(t.amount || 0), 0), kind: name === "菸" ? "habit" : "food" }));
+  const accounts = Object.fromEntries(ACCOUNTS.map((a) => [a, 0]));
+  for (const t of monthTx) {
+    const amt = Number(t.amount || 0);
+    if (t.type === "收入") accounts[t.account] = (accounts[t.account] || 0) + amt;
+    if (t.type === "支出") accounts[t.account] = (accounts[t.account] || 0) - amt;
+    if (t.type === "一般轉帳") { accounts[t.fromAccount] = (accounts[t.fromAccount] || 0) - amt; accounts[t.toAccount] = (accounts[t.toAccount] || 0) + amt; }
   }
-
-  async function confirmInvoice(item) {
-    setConfirmingId(item.id);
-    setSyncState((prev) => ({ ...prev, error: "" }));
-    try {
-      const res = await fetch("/api/financial-os/invoices/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice: item })
-      });
-      const data = await res.json();
-      if (!res.ok || data?.ok === false) throw new Error(data?.message || "確認入帳失敗");
-      setConfirmedMap((prev) => ({ ...prev, [item.id]: true }));
-      setTransactions((prev) => [data.transaction, ...prev.filter((tx) => tx.sourceInvoiceId !== item.id)]);
-    } catch (err) {
-      setSyncState((prev) => ({ ...prev, error: err.message || "確認入帳失敗" }));
-    } finally {
-      setConfirmingId("");
-    }
-  }
-
-  return <Card>
-    <SectionTitle title="載具發票同步" right={syncState.data ? syncState.data.mode : "Demo"} />
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
-      <Metric label="本次發票" value={summary.count} sub="同步筆數" />
-      <Metric label="待確認" value={summary.pendingCount} sub="不直接入帳" />
-      <Metric label="金額" value={money(summary.totalAmount)} sub="候選支出" />
-    </div>
-    <button onClick={syncInvoices} disabled={syncState.loading} style={{ display: "block", width: "100%", border: "none", borderRadius: 16, background: syncState.loading ? "#334155" : "linear-gradient(90deg,#38bdf8,#22c55e)", color: syncState.loading ? "#cbd5e1" : "#020617", fontWeight: 1000, padding: 14, fontSize: 15, marginBottom: 12 }}>
-      {syncState.loading ? "同步中..." : "立即同步載具發票"}
-    </button>
-    {syncState.error ? <div style={{ color: "#fca5a5", fontSize: 13, fontWeight: 850, marginBottom: 10 }}>{syncState.error}</div> : null}
-    {syncState.data?.message ? <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, lineHeight: 1.45, marginBottom: 10 }}>{syncState.data.message}</div> : null}
-    <div style={{ display: "grid", gap: 8 }}>
-      {invoices.map((item) => {
-        const isBooked = item.status === "已入帳";
-        return <div key={item.id} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 14, padding: 11 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 950 }}>{item.merchant}</div>
-              <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 750, marginTop: 4 }}>{item.date}｜AI：{item.suggestedCategory}｜信心 {Math.round(Number(item.confidence || 0) * 100)}%</div>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 1000 }}>{money(item.amount)}</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-            <Pill tone={isBooked ? "good" : "warn"}>{item.status}</Pill>
-            <Pill tone="blue">生活費 Y</Pill>
-            <Pill>{isBooked ? "已產生交易草稿" : "確認後入帳"}</Pill>
-          </div>
-          {!isBooked ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-            <TinyButton tone="good" disabled={confirmingId === item.id} onClick={() => confirmInvoice(item)}>{confirmingId === item.id ? "處理中..." : "確認入帳"}</TinyButton>
-            <TinyButton disabled>改分類</TinyButton>
-          </div> : null}
-        </div>;
-      })}
-    </div>
-    {transactions.length ? <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(148,163,184,.16)" }}>
-      <SectionTitle title="已入帳交易草稿" right={`${transactions.length} 筆`} />
-      {transactions.map((tx) => <ListRow key={tx.id} title={`${tx.date}｜${tx.category}`} sub={`${tx.account}｜${tx.note}`} value={money(tx.amount)} tone="good" />)}
-    </div> : null}
-  </Card>;
+  return { monthTx, income, expense, living, fixed, cashflow: income - expense, foodRows, accounts };
 }
-
-function DashboardScreen() {
-  const maxFood = useMemo(() => Math.max(...foodRows.map((r) => r.amount)), []);
-  const foodTotal = foodRows.reduce((sum, row) => sum + row.amount, 0);
-  const livingBudget = 8000;
-  const livingUsed = 1776;
-  const ratio = Math.round((foodTotal / livingBudget) * 1000) / 10;
-
-  return <>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-      <Metric label="總資產" value="$—" sub="等待補現金、銀行、投資資料" />
-      <Metric label="本月現金流" value="$—" sub="收入 - 支出 - 投資轉出" />
-      <Metric label="生活費預算" value={money(livingBudget)} sub="日常可控消費" />
-      <Metric label="生活費已用" value={money(livingUsed)} sub={`剩餘 ${money(livingBudget - livingUsed)}`} />
-    </div>
-    <Card>
-      <SectionTitle title="飲食大類｜細項支出" right="本月" />
-      {foodRows.map((row) => <BarRow key={row.name} row={row} max={maxFood} />)}
-      <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(148,163,184,.16)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", color: "#cbd5e1", fontSize: 12, fontWeight: 850, marginBottom: 8 }}>
-          <span>飲食＋習慣消費佔生活費</span><span>{ratio}%</span>
-        </div>
-        <div style={{ height: 9, borderRadius: 999, background: "#243044", overflow: "hidden" }}>
-          <div style={{ width: `${ratio}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#22c55e,#f59e0b)" }} />
-        </div>
-      </div>
-      <div style={{ marginTop: 14, background: "rgba(56,189,248,.08)", border: "1px solid rgba(56,189,248,.22)", borderRadius: 14, padding: 12, color: "#dbeafe", fontSize: 13, lineHeight: 1.55, fontWeight: 750 }}>
-        <b>AI 初判：</b>目前最大細項是 <span style={{ color: "#fde68a" }}>菸 {money(510)}</span>，其次是午餐 {money(480)}。這張卡的用途是快速找出「生活費真正被哪個細項吃掉」。
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-        <Pill tone="blue">飲食</Pill><Pill tone="blue">咖啡</Pill><Pill tone="warn">菸：可獨立 KPI</Pill>
-      </div>
-    </Card>
-    <Card>
-      <SectionTitle title="三帳戶狀態" right="V1 固定" />
-      <ListRow title="🏠 家用" sub="家庭支出 / 共用資金" value="$—" />
-      <ListRow title="👤 自用" sub="薪水與日常生活費" value="$—" />
-      <ListRow title="📈 投資" sub="富邦、Binance、xStocks" value="$—" />
-    </Card>
-    <Card>
-      <SectionTitle title="Money Flow" right="V1.5 草稿" />
-      <pre style={{ margin: 0, whiteSpace: "pre", overflowX: "auto", color: "#cbd5e1", background: "rgba(15,23,42,.65)", border: "1px solid rgba(148,163,184,.16)", padding: 12, borderRadius: 14, fontSize: 12, lineHeight: 1.55 }}>{`薪水
-  │
-  ▼
-自用帳戶
-  ├──► 家用 20,000
-  ├──► 投資 5,000
-  └──► 生活費 8,000
-        ├── 早餐
-        ├── 午餐
-        ├── 咖啡
-        └── 菸`}</pre>
-    </Card>
-  </>;
+function Dashboard({ transactions }) {
+  const s = calcStats(transactions); const maxFood = Math.max(1, ...s.foodRows.map((r) => r.amount)); const foodTotal = s.foodRows.reduce((a, r) => a + r.amount, 0); const ratio = Math.round((foodTotal / LIVING_BUDGET) * 1000) / 10;
+  return <><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}><Metric label="本月收入" value={money(s.income)} sub="薪水 / 兼職 / 其他" /><Metric label="本月支出" value={money(s.expense)} sub={`現金流 ${money(s.cashflow)}`} /><Metric label="生活費已用" value={money(s.living)} sub={`剩餘 ${money(LIVING_BUDGET - s.living)}`} /><Metric label="固定支出" value={money(s.fixed)} sub="訂閱 / 手機月攤" /></div><Card><Title title="飲食大類｜細項支出" right="自動統計" />{s.foodRows.map((r) => { const pct = Math.max(3, Math.round((r.amount / maxFood) * 100)); return <div key={r.name} style={{ display: "grid", gridTemplateColumns: "64px 1fr 64px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><div style={{ height: 14, borderRadius: 999, background: "#243044", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: r.kind === "habit" ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "linear-gradient(90deg,#38bdf8,#22c55e)", borderRadius: 999 }} /></div><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>; })}<div style={{ marginTop: 14, color: "#cbd5e1", fontSize: 13 }}>飲食＋習慣消費佔生活費：<b>{ratio}%</b></div></Card><Card><Title title="三帳戶狀態" right="本月淨流入/流出" />{ACCOUNTS.map((a) => <Row key={a} title={a} sub={a === "自用" ? "薪水與日常生活費" : a === "投資" ? "富邦 / Binance / xStocks" : "家庭支出 / 共用資金"} value={money(s.accounts[a])} tone={s.accounts[a] >= 0 ? "good" : "bad"} />)}</Card><Card><Title title="最近交易" right={`${s.monthTx.length} 筆`} />{s.monthTx.slice(0, 6).map((t) => <Row key={t.id} title={`${t.date}｜${t.category}`} sub={`${t.type}｜${t.account || `${t.fromAccount}→${t.toAccount}`}｜${t.note || ""}`} value={money(t.amount)} tone={t.type === "收入" ? "good" : "bad"} />)}</Card></>;
 }
-
-function EntryScreen() {
-  return <>
-    <InvoiceSyncCard />
-    <Card>
-      <SectionTitle title="快速記帳" right="五交易類型" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-        {["➕ 收入", "➖ 支出", "⇄ 轉帳", "🤝 借款", "💰 還款", "📷 收據"].map((x) => <div key={x} style={{ border: "1px solid rgba(148,163,184,.22)", background: "rgba(255,255,255,.04)", color: "#e2e8f0", borderRadius: 14, padding: "10px 8px", textAlign: "center", fontSize: 13, fontWeight: 900 }}>{x}</div>)}
-      </div>
-    </Card>
-    <Card>
-      <SectionTitle title="新增支出" right="Prototype" />
-      {["金額｜$80", "帳戶｜自用", "分類｜早餐", "生活費｜Y", "固定支出｜N", "預算｜Y", "備註｜早餐 / 可省略"].map((x) => {
-        const [label, value] = x.split("｜");
-        return <div key={x} style={{ background: "rgba(15,23,42,.85)", border: "1px solid rgba(148,163,184,.22)", borderRadius: 14, padding: 12, color: "#e2e8f0", fontSize: 14, marginBottom: 10 }}>
-          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginBottom: 5 }}>{label}</div>{value}
-        </div>;
-      })}
-      <button style={{ display: "block", width: "100%", border: "none", borderRadius: 16, background: "linear-gradient(90deg,#38bdf8,#22c55e)", color: "#020617", fontWeight: 1000, padding: 14, fontSize: 15, marginTop: 12 }}>儲存這筆</button>
-    </Card>
-    <Card>
-      <SectionTitle title="常用細項" right="一鍵帶入" />
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{quickItems.map((item) => <Pill key={item} tone={item.includes("菸") ? "warn" : item.includes("早餐") || item.includes("午餐") || item.includes("咖啡") ? "blue" : "normal"}>{item}</Pill>)}</div>
-    </Card>
-  </>;
+function Entry({ transactions, setTransactions }) {
+  const [form, setForm] = useState({ date: today(), type: "支出", amount: "", account: "自用", fromAccount: "自用", toAccount: "家用", category: "早餐", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", note: "" });
+  const add = (patch = {}) => { const tx = { ...form, ...patch, id: `tx-${Date.now()}`, amount: Number((patch.amount ?? form.amount) || 0) }; if (!tx.amount) return; setTransactions((prev) => [tx, ...prev]); setForm((f) => ({ ...f, amount: "", note: "" })); };
+  const quick = [ ["早餐",80], ["午餐",120], ["咖啡",50], ["菸",85], ["ChatGPT",660,"Y","Y"], ["Google One",65,"Y","Y"] ];
+  return <><InvoiceSync onAdd={(tx) => setTransactions((prev) => [tx, ...prev])} /><Card><Title title="新增交易" right="可直接記帳" /><div style={{ display: "grid", gap: 10 }}><Field label="日期"><input style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field><Field label="交易類型"><select style={inputStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{TYPES.map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="金額"><input style={inputStyle} inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="例如 80" /></Field>{form.type === "一般轉帳" || form.type === "借款" || form.type === "還款" ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}><Field label="from"><select style={inputStyle} value={form.fromAccount} onChange={(e) => setForm({ ...form, fromAccount: e.target.value })}>{ACCOUNTS.map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="to"><select style={inputStyle} value={form.toAccount} onChange={(e) => setForm({ ...form, toAccount: e.target.value })}>{ACCOUNTS.map((x) => <option key={x}>{x}</option>)}</select></Field></div> : <Field label="帳戶"><select style={inputStyle} value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })}>{ACCOUNTS.map((x) => <option key={x}>{x}</option>)}</select></Field>}<Field label="分類"><input style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field><div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>{[["生活費", "isLivingExpense"], ["固定", "isFixedExpense"], ["預算", "affectsBudget"]].map(([label, key]) => <Field key={key} label={label}><select style={inputStyle} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })}><option>Y</option><option>N</option></select></Field>)}</div><Field label="備註"><input style={inputStyle} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="可省略" /></Field><button onClick={() => add()} style={{ border: "none", borderRadius: 16, padding: 14, background: "linear-gradient(90deg,#38bdf8,#22c55e)", color: "#020617", fontWeight: 1000 }}>儲存這筆</button></div></Card><Card><Title title="常用細項" right="一鍵新增" /><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{quick.map(([cat, amount, living = "Y", fixed = "N"]) => <button key={cat} onClick={() => add({ type: "支出", amount, category: cat, account: "自用", isLivingExpense: living, isFixedExpense: fixed, affectsBudget: "Y", note: "快捷新增" })} style={{ border: "1px solid rgba(56,189,248,.35)", color: cat === "菸" ? "#fde68a" : "#bae6fd", background: "rgba(255,255,255,.04)", borderRadius: 999, padding: "8px 10px", fontWeight: 850 }}>{cat} {money(amount)}</button>)}</div></Card><Card><Title title="交易清單" right={`${transactions.length} 筆`} />{transactions.slice(0, 12).map((t) => <Row key={t.id} title={`${t.date}｜${t.category}`} sub={`${t.type}｜${t.account || `${t.fromAccount}→${t.toAccount}`}｜生活費 ${t.isLivingExpense}`} value={money(t.amount)} tone={t.type === "收入" ? "good" : "bad"} />)}</Card></>;
 }
-
-function BudgetScreen() {
-  return <>
-    <Card><SectionTitle title="本月預算" right="2026-07" />
-      <ListRow title="生活費" sub="早餐、午餐、晚餐、飲料、咖啡、菸、手機、訂閱" value="$8,000" />
-      <ListRow title="固定支出" sub="ChatGPT、Google One、手機月攤" value="$1,611" />
-      <ListRow title="投資" sub="0050 / VOO / QQQM / 折價獵人" value="$—" />
-    </Card>
-    <Card><SectionTitle title="未來預算" right="提醒" />
-      <ListRow title="空大學費" sub="非生活費，可能有減免" value="$11,280" tone="bad" />
-      <ListRow title="筆電" sub="95 分以上規格" value="$13,000" />
-      <ListRow title="機車維修" sub="7/10 待處理" value="$4,000" tone="bad" />
-    </Card>
-  </>;
-}
-
-function AssetsScreen() {
-  return <>
-    <Card><SectionTitle title="資產中心" right="手動版" />
-      <ListRow title="現金" sub="身上現金" value="$—" />
-      <ListRow title="銀行" sub="台幣帳戶" value="$—" />
-      <ListRow title="ETF" sub="0050 / VOO / QQQM" value="$—" />
-      <ListRow title="Crypto" sub="BTC / USDT" value="$—" />
-      <ListRow title="xStocks" sub="NVDAon / TSMon / AVGOon..." value="$—" />
-    </Card>
-    <Card><SectionTitle title="借貸狀態" right="內外部" />
-      <div style={{ color: "#dbeafe", background: "rgba(56,189,248,.08)", border: "1px solid rgba(56,189,248,.22)", borderRadius: 14, padding: 12, fontSize: 13, lineHeight: 1.65, fontWeight: 750 }}>
-        這裡未來分兩層：<br />1. 三帳戶內部借款：家用 ↔ 自用 ↔ 投資。<br />2. 外部債務：母親、弟弟、朋友 USDT、保單借款。
-      </div>
-    </Card>
-  </>;
-}
-
+function InvoiceSync({ onAdd }) { const [data, setData] = useState(null); const [loading, setLoading] = useState(false); const [done, setDone] = useState({}); const invoices = data?.invoices || demoInvoices; async function sync() { setLoading(true); try { const res = await fetch("/api/financial-os/invoices/sync", { method: "POST" }); setData(await res.json()); } finally { setLoading(false); } } async function confirm(item) { const res = await fetch("/api/financial-os/invoices/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice: item }) }); const json = await res.json(); if (json?.transaction) { onAdd({ ...json.transaction, id: `invoice-${item.id}-${Date.now()}` }); setDone((p) => ({ ...p, [item.id]: true })); } } return <Card><Title title="載具發票同步" right={data?.mode || "Demo"} /><button onClick={sync} disabled={loading} style={{ width: "100%", border: "none", borderRadius: 16, padding: 14, marginBottom: 12, background: loading ? "#334155" : "linear-gradient(90deg,#38bdf8,#22c55e)", color: loading ? "#cbd5e1" : "#020617", fontWeight: 1000 }}>{loading ? "同步中..." : "立即同步載具發票"}</button>{invoices.map((item) => <div key={item.id} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 14, padding: 11, marginBottom: 8 }}><Row title={`${item.merchant}｜AI：${item.suggestedCategory}`} sub={`${item.date}｜信心 ${Math.round(Number(item.confidence || 0) * 100)}%`} value={money(item.amount)} /><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}><Pill tone={done[item.id] ? "good" : "warn"}>{done[item.id] ? "已入帳" : "待確認"}</Pill><Pill tone="blue">生活費 Y</Pill>{!done[item.id] ? <button onClick={() => confirm(item)} style={{ border: "1px solid rgba(34,197,94,.36)", background: "rgba(34,197,94,.16)", color: "#bbf7d0", borderRadius: 999, padding: "6px 9px", fontWeight: 900 }}>確認入帳</button> : null}</div></div>)}</Card>; }
+function Budget({ transactions }) { const s = calcStats(transactions); const items = [["生活費", LIVING_BUDGET, s.living], ["固定支出", 1611, s.fixed], ["空大學費", 11280, 0], ["機車維修", 4000, 0], ["筆電", 13000, 0]]; return <Card><Title title="預算控管" right={MONTH} />{items.map(([name, budget, used]) => { const pct = budget ? Math.round((used / budget) * 100) : 0; return <div key={name} style={{ marginBottom: 14 }}><Row title={name} sub={`已用 ${money(used)} / 預算 ${money(budget)}`} value={`${pct}%`} tone={pct > 100 ? "bad" : "good"} /><div style={{ height: 8, borderRadius: 999, background: "#243044", overflow: "hidden" }}><div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: pct > 100 ? "#ef4444" : "linear-gradient(90deg,#22c55e,#38bdf8)" }} /></div></div>; })}</Card>; }
+function Assets() { return <><Card><Title title="資產中心" right="手動版" />{["現金", "銀行", "ETF｜0050 / VOO / QQQM", "Crypto｜BTC / USDT", "xStocks｜NVDAon / TSMon"].map((x) => <Row key={x} title={x} sub="待接入正式資產資料" value="$—" />)}</Card><Card><Title title="下一步資料庫" right="V1.6" /><div style={{ color: "#cbd5e1", lineHeight: 1.7, fontSize: 14, fontWeight: 750 }}>目前先用手機瀏覽器 LocalStorage，適合測 UI 與資料口徑。等交易欄位穩定後，再接 Supabase / SQLite / GitHub JSON store，避免太早鎖錯資料表。</div></Card></>; }
 export default function FinancialOSPage() {
-  const [tab, setTab] = useState("dashboard");
-  const tabs = [
-    ["dashboard", "總覽"],
-    ["entry", "記帳"],
-    ["budget", "預算"],
-    ["assets", "資產"]
-  ];
-
-  return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
-    <div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}>
-      <section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 1000, letterSpacing: .2, lineHeight: 1.18 }}>Josh Financial OS</div>
-          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>Multi-Account Financial OS｜App Prototype V1.4</div>
-        </div>
-        <div style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: 999, fontSize: 12, color: "#cbd5e1", background: "rgba(255,255,255,.04)", whiteSpace: "nowrap", fontWeight: 900 }}>2026-07</div>
-      </section>
-      {tab === "dashboard" ? <DashboardScreen /> : null}
-      {tab === "entry" ? <EntryScreen /> : null}
-      {tab === "budget" ? <BudgetScreen /> : null}
-      {tab === "assets" ? <AssetsScreen /> : null}
-    </div>
-    <nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}>
-      <div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
-        {tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", textAlign: "center", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900, padding: "9px 4px", borderRadius: 12, background: tab === key ? "rgba(56,189,248,.13)" : "transparent" }}>{label}</button>)}
-      </div>
-    </nav>
-  </main>;
+  const [tab, setTab] = useState("dashboard"); const [transactions, setTransactions] = useState(seedTransactions);
+  useEffect(() => { try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); if (Array.isArray(saved)) setTransactions(saved); } catch {} }, []);
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); } catch {} }, [transactions]);
+  const tabs = [["dashboard", "總覽"], ["entry", "記帳"], ["budget", "預算"], ["assets", "資產"]];
+  return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}><section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V1.5｜可新增交易</div></div><a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a></section>{tab === "dashboard" ? <Dashboard transactions={transactions} /> : null}{tab === "entry" ? <Entry transactions={transactions} setTransactions={setTransactions} /> : null}{tab === "budget" ? <Budget transactions={transactions} /> : null}{tab === "assets" ? <Assets /> : null}</div><nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}><div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", borderRadius: 12, padding: "9px 4px", background: tab === key ? "rgba(56,189,248,.13)" : "transparent", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900 }}>{label}</button>)}</div></nav></main>;
 }
