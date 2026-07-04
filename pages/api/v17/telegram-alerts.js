@@ -1,15 +1,27 @@
 const { sendTelegramMessage } = require("../../../lib/telegram/notify");
 
+function cleanReason(reason) {
+  if (!reason) return "Action Queue 狀態變化";
+  return String(reason).replace(
+    "Active layer waiting for matching event.",
+    "目前符合買點，尚未偵測到買入紀錄。"
+  );
+}
+
+function cleanStatus(status) {
+  return String(status || "").replace(/\s+/g, "");
+}
+
 function formatCard(card) {
   const lines = [
     "🚨 DCA 折價獵人 V17 今日決策",
     "",
-    `${card.symbol} ${card.tier}｜${card.statusLabel || card.status}`,
+    `${card.symbol} ${card.tier}｜${cleanStatus(card.statusLabel || card.status)}`,
     `現價：${card.price ?? "--"}`,
     `跌幅：${card.discountText || card.discount || "--"}`,
     `建議：${card.requiredText || card.amountText || "--"}`,
     `已偵測：${card.filledText || "0U"}`,
-    `原因：${card.reason || "Action Queue 狀態變化"}`,
+    `原因：${cleanReason(card.reason)}`,
     "",
     "規則：只有狀態或價格變化才通知。"
   ];
@@ -31,15 +43,20 @@ module.exports = async function handler(req, res) {
     const host = req.headers.host;
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const shouldSend = req.method === "POST" && req.body?.send === true;
+
     const candidateRes = await fetch(`${protocol}://${host}/api/v17/notify-candidates?t=${Date.now()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body || {})
     });
+
     const candidateData = await readJson(candidateRes);
 
     if (!candidateRes.ok || candidateData?.ok === false) {
-      return res.status(500).json({ ok: false, error: candidateData?.error || `notify_candidates_http_${candidateRes.status}` });
+      return res.status(500).json({
+        ok: false,
+        error: candidateData?.error || `notify_candidates_http_${candidateRes.status}`
+      });
     }
 
     const candidates = candidateData.candidates || [];
@@ -50,13 +67,21 @@ module.exports = async function handler(req, res) {
       for (const message of messages) {
         const sent = await sendTelegramMessage(message);
         results.push(sent);
-        if (!sent.ok) return res.status(500).json({ ok: false, sent: false, failed: sent, sentCount: results.length, candidates });
+        if (!sent.ok) {
+          return res.status(500).json({
+            ok: false,
+            sent: false,
+            failed: sent,
+            sentCount: results.length,
+            candidates
+          });
+        }
       }
     }
 
     return res.status(200).json({
       ok: true,
-      version: "v17-telegram-alerts-v1",
+      version: "v17-telegram-alerts-v2",
       dryRun: !shouldSend,
       sent: shouldSend && results.length > 0,
       candidateCount: candidates.length,
