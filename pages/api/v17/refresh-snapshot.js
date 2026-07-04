@@ -10,6 +10,22 @@ async function readJson(url, options = {}) {
   }
 }
 
+function toMarketMap(rows = []) {
+  return Object.fromEntries(
+    rows.filter((item) => item?.symbol).map((item) => [
+      item.symbol,
+      {
+        symbol: item.symbol,
+        price: item.price,
+        high: item.high,
+        high52w: item.high52w,
+        cycleHigh: item.high || item.cycleHigh || item.high52w,
+        discount: item.discount
+      }
+    ])
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "method_not_allowed" });
@@ -21,8 +37,15 @@ export default async function handler(req, res) {
   const updatedAt = new Date().toISOString();
 
   const prices = await readJson(`${base}/api/prices?t=${Date.now()}`);
+  const rows = Array.isArray(prices.data?.data) ? prices.data.data : [];
+  const markets = toMarketMap(rows);
+
   const wallet = await readJson(`${base}/api/sync-wallet?t=${Date.now()}`);
-  const decisions = await readJson(`${base}/api/v17/decisions?t=${Date.now()}`);
+  const decisions = await readJson(`${base}/api/v17/ui-decisions?t=${Date.now()}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markets, persistState: true })
+  });
   const health = await readJson(`${base}/api/v17/health?t=${Date.now()}`);
 
   const snapshot = {
@@ -46,8 +69,9 @@ export default async function handler(req, res) {
     ok: true,
     updatedAt,
     status: snapshot.status,
-    priceCount: prices.data?.count ?? prices.data?.data?.length ?? 0,
+    priceCount: rows.length,
     walletHoldings: wallet.data?.holdings?.length ?? 0,
-    decisionCount: decisions.data?.count ?? 0
+    cards: decisions.data?.cards?.length ?? 0,
+    states: decisions.data?.states?.length ?? 0
   });
 }

@@ -176,8 +176,11 @@ export default function V17Dashboard() {
       const rows = Array.isArray(prices.data) ? prices.data : [];
       const walletData = snapshot.wallet || { ok: true, holdings: [] };
       const decisionData = snapshot.decisions || {};
-      const cards = decisionData.cards || decisionData.decisions || [];
-      const states = decisionData.states || decisionData.nextStates || [];
+      const rawStates = decisionData.states || decisionData.nextStates || [];
+      const states = Array.isArray(rawStates)
+        ? rawStates
+        : Object.entries(rawStates || {}).map(([symbol, state]) => ({ symbol, ...state }));
+      const cards = decisionData.cards || decisionData.decisions || states;
 
       setAssets(rows);
       setLedger({});
