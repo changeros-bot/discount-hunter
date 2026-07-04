@@ -2,3 +2,4 @@
 .env.local.save
 .next/
 node_modules/
+.vercel

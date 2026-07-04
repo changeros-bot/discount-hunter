@@ -170,19 +170,29 @@ export default function V17Dashboard() {
   async function load() {
     setLoading(true);
     try {
-      const prices = await jsonFetch(`/api/prices?t=${Date.now()}`);
+      const snap = await jsonFetch(`/api/v17/snapshot?t=${Date.now()}`);
+      const snapshot = snap.snapshot || {};
+      const prices = snapshot.prices || {};
       const rows = Array.isArray(prices.data) ? prices.data : [];
-      const ledgerData = await jsonFetch(`/api/buy-ledger?t=${Date.now()}`);
-      const walletRaw = await jsonFetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => null);
-      const btcPrice = btcPriceFromRows(rows);
-      const exchangeData = await jsonFetch(`/api/binance-exchange-position?btcPrice=${encodeURIComponent(btcPrice)}&t=${Date.now()}`).catch(() => null);
-      const walletData = withBtcPosition({ walletData: walletRaw, rows, exchangeData });
-      const today = await jsonFetch(`/api/v17/ui-decisions?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: true }) });
-      setAssets(rows); setLedger(ledgerData.ledger || {}); setWallet(walletData); setDecisions(today.cards || []); setDecisionStates(today.states || []);
-      setUpdatedAt(prices.updatedAt || today.updatedAt || new Date().toISOString()); setSource(prices.source || "Binance xStocks public API"); setError("");
-    } catch (err) { setError(err.message || "V17 讀取失敗"); } finally { setLoading(false); }
-  }
+      const walletData = snapshot.wallet || { ok: true, holdings: [] };
+      const decisionData = snapshot.decisions || {};
+      const cards = decisionData.cards || decisionData.decisions || [];
+      const states = decisionData.states || decisionData.nextStates || [];
 
+      setAssets(rows);
+      setLedger({});
+      setWallet(walletData);
+      setDecisions(cards);
+      setDecisionStates(states);
+      setUpdatedAt(snapshot.updatedAt || prices.updatedAt || new Date().toISOString());
+      setSource(`Snapshot｜${prices.source || "Binance xStocks public API"}`);
+      setError("");
+    } catch (err) {
+      setError(err.message || "Snapshot 讀取失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
   async function handleDecisionAction(row, action) {
     const decision = row.decision || {};
     const id = `${row.symbol}-${row.tier}-${action}`;
