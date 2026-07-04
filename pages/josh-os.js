@@ -15,8 +15,8 @@ const projects = [
     key: "leverage",
     title: "槓桿獵人",
     subtitle: "Leveraged Hunter",
-    status: "PLANNING",
-    href: null,
+    status: "DRAFT",
+    href: "/leveraged-hunter",
     emoji: "⚡",
     summary: "00631L / 槓桿 ETF 專用模組。核心是 Dual Drawdown Diagnostic，不混入折價獵人分類器。",
     bullets: ["TAIEX 訊號", "00631L 實際/理論回撤", "獨立診斷模組"]
@@ -36,7 +36,7 @@ const projects = [
     title: "富邦長期 DCA",
     subtitle: "0050 / VOO / QQQM",
     status: "SEALED",
-    href: null,
+    href: "/fubon-dca",
     emoji: "🏦",
     summary: "長期核心定期定額計畫。與折價獵人分離，不做短線決策。",
     bullets: ["0050 每月 2,000", "VOO 每月 30 USD", "QQQM 每月 30 USD"]
@@ -80,7 +80,7 @@ function ProjectCard({ project, index, total }) {
       </div>)}
     </div>
 
-    {project.href ? <a href={project.href} style={{
+    <a href={project.href} style={{
       display: "block",
       textAlign: "center",
       textDecoration: "none",
@@ -90,16 +90,7 @@ function ProjectCard({ project, index, total }) {
       background: "linear-gradient(90deg,#38bdf8,#22c55e)",
       fontSize: 15,
       fontWeight: 1000
-    }}>開啟 {project.title}</a> : <div style={{
-      textAlign: "center",
-      borderRadius: 18,
-      padding: "15px 14px",
-      color: "#94a3b8",
-      background: "rgba(51,65,85,.55)",
-      border: "1px solid rgba(148,163,184,.18)",
-      fontSize: 15,
-      fontWeight: 950
-    }}>尚未啟用｜先保留為獨立頁</div>}
+    }}>開啟 {project.title}</a>
   </section>;
 }
 
