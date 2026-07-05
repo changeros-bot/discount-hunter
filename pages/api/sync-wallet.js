@@ -1,42 +1,37 @@
-// DCA Discount Hunter - Strict Onchain Wallet Sync API
-// Source of truth for current xStocks holdings is live BNB Chain balanceOf().
-// Transfer history is used when it can derive a real cost basis.
-// If transfer providers are unavailable, existing raw buy-ledger rows may be shown as partial recovered card cost.
+// DCA Discount Hunter - Strict Wallet Sync API
+// Primary source for live xStocks quantity is BNB Chain balanceOf().
+// If balanceOf returns EMPTY_RETURN (0x), it must not be treated as zero.
+// Verified fallback positions may be merged only when backed by audited tx / asset evidence.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
 const { readRawLedgerRecoveredCostHoldings, mergeChainAndRecoveredCostHoldings } = require("../../lib/xstocks/rawLedgerCost");
+const { buildVerifiedPositionFallbackHoldings } = require("../../lib/xstocks/verifiedPositionFallbacks");
 const { WATCHLIST } = require("../../lib/xstocks/constants");
 
 function cleanAddress(value) {
   return String(value || "").trim();
 }
-
 function isEvmAddress(value) {
   return /^0x[a-fA-F0-9]{40}$/.test(cleanAddress(value));
 }
-
 function upper(value) {
   return String(value || "").trim().toUpperCase();
 }
-
 function stripOn(symbol) {
   return upper(symbol).replace(/ON$/, "");
 }
-
 function normalizeOnSymbol(symbol) {
   const s = upper(symbol);
   if (!s) return "";
   return s.endsWith("ON") ? s : `${s}ON`;
 }
-
 function safeNumber(value) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
 }
-
 function uniqueTransfers(transfers) {
   const seen = new Set();
   const out = [];
@@ -48,7 +43,6 @@ function uniqueTransfers(transfers) {
   }
   return out;
 }
-
 function buildContractHints(transfers) {
   const map = new Map();
   for (const tx of transfers || []) {
@@ -68,7 +62,6 @@ function buildContractHints(transfers) {
   }
   return [...map.values()];
 }
-
 function normalizePriceMap(prices) {
   const map = {};
   for (const [key, value] of Object.entries(prices || {})) {
@@ -79,13 +72,11 @@ function normalizePriceMap(prices) {
   }
   return map;
 }
-
 function pickPrice(prices, symbol) {
   const map = normalizePriceMap(prices);
   const s = upper(symbol);
   return map[s] || map[stripOn(s)] || map[`${stripOn(s)}ON`] || null;
 }
-
 function normalizeSymbolMap(items) {
   const map = new Map();
   for (const item of items || []) {
@@ -97,23 +88,19 @@ function normalizeSymbolMap(items) {
   }
   return map;
 }
-
 function detailValue(detail, tokenPrice) {
   return safeNumber(detail?.quantity) * safeNumber(tokenPrice);
 }
-
 function selectBestLiveContracts(liveHoldings, costHoldings, tokenPrices) {
   const costMap = normalizeSymbolMap(costHoldings);
   const selected = [];
   const excluded = [];
-
   for (const live of liveHoldings || []) {
     const symbol = upper(live.symbol);
     const details = Array.isArray(live.details) && live.details.length > 0 ? live.details : [live];
     const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
     const totalCost = safeNumber(cost.totalCost);
     const tokenPrice = safeNumber(pickPrice(tokenPrices, symbol)?.price);
-
     const enrichedDetails = details.map((detail) => ({
       ...detail,
       symbol,
@@ -122,9 +109,7 @@ function selectBestLiveContracts(liveHoldings, costHoldings, tokenPrices) {
       tokenPrice,
       distanceToCost: totalCost > 0 && tokenPrice > 0 ? Math.abs(detailValue(detail, tokenPrice) - totalCost) : null,
     })).filter((detail) => detail.quantity > 0);
-
     if (enrichedDetails.length === 0) continue;
-
     if (enrichedDetails.length === 1 || totalCost <= 0 || tokenPrice <= 0) {
       const only = enrichedDetails[0];
       selected.push({
@@ -137,7 +122,6 @@ function selectBestLiveContracts(liveHoldings, costHoldings, tokenPrices) {
       });
       continue;
     }
-
     const sorted = [...enrichedDetails].sort((a, b) => a.distanceToCost - b.distanceToCost);
     const best = sorted[0];
     const rejected = sorted.slice(1).map((detail) => ({
@@ -145,7 +129,6 @@ function selectBestLiveContracts(liveHoldings, costHoldings, tokenPrices) {
       excludedReason: "estimated_value_farther_from_cost_basis_than_selected_contract",
       selectedContractAddress: best.contractAddress || null,
     }));
-
     selected.push({
       ...live,
       quantity: best.quantity,
@@ -157,19 +140,15 @@ function selectBestLiveContracts(liveHoldings, costHoldings, tokenPrices) {
     });
     excluded.push(...rejected.map((detail) => ({ symbol, ...detail })));
   }
-
   return { selected, excluded };
 }
-
 function mergeLiveQuantities(costHoldings, liveHoldings) {
   const costMap = normalizeSymbolMap(costHoldings);
   const merged = [];
-
   for (const live of liveHoldings || []) {
     const symbol = upper(live.symbol);
     const liveQuantity = safeNumber(live.quantity);
     if (!symbol || liveQuantity <= 0) continue;
-
     const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
     const costQuantity = safeNumber(cost.quantity);
     const rawTotalCost = safeNumber(cost.totalCost);
@@ -178,7 +157,6 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
     const recoveredOnly = Boolean(cost.costBasisRecoveredOnly) || String(source).includes("raw_buy_ledger");
     const totalCost = hasCostBasis ? rawTotalCost : 0;
     const costBasisAverageCost = costQuantity > 0 && rawTotalCost > 0 ? rawTotalCost / costQuantity : safeNumber(cost.averageCost);
-
     merged.push({
       ...cost,
       symbol,
@@ -203,7 +181,7 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
           ? `Recovered cost for ${symbol} from existing raw buy-ledger rows. Not chain transfer-history cost.`
           : null
         : `No real transfer-history cost found for ${symbol}; cost/PnL are hidden instead of using fallback cost.`,
-      quantitySource: "bsc_rpc_balanceOf_live",
+      quantitySource: live.quantitySource || "bsc_rpc_balanceOf_live",
       liveBalanceContractAddress: live.contractAddress || null,
       liveBalanceContractAddresses: live.contractAddresses || (live.contractAddress ? [live.contractAddress] : []),
       liveBalanceDetails: live.details || [],
@@ -211,12 +189,11 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
       liveBalanceDecimals: live.decimals ?? null,
       liveBalanceSource: live.source || null,
       liveContractSelectionReason: live.selectionReason || null,
+      fallbackReason: live.fallbackReason || null,
     });
   }
-
   return merged;
 }
-
 function enrichHoldings(holdings, tokenPrices, referencePrices) {
   return (holdings || []).map((h) => {
     const symbol = upper(h.symbol);
@@ -232,7 +209,6 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
     const referenceStockPrice = safeNumber(referencePriceData?.price);
     const premiumDiscount = tokenPrice - referenceStockPrice;
     const premiumDiscountPct = referenceStockPrice > 0 ? premiumDiscount / referenceStockPrice : 0;
-
     return {
       ...h,
       symbol,
@@ -262,7 +238,6 @@ function enrichHoldings(holdings, tokenPrices, referencePrices) {
     };
   });
 }
-
 function summarize(holdings) {
   const portfolioTotalCost = holdings.reduce((sum, h) => sum + safeNumber(h.totalCost), 0);
   const portfolioMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.currentValue), 0);
@@ -291,17 +266,14 @@ function summarize(holdings) {
 
 async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-
   if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-
   try {
     const bodyWalletAddress = req.body && typeof req.body.walletAddress === "string" ? req.body.walletAddress.trim() : "";
     const queryWalletAddress = req.query && typeof req.query.address === "string" ? req.query.address.trim() : "";
     const envWalletAddress = process.env.WALLET_ADDRESS ? String(process.env.WALLET_ADDRESS).trim() : "";
     const walletAddress = cleanAddress(bodyWalletAddress || queryWalletAddress || envWalletAddress);
-
     if (!isEvmAddress(walletAddress)) {
       return res.status(400).json({ error: "WALLET_ADDRESS not found or invalid" });
     }
@@ -319,7 +291,6 @@ async function handler(req, res) {
     const costHoldings = mergeChainAndRecoveredCostHoldings(chainCostHoldings, rawLedgerRecovered.holdings);
     const contractHints = buildContractHints(transfers);
     const liveScanSymbols = WATCHLIST;
-
     let liveBalanceResult = { holdings: [], errors: [], tokenMetadata: [], contractHoldings: [] };
     try {
       liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, liveScanSymbols, contractHints);
@@ -327,14 +298,15 @@ async function handler(req, res) {
       liveBalanceResult = { holdings: [], errors: [error.message], tokenMetadata: [], contractHoldings: [] };
     }
 
-    const prePriceSymbols = liveBalanceResult.holdings?.length > 0 ? liveBalanceResult.holdings.map((h) => upper(h.symbol)) : liveScanSymbols;
+    const prePriceSymbols = Array.from(new Set([...(liveBalanceResult.holdings || []).map((h) => upper(h.symbol)), ...liveScanSymbols.map(upper)]));
     const [tokenPrices, referencePrices] = await Promise.all([
       fetchTokenPrices(prePriceSymbols),
       fetchReferenceStockPrices(prePriceSymbols),
     ]);
-
     const liveSelection = selectBestLiveContracts(liveBalanceResult.holdings, costHoldings, tokenPrices);
-    const baseHoldings = mergeLiveQuantities(costHoldings, liveSelection.selected);
+    const verifiedFallbackHoldings = buildVerifiedPositionFallbackHoldings(costHoldings, liveSelection.selected);
+    const selectedLiveHoldings = [...liveSelection.selected, ...verifiedFallbackHoldings];
+    const baseHoldings = mergeLiveQuantities(costHoldings, selectedLiveHoldings);
     const holdings = enrichHoldings(baseHoldings, tokenPrices, referencePrices);
     const summary = summarize(holdings);
     const tokenPriceSources = Array.from(new Set(Object.values(tokenPrices || {}).map((p) => p.source).filter(Boolean))).sort();
@@ -342,17 +314,17 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "strict-onchain-with-partial-raw-ledger-recovered-cost-v17",
+      version: "strict-wallet-sync-with-verified-position-fallback-v17",
       strictOnchain: true,
       recoveredCostEnabled: true,
-      recoveredCostPolicy: "Raw buy-ledger recovered cost is used only for per-card cost/PnL when chain transfer-history cost is unavailable. It is not labeled as transfer_history.",
+      recoveredCostPolicy: "Verified tx/asset fallback is used only when balanceOf returns EMPTY_RETURN/unknown and the position is independently verified. Raw ledger is not used as final source.",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       positionSource: bodyWalletAddress ? "manual_body" : queryWalletAddress ? "query_address" : "env_wallet_address",
-      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + raw_buy_ledger_recovered + verified_bsc_rpc_balanceOf_source_of_truth" : hasMegaNodeKey() ? "meganode_cost_basis + raw_buy_ledger_recovered + verified_bsc_rpc_balanceOf_source_of_truth" : "legacy_cost_basis + raw_buy_ledger_recovered + verified_bsc_rpc_balanceOf_source_of_truth",
-      source: hasMoralisKey() ? "Moralis cost basis + raw buy-ledger recovered cost + verified live RPC balances" : hasMegaNodeKey() ? "MegaNode cost basis + raw buy-ledger recovered cost + verified live RPC balances" : "Legacy cost basis + raw buy-ledger recovered cost + verified live RPC balances",
+      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + verified_rpc_balance + verified_position_fallback" : hasMegaNodeKey() ? "meganode_cost_basis + verified_rpc_balance + verified_position_fallback" : "legacy_cost_basis + verified_rpc_balance + verified_position_fallback",
+      source: hasMoralisKey() ? "Moralis cost basis + verified live RPC balances + verified position fallback" : hasMegaNodeKey() ? "MegaNode cost basis + verified live RPC balances + verified position fallback" : "Legacy cost basis + verified live RPC balances + verified position fallback",
       priceSource: tokenPriceSources.join("、") || "binance_xstocks_live",
       referencePriceSource: referencePriceSources.join("、") || "binance_stock_reference_live",
       lastSyncTime: new Date().toISOString(),
@@ -362,10 +334,12 @@ async function handler(req, res) {
         megaNode: hasMegaNodeKey(),
         legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
         rpcBalance: true,
+        verifiedPositionFallback: verifiedFallbackHoldings.length > 0,
         fallbackFirstLayerCostUsd: 0,
         rawLedgerRecoveredCost: rawLedgerRecovered.symbolCount > 0,
       },
       rawLedgerRecoveredCost: rawLedgerRecovered,
+      verifiedFallbackHoldings,
       debugCounts: {
         walletAddressLength: walletAddress.length,
         totalTransfers: transfers.length,
@@ -379,6 +353,9 @@ async function handler(req, res) {
         liveScanSymbols,
         liveBalanceHoldingsCount: liveBalanceResult.holdings?.length || 0,
         selectedLiveBalanceHoldingsCount: liveSelection.selected.length,
+        verifiedFallbackHoldingsCount: verifiedFallbackHoldings.length,
+        verifiedFallbackSymbols: verifiedFallbackHoldings.map((h) => upper(h.symbol)),
+        selectedLiveHoldingsCount: selectedLiveHoldings.length,
         excludedLiveBalanceDetailsCount: liveSelection.excluded.length,
         excludedLiveBalanceDetails: liveSelection.excluded,
         liveContractHoldingsCount: liveBalanceResult.contractHoldings?.length || 0,
@@ -394,6 +371,7 @@ async function handler(req, res) {
         costHoldingSymbols: costHoldings.map((h) => h.symbol),
         liveBalanceSymbols: (liveBalanceResult.holdings || []).map((h) => upper(h.symbol)),
         selectedLiveBalanceSymbols: liveSelection.selected.map((h) => upper(h.symbol)),
+        selectedLiveHoldingSymbols: selectedLiveHoldings.map((h) => upper(h.symbol)),
         holdingSymbols: holdings.map((h) => h.symbol),
         liveTokenMetadata: (liveBalanceResult.tokenMetadata || []).map((t) => ({ symbol: t.symbol, contractAddress: t.contractAddress, source: t.source })),
         holdingPriceDebug: holdings.map((h) => ({
@@ -406,6 +384,7 @@ async function handler(req, res) {
           costBasisMissing: h.costBasisMissing,
           costBasisWarning: h.costBasisWarning,
           quantitySource: h.quantitySource,
+          fallbackReason: h.fallbackReason,
           liveBalanceSource: h.liveBalanceSource,
           liveBalanceContractAddress: h.liveBalanceContractAddress,
           liveBalanceContractAddresses: h.liveBalanceContractAddresses,
