@@ -1,12 +1,13 @@
 // DCA Discount Hunter - Strict Onchain Wallet Sync API
 // Source of truth for current xStocks holdings is live BNB Chain balanceOf().
-// Transfer history is used only when it can derive a real cost basis.
-// No fallback cost is injected in strict mode.
+// Transfer history is used when it can derive a real cost basis.
+// If transfer providers are unavailable, existing raw buy-ledger rows may be shown as partial recovered card cost.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../lib/xstocks/rpcBalances");
+const { readRawLedgerRecoveredCostHoldings, mergeChainAndRecoveredCostHoldings } = require("../../lib/xstocks/rawLedgerCost");
 const { WATCHLIST } = require("../../lib/xstocks/constants");
 
 function cleanAddress(value) {
@@ -172,8 +173,10 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
     const cost = costMap.get(symbol) || costMap.get(stripOn(symbol)) || {};
     const costQuantity = safeNumber(cost.quantity);
     const rawTotalCost = safeNumber(cost.totalCost);
-    const hasRealCostBasis = rawTotalCost > 0;
-    const totalCost = hasRealCostBasis ? rawTotalCost : 0;
+    const hasCostBasis = rawTotalCost > 0;
+    const source = hasCostBasis ? (cost.costBasisSource || "transfer_history") : "missing_real_cost_basis";
+    const recoveredOnly = Boolean(cost.costBasisRecoveredOnly) || String(source).includes("raw_buy_ledger");
+    const totalCost = hasCostBasis ? rawTotalCost : 0;
     const costBasisAverageCost = costQuantity > 0 && rawTotalCost > 0 ? rawTotalCost / costQuantity : safeNumber(cost.averageCost);
 
     merged.push({
@@ -191,10 +194,15 @@ function mergeLiveQuantities(costHoldings, liveHoldings) {
       lastBuyTimestamp: cost.lastBuyTimestamp || null,
       lastSellTimestamp: cost.lastSellTimestamp || null,
       officialHolding: true,
-      costBasisSource: hasRealCostBasis ? "transfer_history" : "missing_real_cost_basis",
+      costBasisSource: source,
+      costBasisRecoveredOnly: recoveredOnly,
       costBasisEstimated: false,
-      costBasisMissing: !hasRealCostBasis,
-      costBasisWarning: hasRealCostBasis ? null : `No real transfer-history cost found for ${symbol}; cost/PnL are hidden instead of using fallback cost.`,
+      costBasisMissing: !hasCostBasis,
+      costBasisWarning: hasCostBasis
+        ? recoveredOnly
+          ? `Recovered cost for ${symbol} from existing raw buy-ledger rows. Not chain transfer-history cost.`
+          : null
+        : `No real transfer-history cost found for ${symbol}; cost/PnL are hidden instead of using fallback cost.`,
       quantitySource: "bsc_rpc_balanceOf_live",
       liveBalanceContractAddress: live.contractAddress || null,
       liveBalanceContractAddresses: live.contractAddresses || (live.contractAddress ? [live.contractAddress] : []),
@@ -260,13 +268,15 @@ function summarize(holdings) {
   const portfolioMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.currentValue), 0);
   const portfolioRawMarketValue = holdings.reduce((sum, h) => sum + safeNumber(h.rawCurrentValue), 0);
   const costBasisMissingCount = holdings.filter((h) => h.costBasisMissing).length;
-  const portfolioUnrealizedPnL = portfolioTotalCost > 0 ? portfolioMarketValue - portfolioTotalCost : null;
-  const portfolioPnLPct = portfolioTotalCost > 0 ? portfolioUnrealizedPnL / portfolioTotalCost : null;
+  const portfolioCostReady = holdings.length > 0 && costBasisMissingCount === 0;
+  const portfolioUnrealizedPnL = portfolioCostReady && portfolioTotalCost > 0 ? portfolioMarketValue - portfolioTotalCost : null;
+  const portfolioPnLPct = portfolioCostReady && portfolioTotalCost > 0 ? portfolioUnrealizedPnL / portfolioTotalCost : null;
   return {
     actualTotalInvested: portfolioTotalCost,
     portfolioTotalCost,
     portfolioMarketValue,
     portfolioRawMarketValue,
+    portfolioCostReady,
     portfolioUnrealizedPnL,
     portfolioPnLPct,
     totalCost: portfolioTotalCost,
@@ -299,7 +309,14 @@ async function handler(req, res) {
     const rawTransfers = await fetchWalletTokenTransfers(walletAddress);
     const transfers = uniqueTransfers(rawTransfers);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
-    const costHoldings = calculateHoldings(buyRecords);
+    const chainCostHoldings = calculateHoldings(buyRecords);
+    let rawLedgerRecovered = { rowCount: 0, symbolCount: 0, totalRecoveredCost: 0, holdings: [] };
+    try {
+      rawLedgerRecovered = await readRawLedgerRecoveredCostHoldings();
+    } catch (error) {
+      rawLedgerRecovered = { rowCount: 0, symbolCount: 0, totalRecoveredCost: 0, holdings: [], error: error.message };
+    }
+    const costHoldings = mergeChainAndRecoveredCostHoldings(chainCostHoldings, rawLedgerRecovered.holdings);
     const contractHints = buildContractHints(transfers);
     const liveScanSymbols = WATCHLIST;
 
@@ -325,15 +342,17 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "strict-onchain-no-fallback-cost-v17",
+      version: "strict-onchain-with-partial-raw-ledger-recovered-cost-v17",
       strictOnchain: true,
+      recoveredCostEnabled: true,
+      recoveredCostPolicy: "Raw buy-ledger recovered cost is used only for per-card cost/PnL when chain transfer-history cost is unavailable. It is not labeled as transfer_history.",
       ...summary,
       holdings,
       walletAddress: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       fullWalletAddress: walletAddress,
       positionSource: bodyWalletAddress ? "manual_body" : queryWalletAddress ? "query_address" : "env_wallet_address",
-      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + verified_bsc_rpc_balanceOf_source_of_truth" : hasMegaNodeKey() ? "meganode_cost_basis + verified_bsc_rpc_balanceOf_source_of_truth" : "legacy_cost_basis + verified_bsc_rpc_balanceOf_source_of_truth",
-      source: hasMoralisKey() ? "Moralis cost basis + verified live RPC balances" : hasMegaNodeKey() ? "MegaNode cost basis + verified live RPC balances" : "Legacy cost basis + verified live RPC balances",
+      walletSyncSource: hasMoralisKey() ? "moralis_cost_basis + raw_buy_ledger_recovered + verified_bsc_rpc_balanceOf_source_of_truth" : hasMegaNodeKey() ? "meganode_cost_basis + raw_buy_ledger_recovered + verified_bsc_rpc_balanceOf_source_of_truth" : "legacy_cost_basis + raw_buy_ledger_recovered + verified_bsc_rpc_balanceOf_source_of_truth",
+      source: hasMoralisKey() ? "Moralis cost basis + raw buy-ledger recovered cost + verified live RPC balances" : hasMegaNodeKey() ? "MegaNode cost basis + raw buy-ledger recovered cost + verified live RPC balances" : "Legacy cost basis + raw buy-ledger recovered cost + verified live RPC balances",
       priceSource: tokenPriceSources.join("、") || "binance_xstocks_live",
       referencePriceSource: referencePriceSources.join("、") || "binance_stock_reference_live",
       lastSyncTime: new Date().toISOString(),
@@ -344,11 +363,16 @@ async function handler(req, res) {
         legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
         rpcBalance: true,
         fallbackFirstLayerCostUsd: 0,
+        rawLedgerRecoveredCost: rawLedgerRecovered.symbolCount > 0,
       },
+      rawLedgerRecoveredCost: rawLedgerRecovered,
       debugCounts: {
         walletAddressLength: walletAddress.length,
         totalTransfers: transfers.length,
         buyRecordsCount: buyRecords.length,
+        chainCostHoldingsCount: chainCostHoldings.length,
+        rawLedgerRecoveredCostSymbols: (rawLedgerRecovered.holdings || []).map((h) => upper(h.symbol)),
+        rawLedgerRecoveredCostTotal: rawLedgerRecovered.totalRecoveredCost || 0,
         costHoldingsCount: costHoldings.length,
         contractHintsCount: contractHints.length,
         contractHintSymbols: Array.from(new Set(contractHints.map((h) => upper(h.symbol)))).sort(),
@@ -362,6 +386,7 @@ async function handler(req, res) {
         liveBalanceBlockNumber: liveBalanceResult.checkedBlockNumber || null,
         holdingsCount: holdings.length,
         costBasisMissingCount: holdings.filter((h) => h.costBasisMissing).length,
+        costBasisRecoveredOnlySymbols: holdings.filter((h) => h.costBasisRecoveredOnly).map((h) => h.symbol),
         costBasisMissingSymbols: holdings.filter((h) => h.costBasisMissing).map((h) => h.symbol),
         tokenPriceSymbols: Object.keys(tokenPrices || {}).sort(),
         referencePriceSymbols: Object.keys(referencePrices || {}).sort(),
@@ -377,6 +402,7 @@ async function handler(req, res) {
           valuationQuantity: h.valuationQuantity,
           costBasisQuantity: h.costBasisQuantity,
           costBasisSource: h.costBasisSource,
+          costBasisRecoveredOnly: h.costBasisRecoveredOnly,
           costBasisMissing: h.costBasisMissing,
           costBasisWarning: h.costBasisWarning,
           quantitySource: h.quantitySource,
