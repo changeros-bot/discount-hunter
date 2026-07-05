@@ -5,21 +5,6 @@ import { AssetCard, fmtAmount, PageShell, Section, TierProgress } from "../compo
 const REFRESH_MS = 60000;
 const CACHE_KEY = "v17-fast-open-cache";
 
-// 2026-07-05 user-verified Binance xStocks cost snapshot.
-// This is not a fake 5U fallback: each symbol was checked against the user's Binance position/trade screenshots.
-// BTC cost still comes from Binance read-only myTrades.
-const VERIFIED_XSTOCK_COST_USD = {
-  AMDON: 5,
-  QQQON: 5,
-  TSMON: 5,
-  GOOGLON: 5,
-  NVDAON: 10,
-  MRVLON: 10,
-  SPCXON: 10,
-  AVGOON: 15,
-  RKLBON: 15,
-};
-
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
   const data = await res.json().catch(() => null);
@@ -60,24 +45,16 @@ function btcPriceFromRows(rows = []) {
   return Number(btc?.price || 0);
 }
 
-function normalizeOnSymbol(symbol) {
-  const s = String(symbol || "").trim().toUpperCase();
-  if (!s) return "";
-  if (s === "BTC") return "BTC";
-  return s.endsWith("ON") ? s : `${s}ON`;
-}
-
-function verifiedCostFor(holding) {
-  const apiCost = Number(holding?.totalCost || 0);
-  if (apiCost > 0 && !holding?.costBasisMissing) return { cost: apiCost, source: holding?.costBasisSource || "api" };
-  const symbol = normalizeOnSymbol(holding?.symbol);
-  const verified = Number(VERIFIED_XSTOCK_COST_USD[symbol] || 0);
-  if (verified > 0) return { cost: verified, source: "user_verified_binance_xstocks_cost_snapshot_20260705" };
-  return { cost: 0, source: "missing" };
-}
-
 function holdingValue(holding) {
   return Number(holding?.currentValue || holding?.marketValue || holding?.positionValue || holding?.rawCurrentValue || 0);
+}
+
+function hasChainVerifiableCost(holding) {
+  const cost = Number(holding?.totalCost || 0);
+  if (!(cost > 0)) return false;
+  if (holding?.costBasisMissing) return false;
+  const source = String(holding?.costBasisSource || "");
+  return source.includes("transfer_history") || source.includes("binance_myTrades");
 }
 
 function mergeHoldingsBySymbol(...groups) {
@@ -127,20 +104,16 @@ function signedColor(value) {
 
 function walletSummary(holdings = []) {
   const live = (holdings || []).filter((h) => Number(h.quantity) > 0);
-  const rows = live.map((h) => {
-    const costInfo = verifiedCostFor(h);
-    return { holding: h, value: holdingValue(h), cost: costInfo.cost, costSource: costInfo.source };
-  });
-  const known = rows.filter((row) => row.cost > 0);
-  const missing = rows.filter((row) => row.cost <= 0);
-  const knownCost = known.reduce((s, row) => s + row.cost, 0);
-  const knownValue = known.reduce((s, row) => s + row.value, 0);
-  const totalValue = rows.reduce((s, row) => s + row.value, 0);
-  const missingValue = missing.reduce((s, row) => s + row.value, 0);
+  const known = live.filter(hasChainVerifiableCost);
+  const missing = live.filter((h) => !hasChainVerifiableCost(h));
+  const knownCost = known.reduce((s, h) => s + Number(h.totalCost || 0), 0);
+  const knownValue = known.reduce((s, h) => s + holdingValue(h), 0);
+  const totalValue = live.reduce((s, h) => s + holdingValue(h), 0);
+  const missingValue = missing.reduce((s, h) => s + holdingValue(h), 0);
   const pnl = knownCost > 0 ? knownValue - knownCost : null;
-  const verifiedSnapshotCount = known.filter((row) => row.costSource === "user_verified_binance_xstocks_cost_snapshot_20260705").length;
   return {
     count: live.length,
+    knownCount: known.length,
     knownCost,
     knownValue,
     totalValue,
@@ -148,7 +121,7 @@ function walletSummary(holdings = []) {
     pnl,
     pnlPct: knownCost > 0 ? pnl / knownCost : null,
     costMissingCount: missing.length,
-    verifiedSnapshotCount,
+    missingSymbols: missing.map((h) => String(h.symbol || "").toUpperCase()).filter(Boolean),
   };
 }
 
@@ -158,22 +131,25 @@ function PortfolioSummaryCard({ summary, updatedAt }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 1000, color: healthy ? "#4ade80" : "#fde68a", margin: 0 }}>真實持倉</h2>
-        <div style={{ marginTop: 4, color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>BTC + xStocks｜成本來源已驗證</div>
+        <div style={{ marginTop: 4, color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>只採鏈上 / 交易所 API 可證明成本</div>
       </div>
       <div style={{ color: healthy ? "#bbf7d0" : "#fde68a", fontSize: 12, fontWeight: 1000, padding: "6px 9px", borderRadius: 999, background: healthy ? "rgba(34,197,94,.12)" : "rgba(245,158,11,.12)", border: `1px solid ${healthy ? "rgba(34,197,94,.24)" : "rgba(245,158,11,.24)"}` }}>{healthy ? "PASS" : "CHECK"}</div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>已知成本</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.knownCost)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>可證明成本</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.knownCost)}</div></div>
       <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總市值</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalValue)}</div></div>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>損益</div><div style={{ color: signedColor(summary.pnl), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{summary.pnl === null ? "N/A" : signedUsd(summary.pnl)}</div></div>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>報酬</div><div style={{ color: signedColor(summary.pnlPct), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{summary.pnlPct === null ? "N/A" : signedPct(summary.pnlPct)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>可證明損益</div><div style={{ color: signedColor(summary.pnl), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{summary.pnl === null ? "N/A" : signedUsd(summary.pnl)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>可證明報酬</div><div style={{ color: signedColor(summary.pnlPct), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{summary.pnlPct === null ? "N/A" : signedPct(summary.pnlPct)}</div></div>
     </div>
+    {summary.costMissingCount > 0 ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.25)", color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.5 }}>
+      有 {summary.costMissingCount} 筆持倉缺鏈上可證明成本，缺成本市值 {usd(summary.missingValue)}。這些資產只列入總市值，不列入損益與報酬。
+    </div> : null}
     <details style={{ marginTop: 8, color: "#94a3b8", fontSize: 11, fontWeight: 800 }}>
       <summary>資料來源 / 成本細節</summary>
       <div style={{ marginTop: 6, lineHeight: 1.55 }}>
-        持倉數：{summary.count}｜缺成本：{summary.costMissingCount}<br />
-        成本口徑：BTC = Binance myTrades；xStocks = Binance 截圖逐檔驗證成本快照（共 {summary.verifiedSnapshotCount} 檔），若 API transfer-history 成本可用則優先使用。<br />
-        正確公式：已知成本 = BTC 成本 + 已驗證 xStocks 成本；損益 = 已知市值 - 已知成本。<br />
+        持倉數：{summary.count}｜可證明成本：{summary.knownCount}｜缺成本：{summary.costMissingCount}<br />
+        成本公式：同一 tx hash 內 stablecoin OUT + xStock IN = BUY；成本 = stablecoin OUT。BTC 使用 Binance myTrades。<br />
+        缺成本：{summary.missingSymbols?.join("、") || "none"}<br />
         Last Sync：{updatedAt || "background refresh"}
       </div>
     </details>
@@ -328,7 +304,7 @@ export default function V17Dashboard() {
         <div>Wallet Source：{wallet?.source || "cached / loading"}</div>
         <div>Wallet Sync：{wallet?.walletSyncSource || "background refresh"}</div>
         <div>BTC Source：{wallet?.btcPositionSource || "background refresh"}</div>
-        <div>Strict Mode：no manual BTC fallback / xStocks user-verified Binance cost snapshot</div>
+        <div>Strict Mode：no manual xStocks cost / no screenshot cost / no fake fallback</div>
         <div>Last Sync：{wallet?.lastSyncTime || updatedAt}</div>
       </div>
     </details>
