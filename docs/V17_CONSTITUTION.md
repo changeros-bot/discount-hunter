@@ -16,6 +16,14 @@ Core rules:
 5. Tactical logic must never contaminate Investment Engine cost basis, ledger, or decision flow.
 6. V17 optimizes for 30-second daily decisions, not maximum information display.
 
+追加最高原則 after 2026-07-05 incident:
+
+```text
+Stability first. Truth second. Beauty third.
+```
+
+But truth must not be introduced by first breaking the UI. Any replacement of a fallback source must be proven in an audit page before it is connected to `/v17`.
+
 ## 2. Engines
 
 ### Investment Engine
@@ -182,6 +190,9 @@ Current providers:
 
 - Binance xStocks public API.
 - Binance BTCUSDT market data.
+- Binance signed read-only API for BTC quantity and trades.
+- BSC balanceOf for xStocks quantity.
+- NodeReal / MegaNode BSC RPC `eth_getLogs` for xStocks cost basis.
 
 Required output shape:
 
@@ -249,3 +260,225 @@ V17 can be considered sealed when:
 6. Research Pipeline exists.
 7. Out-of-scope items are documented and not implemented in V17.
 8. The app supports 30-second daily decision making.
+
+## 12. Data Source Constitution
+
+### BTC
+
+```text
+BTC quantity source: Binance read-only /api/v3/account
+BTC cost source: Binance /api/v3/myTrades weighted average
+BTC price source: Binance BTCUSDT live/reference price
+BTC PnL: allowed only when quantity and trades are API synced
+```
+
+### xStocks
+
+```text
+xStocks quantity source: BSC balanceOf
+xStocks cost source: NodeReal / MegaNode standard BSC RPC eth_getLogs
+xStocks cost rule: stablecoin OUT + xStock IN in same tx hash = BUY
+xStocks price source: Binance xStocks live/reference price
+xStocks PnL: allowed only when cost basis PASS
+```
+
+### Forbidden data behavior
+
+```text
+No screenshot fallback.
+No fake 5U fallback as real cost.
+No manual cost injection unless explicitly labeled as manual and approved by user.
+No PnL for missing-cost assets.
+No mixing known-cost and missing-cost assets in return calculations.
+No treating missing cost as zero.
+```
+
+## 13. PnL Constitution
+
+All asset metrics must be separated into four layers:
+
+```text
+1. Quantity
+2. Market Value
+3. Known Cost
+4. PnL / Return Eligibility
+```
+
+Rules:
+
+```text
+If quantity exists but cost is missing: show quantity and market value only.
+If cost is missing: hide or mark PnL as N/A.
+If a portfolio contains missing-cost assets: total market value may include them, but PnL / return must exclude them.
+Never treat missing cost as zero.
+```
+
+This rule exists because the 2026-07-05 incident briefly produced a misleading return by mixing BTC known cost with xStocks missing cost.
+
+## 14. Stability Lock
+
+Do not directly modify these on main:
+
+```text
+Wallet calculation
+Cost basis parser
+Decision Engine
+Snapshot / state cache
+State classifier
+Universe registry
+Tier rules
+Buy-point completion / skipped logic
+```
+
+Allowed without opening core:
+
+```text
+Read-only audit page
+Read-only reconciliation table
+UI label clarification
+Documentation update
+Health-check endpoint
+```
+
+## 15. Required Change Process
+
+Before any V17 core change:
+
+```text
+1. Read docs/AI_HANDOFF.md.
+2. Read docs/V17_CONSTITUTION.md.
+3. Identify the category: data source / parser / UI / state machine / deployment.
+4. Add or use a read-only audit endpoint/page.
+5. Prove the source status is PASS.
+6. Only then connect the result into /v17.
+7. After deployment, verify Real Position Audit and State Machine.
+8. Record the new stable baseline if and only if the user approves.
+```
+
+Do not skip the audit step.
+
+## 16. Fallback Replacement Rule
+
+Fallbacks are allowed only as temporary labels, not as truth.
+
+Replacement sequence:
+
+```text
+1. Keep old display stable.
+2. Build audit page for new source.
+3. Verify new source PASS.
+4. Switch the internal source.
+5. Display source label clearly.
+6. Remove or hide fallback.
+7. Confirm no PnL distortion.
+```
+
+Never do this sequence backward.
+
+## 17. NodeReal / MegaNode Rule
+
+NodeReal / MegaNode must use stable standard BSC RPC where possible:
+
+```text
+Preferred method: eth_getLogs
+Purpose: ERC20 Transfer events for xStocks and stablecoins
+Avoid relying only on enhanced methods such as nr_getAssetTransfers unless explicitly verified.
+```
+
+Reason:
+
+```text
+During the 2026-07-05 incident, nr_getAssetTransfers failed on the available NodeReal endpoint, while eth_getLogs succeeded.
+```
+
+## 18. Audit Pages Are Production Safety Tools
+
+The following pages/endpoints are not disposable debug toys. They are production safety tools:
+
+```text
+/v17-cost-basis-audit
+/api/v17/xstocks-cost-basis-audit
+```
+
+They should remain available unless replaced by a better audit system.
+
+Expected healthy status:
+
+```text
+Status: PASS
+Transfer source used: MegaNode / NodeReal
+Transfer Count > 0
+BUY Pattern Hash > 0
+Official BUY Records > 0
+xStocks live holdings costStatus: PASS
+```
+
+## 19. Incident Memory: 2026-07-05
+
+What went wrong:
+
+```text
+The AI modified main before reading the known gap.
+The system previously looked normal because xStocks cost still had fallback behavior.
+Fallback was removed before NodeReal cost basis was verified.
+A temporary PnL bug mixed known-cost BTC with missing-cost xStocks.
+A JSX syntax issue caused one failed Vercel build.
+```
+
+What fixed it:
+
+```text
+Read the handoff.
+Added Real Position Audit.
+Added xStocks Cost Basis Audit.
+Detected NodeReal key.
+Replaced unsupported enhanced method with eth_getLogs.
+Rebuilt xStocks costs from real ERC20 Transfer logs.
+Verified PASS on 8 xStocks holdings.
+```
+
+Permanent lesson:
+
+```text
+Do not make the system honest by first breaking it.
+Make it observable, verify the new source, then migrate.
+```
+
+## 20. Communication Rule
+
+If an AI-created code change causes a broken deployment or confusing data state, say so plainly.
+
+Do not say:
+
+```text
+Maybe the user did not set the key.
+```
+
+unless diagnostics prove it.
+
+Say:
+
+```text
+The current diagnostic shows whether the key is detected, whether the provider returned data, and which method failed.
+```
+
+Be factual, not defensive.
+
+## 21. What Not To Do Next
+
+```text
+Do not touch V17 core now.
+Do not rewrite the dashboard.
+Do not rework cost basis again unless audit fails.
+Do not add more providers just because one provider shows ERROR if the primary selected source is already PASS.
+Do not chase BscScan if NodeReal is PASS.
+Do not refactor state machine while cost basis is being verified.
+```
+
+The correct next addition, if needed, is a read-only reconciliation table:
+
+```text
+Asset | Wallet/Binance quantity | System quantity | Difference | Cost source | PnL eligibility
+```
+
+This table must not mutate state.
