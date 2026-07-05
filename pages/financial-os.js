@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "josh-financial-os-transactions-20260705-v3";
+const STORAGE_KEY = "josh-financial-os-transactions-20260705-v4";
 const MONTH = "2026-07";
 const LIVING_BUDGET = 8000;
 
@@ -39,26 +39,25 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 function groupOf(category) {
-  if (["早餐", "午餐", "晚餐", "飲料", "咖啡", "點心/宵夜"].includes(category)) return "飲食";
-  if (category === "菸") return "習慣消費";
+  if (FOOD_CATEGORIES.includes(category)) return "飲食";
   return "其他";
 }
 function calcStats(transactions) {
   const monthTx = transactions.filter(isMonth);
   const income = sum(monthTx.filter((t) => t.type === "收入"));
-  const expense = sum(monthTx.filter((t) => t.type === "支出"));
-  const living = sum(monthTx.filter((t) => t.type === "支出" && t.isLivingExpense === "Y"));
-  const fixed = sum(monthTx.filter((t) => t.type === "支出" && t.isFixedExpense === "Y"));
-  const foodRows = FOOD_CATEGORIES.map((name) => ({ name, amount: sum(monthTx.filter((t) => t.type === "支出" && t.category === name)) }));
-  const groupNames = ["飲食", "習慣消費", "其他"];
-  const groupRows = groupNames.map((name) => ({ name, amount: sum(monthTx.filter((t) => t.type === "支出" && groupOf(t.category) === name)) })).filter((r) => r.amount > 0);
+  const expenseRows = monthTx.filter((t) => t.type === "支出");
+  const expense = sum(expenseRows);
+  const living = sum(expenseRows.filter((t) => t.isLivingExpense === "Y"));
+  const fixed = sum(expenseRows.filter((t) => t.isFixedExpense === "Y"));
+  const foodRows = FOOD_CATEGORIES.map((name) => ({ name, amount: sum(expenseRows.filter((t) => t.category === name)) }));
+  const groupRows = ["飲食", "其他"].map((name) => ({ name, amount: sum(expenseRows.filter((t) => groupOf(t.category) === name)) })).filter((r) => r.amount > 0);
   const accounts = Object.fromEntries(ACCOUNTS.map((a) => [a, 0]));
   for (const t of monthTx) {
     const amt = Number(t.amount || 0);
     if (t.type === "收入") accounts[t.account] = (accounts[t.account] || 0) + amt;
     if (t.type === "支出") accounts[t.account] = (accounts[t.account] || 0) - amt;
   }
-  return { monthTx, income, expense, living, fixed, cashflow: income - expense, foodRows, groupRows, accounts };
+  return { monthTx, expenseRows, income, expense, living, fixed, cashflow: income - expense, foodRows, groupRows, accounts };
 }
 
 function Card({ children, style }) {
@@ -90,7 +89,8 @@ function Dashboard({ transactions }) {
   const maxFood = Math.max(1, ...s.foodRows.map((r) => r.amount));
   const maxGroup = Math.max(1, ...s.groupRows.map((r) => r.amount));
   const foodTotal = sum(s.foodRows);
-  const pass = s.monthTx.filter((t) => t.type === "支出").length === 15 && s.expense === 1105;
+  const expenseRows = [...s.expenseRows].sort((a, b) => b.date.localeCompare(a.date));
+  const pass = expenseRows.length === 15 && s.expense === 1105;
   return <>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
       <Metric label="本月收入" value={money(s.income)} sub="薪水 / 兼職 / 其他" />
@@ -98,9 +98,9 @@ function Dashboard({ transactions }) {
       <Metric label="生活費已用" value={money(s.living)} sub={`剩餘 ${money(LIVING_BUDGET - s.living)}`} />
       <Metric label="固定支出" value={money(s.fixed)} sub="訂閱 / 手機月攤" />
     </div>
-    <Card><Title title="本月大類支出" right="月報初判" />{s.groupRows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "86px 1fr 70px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxGroup} danger={r.name === "習慣消費"} /><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>)}<div style={{ marginTop: 14, color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>目前 7/1–7/5 已更新 15 筆支出，總計 <b>{money(s.expense)}</b>。截圖核對目標：15 筆 / $1,105。</div></Card>
+    <Card><Title title="本月大類支出" right="月報初判" />{s.groupRows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "86px 1fr 70px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxGroup} /><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>)}<div style={{ marginTop: 14, color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>目前 7/1–7/5 已更新 15 筆支出，總計 <b>{money(s.expense)}</b>。菸暫不拆成習慣消費，先合併進飲食。</div></Card>
     <Card><Title title="飲食大類｜細項支出" right={`合計 ${money(foodTotal)}`} />{s.foodRows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "64px 1fr 64px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxFood} danger={r.name === "菸"} /><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>)}</Card>
-    <Card><Title title="最近交易" right={`${s.monthTx.length} 筆`} />{[...s.monthTx].sort((a, b) => b.date.localeCompare(a.date)).map((t) => <Row key={t.id} title={t.note || t.category} sub={`${t.date}｜${t.category}｜${t.account}`} value={money(t.amount)} tone={t.type === "收入" ? "good" : "bad"} />)}</Card>
+    <Card style={{ padding: 0, overflow: "hidden" }}><details><summary style={{ listStyle: "none", cursor: "pointer", padding: 16 }}><Title title="最近交易" right={`${expenseRows.length} 筆｜點開查看`} /><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>預設縮合，避免主頁拉太長。最近一筆：{expenseRows[0]?.note || "—"} {money(expenseRows[0]?.amount || 0)}</div></summary><div style={{ padding: "0 16px 10px" }}>{expenseRows.map((t) => <Row key={t.id} title={t.note || t.category} sub={`${t.date}｜${t.category}｜${t.account}`} value={money(t.amount)} tone="bad" />)}</div></details></Card>
   </>;
 }
 
@@ -141,7 +141,7 @@ function Budget({ transactions }) {
 function Assets({ transactions, setTransactions }) {
   function resetSeed() { setTransactions(seedTransactions); }
   function exportJson() {
-    const blob = new Blob([JSON.stringify({ version: "financial-os-v3", exportedAt: new Date().toISOString(), transactions }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: "financial-os-v4", exportedAt: new Date().toISOString(), transactions }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
