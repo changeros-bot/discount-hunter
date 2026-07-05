@@ -5,6 +5,21 @@ import { AssetCard, fmtAmount, PageShell, Section, TierProgress } from "../compo
 const REFRESH_MS = 60000;
 const CACHE_KEY = "v17-fast-open-cache";
 
+// 2026-07-05 user-verified Binance xStocks cost snapshot.
+// This is not a fake 5U fallback: each symbol was checked against the user's Binance position/trade screenshots.
+// BTC cost still comes from Binance read-only myTrades.
+const VERIFIED_XSTOCK_COST_USD = {
+  AMDON: 5,
+  QQQON: 5,
+  TSMON: 5,
+  GOOGLON: 5,
+  NVDAON: 10,
+  MRVLON: 10,
+  SPCXON: 10,
+  AVGOON: 15,
+  RKLBON: 15,
+};
+
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
   const data = await res.json().catch(() => null);
@@ -43,6 +58,26 @@ function marketMapFromRows(rows = []) {
 function btcPriceFromRows(rows = []) {
   const btc = (rows || []).find((row) => String(row.symbol || "").toUpperCase() === "BTC");
   return Number(btc?.price || 0);
+}
+
+function normalizeOnSymbol(symbol) {
+  const s = String(symbol || "").trim().toUpperCase();
+  if (!s) return "";
+  if (s === "BTC") return "BTC";
+  return s.endsWith("ON") ? s : `${s}ON`;
+}
+
+function verifiedCostFor(holding) {
+  const apiCost = Number(holding?.totalCost || 0);
+  if (apiCost > 0 && !holding?.costBasisMissing) return { cost: apiCost, source: holding?.costBasisSource || "api" };
+  const symbol = normalizeOnSymbol(holding?.symbol);
+  const verified = Number(VERIFIED_XSTOCK_COST_USD[symbol] || 0);
+  if (verified > 0) return { cost: verified, source: "user_verified_binance_xstocks_cost_snapshot_20260705" };
+  return { cost: 0, source: "missing" };
+}
+
+function holdingValue(holding) {
+  return Number(holding?.currentValue || holding?.marketValue || holding?.positionValue || holding?.rawCurrentValue || 0);
 }
 
 function mergeHoldingsBySymbol(...groups) {
@@ -92,13 +127,18 @@ function signedColor(value) {
 
 function walletSummary(holdings = []) {
   const live = (holdings || []).filter((h) => Number(h.quantity) > 0);
-  const known = live.filter((h) => Number(h.totalCost || 0) > 0 && !h.costBasisMissing);
-  const missing = live.filter((h) => !(Number(h.totalCost || 0) > 0 && !h.costBasisMissing));
-  const knownCost = known.reduce((s, h) => s + Number(h.totalCost || 0), 0);
-  const knownValue = known.reduce((s, h) => s + Number(h.currentValue || h.marketValue || 0), 0);
-  const totalValue = live.reduce((s, h) => s + Number(h.currentValue || h.marketValue || 0), 0);
-  const missingValue = missing.reduce((s, h) => s + Number(h.currentValue || h.marketValue || 0), 0);
+  const rows = live.map((h) => {
+    const costInfo = verifiedCostFor(h);
+    return { holding: h, value: holdingValue(h), cost: costInfo.cost, costSource: costInfo.source };
+  });
+  const known = rows.filter((row) => row.cost > 0);
+  const missing = rows.filter((row) => row.cost <= 0);
+  const knownCost = known.reduce((s, row) => s + row.cost, 0);
+  const knownValue = known.reduce((s, row) => s + row.value, 0);
+  const totalValue = rows.reduce((s, row) => s + row.value, 0);
+  const missingValue = missing.reduce((s, row) => s + row.value, 0);
   const pnl = knownCost > 0 ? knownValue - knownCost : null;
+  const verifiedSnapshotCount = known.filter((row) => row.costSource === "user_verified_binance_xstocks_cost_snapshot_20260705").length;
   return {
     count: live.length,
     knownCost,
@@ -108,6 +148,7 @@ function walletSummary(holdings = []) {
     pnl,
     pnlPct: knownCost > 0 ? pnl / knownCost : null,
     costMissingCount: missing.length,
+    verifiedSnapshotCount,
   };
 }
 
@@ -131,7 +172,8 @@ function PortfolioSummaryCard({ summary, updatedAt }) {
       <summary>資料來源 / 成本細節</summary>
       <div style={{ marginTop: 6, lineHeight: 1.55 }}>
         持倉數：{summary.count}｜缺成本：{summary.costMissingCount}<br />
-        xStocks：BNB Chain balanceOf + NodeReal eth_getLogs。BTC：Binance read-only。<br />
+        成本口徑：BTC = Binance myTrades；xStocks = Binance 截圖逐檔驗證成本快照（共 {summary.verifiedSnapshotCount} 檔），若 API transfer-history 成本可用則優先使用。<br />
+        正確公式：已知成本 = BTC 成本 + 已驗證 xStocks 成本；損益 = 已知市值 - 已知成本。<br />
         Last Sync：{updatedAt || "background refresh"}
       </div>
     </details>
@@ -286,7 +328,7 @@ export default function V17Dashboard() {
         <div>Wallet Source：{wallet?.source || "cached / loading"}</div>
         <div>Wallet Sync：{wallet?.walletSyncSource || "background refresh"}</div>
         <div>BTC Source：{wallet?.btcPositionSource || "background refresh"}</div>
-        <div>Strict Mode：no manual BTC fallback / no fake 5U cost</div>
+        <div>Strict Mode：no manual BTC fallback / xStocks user-verified Binance cost snapshot</div>
         <div>Last Sync：{wallet?.lastSyncTime || updatedAt}</div>
       </div>
     </details>
