@@ -121,15 +121,16 @@ function PortfolioSummaryCard({ summary, updatedAt }) {
       </div>
       <div style={{ color: healthy ? "#bbf7d0" : "#fde68a", fontSize: 12, fontWeight: 1000, padding: "6px 9px", borderRadius: 999, background: healthy ? "rgba(34,197,94,.12)" : "rgba(245,158,11,.12)", border: `1px solid ${healthy ? "rgba(34,197,94,.24)" : "rgba(245,158,11,.24)"}` }}>{healthy ? "PASS" : "CHECK"}</div>
     </div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 12 }}>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>市值</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalValue)}</div></div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>已知成本</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.knownCost)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總市值</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalValue)}</div></div>
       <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>損益</div><div style={{ color: signedColor(summary.pnl), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{summary.pnl === null ? "N/A" : signedUsd(summary.pnl)}</div></div>
       <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>報酬</div><div style={{ color: signedColor(summary.pnlPct), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{summary.pnlPct === null ? "N/A" : signedPct(summary.pnlPct)}</div></div>
     </div>
     <details style={{ marginTop: 8, color: "#94a3b8", fontSize: 11, fontWeight: 800 }}>
       <summary>資料來源 / 成本細節</summary>
       <div style={{ marginTop: 6, lineHeight: 1.55 }}>
-        已知成本：{usd(summary.knownCost)}｜持倉數：{summary.count}｜缺成本：{summary.costMissingCount}<br />
+        持倉數：{summary.count}｜缺成本：{summary.costMissingCount}<br />
         xStocks：BNB Chain balanceOf + NodeReal eth_getLogs。BTC：Binance read-only。<br />
         Last Sync：{updatedAt || "background refresh"}
       </div>
