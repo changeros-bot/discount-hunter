@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "josh-financial-os-transactions-20260705-v5";
+const STORAGE_KEY = "josh-financial-os-transactions-20260705-v6";
 const MONTH = "2026-07";
 const LIVING_BUDGET = 8000;
 
@@ -121,6 +121,73 @@ function Dashboard({ transactions }) {
   </>;
 }
 
+function InvoiceSync({ onConfirm }) {
+  const [carrier, setCarrier] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [invoices, setInvoices] = useState([]);
+  const [mode, setMode] = useState("未同步");
+  const [message, setMessage] = useState("刷手機條碼後，這裡用後端查詢載具新增發票；確認後才入帳。");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState({});
+
+  async function syncInvoices() {
+    setLoading(true);
+    setMessage("同步中...");
+    try {
+      const res = await fetch("/api/invoices/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ carrier, verifyCode, since: `${MONTH}-01`, until: today() })
+      });
+      const json = await res.json();
+      setMode(json.mode || "UNKNOWN");
+      setInvoices(Array.isArray(json.invoices) ? json.invoices : []);
+      setMessage(json.message || "同步完成，請確認是否入帳。");
+    } catch (err) {
+      setMessage(`同步失敗：${err.message || "請稍後再試"}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function confirmInvoice(item) {
+    const category = item.suggestedCategory || "飲食";
+    onConfirm({
+      id: `invoice-${item.id}`,
+      date: item.date || today(),
+      type: "支出",
+      amount: Number(item.amount || 0),
+      account: "自用",
+      category,
+      isLivingExpense: "Y",
+      isFixedExpense: isFixedCategory(category) ? "Y" : "N",
+      affectsBudget: "Y",
+      note: `${item.merchant || "發票"}${item.invoiceNo ? `｜${item.invoiceNo}` : ""}`,
+      source: "invoice-carrier",
+    });
+    setDone((p) => ({ ...p, [item.id]: true }));
+  }
+
+  return <Card>
+    <Title title="載具發票同步" right={mode} />
+    <div style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.55, marginBottom: 10 }}>{message}</div>
+    <div style={{ display: "grid", gap: 8 }}>
+      <input value={carrier} onChange={(e) => setCarrier(e.target.value)} style={inputStyle()} placeholder="手機條碼；例如 /ABC1234" autoComplete="off" />
+      <input value={verifyCode} onChange={(e) => setVerifyCode(e.target.value)} style={inputStyle()} placeholder="驗證碼；不會存進 LocalStorage" type="password" autoComplete="off" />
+      <button onClick={syncInvoices} disabled={loading} style={{ border: "none", borderRadius: 16, padding: 14, background: loading ? "#334155" : "linear-gradient(90deg,#38bdf8,#22c55e)", color: loading ? "#cbd5e1" : "#020617", fontWeight: 1000 }}>{loading ? "同步中..." : "立即同步載具發票"}</button>
+    </div>
+    {invoices.length ? <div style={{ marginTop: 12 }}>
+      {invoices.map((item) => <div key={item.id} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.16)", borderRadius: 14, padding: 11, marginBottom: 8 }}>
+        <Row title={`${item.merchant}｜${item.suggestedCategory || "待分類"}`} sub={`${item.date}｜${item.invoiceNo || "無發票號"}｜信心 ${Math.round(Number(item.confidence || 0) * 100)}%`} value={money(item.amount)} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <span style={{ color: done[item.id] ? "#86efac" : "#fde68a", border: `1px solid ${done[item.id] ? "rgba(34,197,94,.35)" : "rgba(245,158,11,.35)"}`, borderRadius: 999, padding: "6px 9px", fontSize: 12, fontWeight: 850 }}>{done[item.id] ? "已入帳" : "待確認"}</span>
+          {!done[item.id] ? <SmallButton tone="good" onClick={() => confirmInvoice(item)}>確認入帳</SmallButton> : null}
+        </div>
+      </div>)}
+    </div> : null}
+  </Card>;
+}
+
 function Entry({ transactions, setTransactions, onDelete }) {
   const [form, setForm] = useState({ date: today(), type: "支出", amount: "", account: "自用", category: "飲食", note: "" });
   function save() {
@@ -131,7 +198,11 @@ function Entry({ transactions, setTransactions, onDelete }) {
     setTransactions([{ id: `manual-${Date.now()}`, ...form, note, amount, isLivingExpense: "Y", isFixedExpense: fixed ? "Y" : "N", affectsBudget: "Y" }, ...transactions]);
     setForm({ ...form, amount: "", note: "" });
   }
+  function confirmInvoice(tx) {
+    setTransactions((prev) => prev.some((t) => t.id === tx.id) ? prev : [tx, ...prev]);
+  }
   return <>
+    <InvoiceSync onConfirm={confirmInvoice} />
     <Card><Title title="新增交易" right="手動" />
       <div style={{ display: "grid", gap: 10 }}>
         <input value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={inputStyle()} type="date" />
@@ -161,7 +232,7 @@ function Budget({ transactions }) {
 function Assets({ transactions, setTransactions }) {
   function resetSeed() { setTransactions(seedTransactions); }
   function exportJson() {
-    const blob = new Blob([JSON.stringify({ version: "financial-os-v5", exportedAt: new Date().toISOString(), transactions }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: "financial-os-v6", exportedAt: new Date().toISOString(), transactions }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -195,7 +266,7 @@ export default function FinancialOSPage() {
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}>
       <section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-        <div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V1.8｜七月支出紀錄</div></div>
+        <div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V1.9｜載具同步骨架</div></div>
         <a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a>
       </section>
       {tab === "dashboard" ? <Dashboard transactions={transactions} /> : null}
