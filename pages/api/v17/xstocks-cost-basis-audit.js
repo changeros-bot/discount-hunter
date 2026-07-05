@@ -124,6 +124,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, message: "Method not allowed" });
   }
   const walletAddress = cleanAddress(process.env.WALLET_ADDRESS);
+  const expectedSymbols = WATCHLIST.map(normalizeSymbol);
   const verifiedMap = verifiedCostMap();
   const base = {
     ok: true,
@@ -136,6 +137,8 @@ export default async function handler(req, res) {
     bscScanConfigured: hasBscScanKey(),
     verifiedTxRegistryConfigured: verifiedMap.size > 0,
     verifiedTxRegistryCount: verifiedMap.size,
+    expectedSymbolCount: expectedSymbols.length,
+    expectedSymbols,
     watchlist: WATCHLIST,
     policy: {
       xstocksQuantitySource: "BSC balanceOf",
@@ -195,12 +198,16 @@ export default async function handler(req, res) {
     };
   });
 
+  const liveSymbols = liveHoldings.map((h) => normalizeSymbol(h.symbol));
+  const missingLiveSymbols = expectedSymbols.filter((symbol) => !liveSymbols.includes(symbol));
+  const unexpectedLiveSymbols = liveSymbols.filter((symbol) => !expectedSymbols.includes(symbol));
   const transferSummary = summarizeTransfers(transfers || [], walletAddress);
   const liveMissingCount = liveHoldings.filter((h) => h.costStatus === "MISSING").length;
   const liveVerifiedCount = liveHoldings.filter((h) => h.costBasisSource === "verified_tx_hash_receipt").length;
   let status = "CHECK";
   let diagnosis = "";
-  if (transferError) { status = liveMissingCount === 0 ? "VERIFIED_TX_REGISTRY_PASS_TRANSFER_ERROR" : "TRANSFER_FETCH_ERROR"; diagnosis = liveMissingCount === 0 ? "Transfer API errored, but all live holdings have verified tx hash receipt cost sources." : "Transfer API threw an error before returning data."; }
+  if (missingLiveSymbols.length > 0) { status = "VERIFIED_TX_REGISTRY_PARTIAL_LIVE_BALANCE"; diagnosis = `Expected ${expectedSymbols.length} xStocks, but live balance scan returned ${liveSymbols.length}. Missing live symbols: ${missingLiveSymbols.join(", ")}.`; }
+  else if (transferError) { status = liveMissingCount === 0 ? "VERIFIED_TX_REGISTRY_PASS_TRANSFER_ERROR" : "TRANSFER_FETCH_ERROR"; diagnosis = liveMissingCount === 0 ? "Transfer API errored, but all live holdings have verified tx hash receipt cost sources." : "Transfer API threw an error before returning data."; }
   else if (!transfers.length && liveMissingCount === 0 && liveHoldings.length > 0) { status = "VERIFIED_TX_REGISTRY_PASS"; diagnosis = "Transfer providers returned zero/error, but all live xStock holdings have verified tx hash receipt cost sources."; }
   else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "All configured transfer sources returned 0 or no usable ERC20 transfers for this wallet, so transfer-history cost basis cannot be reconstructed. Verified tx registry may still provide audited costs for specific holdings."; }
   else if (officialBuyRecords.length === 0 && transferInRecords.length > 0 && liveMissingCount === 0) { status = "VERIFIED_TX_REGISTRY_PASS_ONLY_TRANSFER_IN"; diagnosis = "Transfer scan lacks same-hash BUY patterns, but all live holdings have verified tx hash receipt cost sources."; }
@@ -227,6 +234,10 @@ export default async function handler(req, res) {
     verifiedTxCostHoldingCount: verifiedMap.size,
     costHoldingCount: costHoldings.length,
     liveBalanceCount: liveHoldings.length,
+    liveSymbolCount: liveSymbols.length,
+    liveSymbols,
+    missingLiveSymbols,
+    unexpectedLiveSymbols,
     liveCostMissingCount: liveMissingCount,
     liveVerifiedCostCount: liveVerifiedCount,
     liveBalanceErrors: liveBalanceResult.errors || [],
