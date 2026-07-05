@@ -1,6 +1,15 @@
 const projects = [
   {
     id: 1,
+    eyebrow: "CORE",
+    title: "富邦台美股長期 DCA",
+    description: "0050 / VOO / QQQM。長期核心定期定額，不做短線決策。",
+    href: "/fubon-dca",
+    status: "Sealed",
+    accent: "#38bdf8",
+  },
+  {
+    id: 2,
     eyebrow: "LIVE",
     title: "美股 DCA 折價追蹤",
     description: "BTC + Binance xStocks。今日決策、持倉、折價層級與真實成本。",
@@ -9,7 +18,7 @@ const projects = [
     accent: "#22c55e",
   },
   {
-    id: 2,
+    id: 3,
     eyebrow: "PLANNING",
     title: "槓桿獵人",
     description: "00631L 與槓桿 ETF 診斷模組。等待 Exit Rule 完成後啟用。",
@@ -18,21 +27,12 @@ const projects = [
     accent: "#f59e0b",
   },
   {
-    id: 3,
+    id: 4,
     eyebrow: "PROTOTYPE",
     title: "Josh Financial OS",
     description: "收入、支出、三帳戶、生活費、預算、資產與 AI 月報。",
-    href: "/financial-os",
+    href: "/josh-os",
     status: "Prototype",
-    accent: "#38bdf8",
-  },
-  {
-    id: 4,
-    eyebrow: "WATCH",
-    title: "系統監控 / 文件",
-    description: "V17 憲法、交接文件、成本診斷與安全檢查入口。",
-    href: "/v17-cost-basis-audit",
-    status: "Audit",
     accent: "#a78bfa",
   },
 ];
@@ -71,7 +71,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        四合一入口：折扣獵人、槓桿獵人、Josh Financial OS、系統監控。根目錄不再直接跳單一 V17。
+        四合一入口：富邦 DCA、折價獵人、槓桿獵人、Josh Financial OS。診斷工具保留在文件與系統頁，不放主卡。
       </footer>
     </div>
   </main>;
