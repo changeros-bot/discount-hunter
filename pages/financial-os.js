@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "josh-financial-os-transactions-20260705-v6";
+const BUDGET_STORAGE_KEY = "josh-financial-os-budgets-20260705-v1";
+const ASSET_STORAGE_KEY = "josh-financial-os-assets-20260705-v1";
 const MONTH = "2026-07";
-const LIVING_BUDGET = 8000;
 
 const seedTransactions = [
   ["food-0705-breakfast", "2026-07-05", 80, "早餐", "早餐"],
@@ -20,34 +21,34 @@ const seedTransactions = [
   ["food-0702-latte", "2026-07-02", 40, "咖啡", "中冰拿"],
   ["food-0701-cigarette-coffee", "2026-07-01", 115, "菸", "菸+黑咖啡"],
   ["food-0701-breakfast", "2026-07-01", 80, "早餐", "早餐"],
-].map(([id, date, amount, category, note]) => ({
-  id,
-  date,
-  type: "支出",
-  amount,
-  account: "自用",
-  category,
-  note,
-  isLivingExpense: "Y",
-  isFixedExpense: "N",
-  affectsBudget: "Y",
-}));
+].map(([id, date, amount, category, note]) => ({ id, date, type: "支出", amount, account: "自用", category, note, isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y" }));
+
+const seedBudgets = [
+  { id: "budget-living", name: "生活費", category: "生活費", amount: 8000 },
+];
+
+const seedAssets = [
+  { id: "asset-cash", name: "現金", type: "現金", amount: 0, note: "手動輸入" },
+  { id: "asset-bank", name: "銀行", type: "銀行", amount: 0, note: "手動輸入" },
+];
 
 const MAIN_CATEGORIES = ["飲食", "服飾", "居住", "交通", "教育", "娛樂", "醫療", "金融"];
 const FOOD_CATEGORIES = ["早餐", "午餐", "晚餐", "飲料", "咖啡", "菸", "點心/宵夜"];
 const FIXED_CATEGORIES = ["手機月租費", "手機月攤", "ChatGPT", "Google One", "保險", "房租", "水電瓦斯", "網路費"];
 const OTHER_CATEGORIES = ["機車", "生活用品", "醫療健康", "家庭", "投資", "其他"];
-const ALL_CATEGORIES = [...MAIN_CATEGORIES, "────────", ...FOOD_CATEGORIES, ...FIXED_CATEGORIES, ...OTHER_CATEGORIES];
+const ALL_CATEGORIES = [...MAIN_CATEGORIES, "生活費", "固定支出", "生活用品", "────────", ...FOOD_CATEGORIES, ...FIXED_CATEGORIES, ...OTHER_CATEGORIES];
 const ACCOUNTS = ["家用", "自用", "投資"];
 const TYPES = ["收入", "支出", "一般轉帳", "借款", "還款"];
+const ASSET_TYPES = ["現金", "銀行", "ETF", "加密貨幣", "xStocks", "其他資產", "負債"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 const nt = (n) => `$${Number(n || 0).toLocaleString("zh-TW", { maximumFractionDigits: 0 })}`;
 const sum = (rows) => rows.reduce((s, t) => s + Number(t.amount || 0), 0);
 const isMonth = (t) => String(t.date || "").slice(0, 7) === MONTH;
-const isFixed = (c) => FIXED_CATEGORIES.includes(c);
+const isFixed = (c) => FIXED_CATEGORIES.includes(c) || c === "固定支出";
 
 function groupOf(category) {
+  if (category === "生活費") return "生活費";
   if (category === "飲食" || FOOD_CATEGORIES.includes(category)) return "飲食";
   if (category === "服飾") return "服飾";
   if (category === "居住" || ["房租", "水電瓦斯", "網路費"].includes(category)) return "居住";
@@ -75,6 +76,12 @@ function stats(transactions) {
   return { monthTx, expenses, income, expense, living, fixed, groups, foods };
 }
 
+function spentForBudget(budget, s) {
+  if (budget.category === "生活費") return s.living;
+  if (budget.category === "固定支出") return s.fixed;
+  return sum(s.expenses.filter((t) => groupOf(t.category) === budget.category || t.category === budget.category));
+}
+
 function Card({ children, style }) {
   return <section style={{ background: "rgba(17,24,39,.92)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: "0 12px 34px rgba(0,0,0,.26)", ...style }}>{children}</section>;
 }
@@ -90,7 +97,7 @@ function Row({ title, sub, value, action, tone = "bad" }) {
 }
 function Bar({ amount, max, danger }) {
   const pct = max > 0 ? Math.max(3, Math.round((amount / max) * 100)) : 0;
-  return <div style={{ height: 12, borderRadius: 999, background: "#243044", overflow: "hidden" }}><div style={{ height: "100%", width: `${pct}%`, borderRadius: 999, background: danger ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "linear-gradient(90deg,#38bdf8,#22c55e)" }} /></div>;
+  return <div style={{ height: 12, borderRadius: 999, background: "#243044", overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, pct)}%`, borderRadius: 999, background: danger ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "linear-gradient(90deg,#38bdf8,#22c55e)" }} /></div>;
 }
 function SmallButton({ children, onClick, tone = "blue" }) {
   const bad = tone === "bad";
@@ -100,8 +107,9 @@ function inputStyle() {
   return { width: "100%", background: "rgba(15,23,42,.88)", border: "1px solid rgba(148,163,184,.24)", color: "#f8fafc", borderRadius: 14, padding: 12, fontSize: 15, outline: "none" };
 }
 
-function Dashboard({ transactions }) {
+function Dashboard({ transactions, budgets }) {
   const s = stats(transactions);
+  const livingBudget = budgets.find((b) => b.category === "生活費")?.amount || 8000;
   const rows = [...s.expenses].sort((a, b) => b.date.localeCompare(a.date));
   const maxGroup = Math.max(1, ...s.groups.map((r) => r.amount));
   const maxFood = Math.max(1, ...s.foods.map((r) => r.amount));
@@ -109,7 +117,7 @@ function Dashboard({ transactions }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
       <Metric label="本月收入" value={nt(s.income)} sub="薪水 / 兼職 / 其他" />
       <Metric label="本月支出" value={nt(s.expense)} sub={s.expense >= 1105 ? "七月支出已更新" : "CHECK"} />
-      <Metric label="生活費已用" value={nt(s.living)} sub={`剩餘 ${nt(LIVING_BUDGET - s.living)}`} />
+      <Metric label="生活費已用" value={nt(s.living)} sub={`剩餘 ${nt(livingBudget - s.living)}`} />
       <Metric label="固定支出" value={nt(s.fixed)} sub="手機 / 訂閱 / 保險" />
     </div>
     <Card><Title title="本月大類支出" right="月報初判" />{s.groups.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "86px 1fr 70px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxGroup} /><div style={{ textAlign: "right", fontWeight: 950 }}>{nt(r.amount)}</div></div>)}</Card>
@@ -145,16 +153,53 @@ function Entry({ transactions, setTransactions, onDelete }) {
   </>;
 }
 
-function Budget({ transactions }) {
+function Budget({ transactions, budgets, setBudgets }) {
   const s = stats(transactions);
-  const pct = Math.round((s.living / LIVING_BUDGET) * 100);
-  return <Card><Title title="預算控管" right={MONTH} /><Row title="生活費" sub={`已用 ${nt(s.living)} / 預算 ${nt(LIVING_BUDGET)}`} value={`${pct}%`} tone={pct > 100 ? "bad" : "good"} /><div style={{ height: 8, borderRadius: 999, background: "#243044", overflow: "hidden" }}><div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: pct > 100 ? "#ef4444" : "linear-gradient(90deg,#22c55e,#38bdf8)" }} /></div></Card>;
+  const [form, setForm] = useState({ name: "", category: "飲食", amount: "" });
+  function saveBudget() {
+    const amount = Number(form.amount || 0);
+    if (!amount) return;
+    const name = form.name.trim() || form.category;
+    const next = { id: `budget-${Date.now()}`, name, category: form.category, amount };
+    setBudgets((prev) => [next, ...prev]);
+    setForm({ name: "", category: "飲食", amount: "" });
+  }
+  function updateAmount(id, amount) {
+    setBudgets((prev) => prev.map((b) => b.id === id ? { ...b, amount: Number(amount || 0) } : b));
+  }
+  return <>
+    <Card><Title title="新增預算" right={MONTH} />
+      <div style={{ display: "grid", gap: 10 }}>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle()} placeholder="預算名稱；例如 手機費 / 飲食 / 交通" />
+        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inputStyle()}>{ALL_CATEGORIES.filter((x) => x !== "────────").map((x) => <option key={x}>{x}</option>)}</select>
+        <input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={inputStyle()} placeholder="預算金額" inputMode="numeric" />
+        <button onClick={saveBudget} style={{ border: "none", borderRadius: 16, padding: 14, background: "linear-gradient(90deg,#38bdf8,#22c55e)", color: "#020617", fontWeight: 1000 }}>新增這個預算</button>
+      </div>
+    </Card>
+    <Card><Title title="預算控管" right={`${budgets.length} 組`} />{budgets.map((b) => {
+      const spent = spentForBudget(b, s);
+      const pct = b.amount ? Math.round((spent / b.amount) * 100) : 0;
+      return <div key={b.id} style={{ marginBottom: 16 }}>
+        <Row title={b.name} sub={`${b.category}｜已用 ${nt(spent)} / 預算 ${nt(b.amount)}`} value={`${pct}%`} tone={pct > 100 ? "bad" : "good"} action={<SmallButton tone="bad" onClick={() => setBudgets((p) => p.filter((x) => x.id !== b.id))}>刪除</SmallButton>} />
+        <Bar amount={spent} max={b.amount || 1} danger={pct > 100} />
+        <input value={b.amount} onChange={(e) => updateAmount(b.id, e.target.value)} style={{ ...inputStyle(), marginTop: 8 }} inputMode="numeric" />
+      </div>;
+    })}</Card>
+  </>;
 }
 
-function Assets({ transactions, setTransactions }) {
+function Assets({ assets, setAssets, transactions, setTransactions }) {
+  const [form, setForm] = useState({ name: "", type: "現金", amount: "", note: "" });
+  const total = sum(assets.filter((a) => a.type !== "負債")) - sum(assets.filter((a) => a.type === "負債"));
+  function addAsset() {
+    const amount = Number(form.amount || 0);
+    if (!form.name.trim() && !amount) return;
+    setAssets((prev) => [{ id: `asset-${Date.now()}`, name: form.name.trim() || form.type, type: form.type, amount, note: form.note.trim() || "手動輸入" }, ...prev]);
+    setForm({ name: "", type: "現金", amount: "", note: "" });
+  }
   function resetSeed() { setTransactions(seedTransactions); }
   function exportJson() {
-    const blob = new Blob([JSON.stringify({ version: "financial-os-v6", exportedAt: new Date().toISOString(), transactions }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: "financial-os-v7", exportedAt: new Date().toISOString(), transactions, assets }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -163,7 +208,18 @@ function Assets({ transactions, setTransactions }) {
     URL.revokeObjectURL(url);
   }
   return <>
-    <Card><Title title="資產中心" right="手動版" />{["現金", "銀行", "ETF｜0050 / VOO / QQQM", "BTC / USDT", "xStocks"].map((x) => <Row key={x} title={x} sub="待接入正式資產資料" value="$—" tone="neutral" />)}</Card>
+    <Card><Title title="資產總覽" right="手動版" /><Metric label="手動資產淨值" value={nt(total)} sub="現金 / 銀行 / 其他資產；BTC 與 xStocks 仍看折價獵人 V17" /></Card>
+    <Card><Title title="新增手動資產" right="LocalStorage" />
+      <div style={{ display: "grid", gap: 10 }}>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle()} placeholder="資產名稱；例如 合庫帳戶 / 現金 / 機車" />
+        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inputStyle()}>{ASSET_TYPES.map((x) => <option key={x}>{x}</option>)}</select>
+        <input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={inputStyle()} placeholder="金額" inputMode="numeric" />
+        <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={inputStyle()} placeholder="備註" />
+        <button onClick={addAsset} style={{ border: "none", borderRadius: 16, padding: 14, background: "linear-gradient(90deg,#38bdf8,#22c55e)", color: "#020617", fontWeight: 1000 }}>新增資產</button>
+      </div>
+    </Card>
+    <Card><Title title="資產清單" right={`${assets.length} 筆`} />{assets.map((a) => <Row key={a.id} title={a.name} sub={`${a.type}｜${a.note || "手動輸入"}`} value={nt(a.amount)} tone={a.type === "負債" ? "bad" : "good"} action={<SmallButton tone="bad" onClick={() => setAssets((p) => p.filter((x) => x.id !== a.id))}>移除</SmallButton>} />)}</Card>
+    <Card><Title title="投資資產串接" right="資料源分離" /><div style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.7 }}>BTC / USDT / xStocks 已由折價獵人 V17 追蹤，記帳本不重新計算，避免兩套系統數字打架。投資資產請以 V17 為準。</div><a href="/v17" style={{ display: "block", textAlign: "center", marginTop: 12, textDecoration: "none", borderRadius: 16, padding: 13, background: "rgba(56,189,248,.12)", border: "1px solid rgba(56,189,248,.35)", color: "#bae6fd", fontWeight: 1000 }}>打開折價獵人 V17</a></Card>
     <Card><Title title="備份 / 還原" right="LocalStorage" /><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><SmallButton onClick={exportJson}>匯出 JSON</SmallButton><SmallButton tone="bad" onClick={resetSeed}>重置七月支出</SmallButton></div></Card>
   </>;
 }
@@ -171,29 +227,30 @@ function Assets({ transactions, setTransactions }) {
 export default function FinancialOSPage() {
   const [tab, setTab] = useState("dashboard");
   const [transactions, setTransactions] = useState(seedTransactions);
+  const [budgets, setBudgets] = useState(seedBudgets);
+  const [assets, setAssets] = useState(seedAssets);
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (Array.isArray(saved)) setTransactions(saved);
-    } catch {}
+    try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); if (Array.isArray(saved)) setTransactions(saved); } catch {}
+    try { const savedBudgets = JSON.parse(localStorage.getItem(BUDGET_STORAGE_KEY) || "null"); if (Array.isArray(savedBudgets)) setBudgets(savedBudgets); } catch {}
+    try { const savedAssets = JSON.parse(localStorage.getItem(ASSET_STORAGE_KEY) || "null"); if (Array.isArray(savedAssets)) setAssets(savedAssets); } catch {}
   }, []);
-  useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); } catch {}
-  }, [transactions]);
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); } catch {} }, [transactions]);
+  useEffect(() => { try { localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budgets)); } catch {} }, [budgets]);
+  useEffect(() => { try { localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(assets)); } catch {} }, [assets]);
 
   const tabs = useMemo(() => [["dashboard", "總覽"], ["entry", "記帳"], ["budget", "預算"], ["assets", "資產"]], []);
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}>
       <section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-        <div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V1.9｜七月支出紀錄</div></div>
+        <div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V2.0｜預算與資產</div></div>
         <a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a>
       </section>
-      {tab === "dashboard" && <Dashboard transactions={transactions} />}
+      {tab === "dashboard" && <Dashboard transactions={transactions} budgets={budgets} />}
       {tab === "entry" && <Entry transactions={transactions} setTransactions={setTransactions} onDelete={(id) => setTransactions((p) => p.filter((t) => t.id !== id))} />}
-      {tab === "budget" && <Budget transactions={transactions} />}
-      {tab === "assets" && <Assets transactions={transactions} setTransactions={setTransactions} />}
+      {tab === "budget" && <Budget transactions={transactions} budgets={budgets} setBudgets={setBudgets} />}
+      {tab === "assets" && <Assets assets={assets} setAssets={setAssets} transactions={transactions} setTransactions={setTransactions} />}
     </div>
     <nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}>
       <div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", borderRadius: 12, padding: "9px 4px", background: tab === key ? "rgba(56,189,248,.13)" : "transparent", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900 }}>{label}</button>)}</div>
