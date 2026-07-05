@@ -22,10 +22,11 @@ const seedTransactions = [
   { id: "food-0701-breakfast", date: "2026-07-01", type: "支出", amount: 80, account: "自用", category: "早餐", isLivingExpense: "Y", isFixedExpense: "N", affectsBudget: "Y", note: "早餐" },
 ];
 
+const MAIN_CATEGORIES = ["飲食", "服飾", "居住", "交通", "教育", "娛樂", "醫療", "金融"];
 const FOOD_CATEGORIES = ["早餐", "午餐", "晚餐", "飲料", "咖啡", "菸", "點心/宵夜"];
 const FIXED_CATEGORIES = ["手機月租費", "手機月攤", "ChatGPT", "Google One", "保險", "房租", "水電瓦斯", "網路費"];
-const OTHER_CATEGORIES = ["交通", "機車", "生活用品", "醫療健康", "教育", "家庭", "投資", "其他"];
-const ALL_CATEGORIES = [...FOOD_CATEGORIES, ...FIXED_CATEGORIES, ...OTHER_CATEGORIES];
+const OTHER_CATEGORIES = ["機車", "生活用品", "醫療健康", "家庭", "投資", "其他"];
+const ALL_CATEGORIES = [...MAIN_CATEGORIES, "────────", ...FOOD_CATEGORIES, ...FIXED_CATEGORIES, ...OTHER_CATEGORIES];
 const ACCOUNTS = ["家用", "自用", "投資"];
 const TYPES = ["收入", "支出", "一般轉帳", "借款", "還款"];
 
@@ -45,13 +46,16 @@ function isFixedCategory(category) {
   return FIXED_CATEGORIES.includes(category);
 }
 function groupOf(category) {
-  if (FOOD_CATEGORIES.includes(category)) return "飲食";
-  if (FIXED_CATEGORIES.includes(category)) return "固定支出";
-  if (["交通", "機車"].includes(category)) return "交通";
-  if (category === "生活用品") return "生活用品";
-  if (category === "醫療健康") return "醫療健康";
+  if (category === "飲食" || FOOD_CATEGORIES.includes(category)) return "飲食";
+  if (category === "服飾") return "服飾";
+  if (category === "居住" || ["房租", "水電瓦斯", "網路費"].includes(category)) return "居住";
+  if (category === "交通" || ["機車"].includes(category)) return "交通";
   if (category === "教育") return "教育";
-  if (category === "投資") return "投資";
+  if (category === "娛樂") return "娛樂";
+  if (category === "醫療" || category === "醫療健康") return "醫療";
+  if (category === "金融" || ["保險", "投資"].includes(category)) return "金融";
+  if (["手機月租費", "手機月攤", "ChatGPT", "Google One"].includes(category)) return "固定支出";
+  if (category === "生活用品") return "生活用品";
   return "其他";
 }
 function calcStats(transactions) {
@@ -61,8 +65,8 @@ function calcStats(transactions) {
   const expense = sum(expenseRows);
   const living = sum(expenseRows.filter((t) => t.isLivingExpense === "Y"));
   const fixed = sum(expenseRows.filter((t) => t.isFixedExpense === "Y" || isFixedCategory(t.category)));
-  const foodRows = FOOD_CATEGORIES.map((name) => ({ name, amount: sum(expenseRows.filter((t) => t.category === name)) }));
-  const groupNames = ["飲食", "固定支出", "交通", "生活用品", "醫療健康", "教育", "投資", "其他"];
+  const foodRows = FOOD_CATEGORIES.map((name) => ({ name, amount: sum(expenseRows.filter((t) => t.category === name || (name === "早餐" && t.category === "飲食"))) }));
+  const groupNames = ["飲食", "服飾", "居住", "交通", "教育", "娛樂", "醫療", "金融", "固定支出", "生活用品", "其他"];
   const groupRows = groupNames.map((name) => ({ name, amount: sum(expenseRows.filter((t) => groupOf(t.category) === name)) })).filter((r) => r.amount > 0);
   const accounts = Object.fromEntries(ACCOUNTS.map((a) => [a, 0]));
   for (const t of monthTx) {
@@ -111,14 +115,14 @@ function Dashboard({ transactions }) {
       <Metric label="生活費已用" value={money(s.living)} sub={`剩餘 ${money(LIVING_BUDGET - s.living)}`} />
       <Metric label="固定支出" value={money(s.fixed)} sub="手機 / 訂閱 / 保險" />
     </div>
-    <Card><Title title="本月大類支出" right="月報初判" />{s.groupRows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "86px 1fr 70px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxGroup} /><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>)}<div style={{ marginTop: 14, color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>飲食先合併統計；手機月租費等固定項目會自動進「固定支出」。</div></Card>
+    <Card><Title title="本月大類支出" right="月報初判" />{s.groupRows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "86px 1fr 70px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxGroup} /><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>)}<div style={{ marginTop: 14, color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>大分類已加入：飲食、服飾、居住、交通、教育、娛樂、醫療、金融。手機月租費仍會自動進固定支出。</div></Card>
     <Card><Title title="飲食大類｜細項支出" right={`合計 ${money(foodTotal)}`} />{s.foodRows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "64px 1fr 64px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxFood} danger={r.name === "菸"} /><div style={{ textAlign: "right", fontWeight: 950 }}>{money(r.amount)}</div></div>)}</Card>
     <Card style={{ padding: 0, overflow: "hidden" }}><details><summary style={{ listStyle: "none", cursor: "pointer", padding: 16 }}><Title title="最近交易" right={`${expenseRows.length} 筆｜點開查看`} /><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>預設縮合，避免主頁拉太長。最近一筆：{expenseRows[0]?.note || "—"} {money(expenseRows[0]?.amount || 0)}</div></summary><div style={{ padding: "0 16px 10px" }}>{expenseRows.map((t) => <Row key={t.id} title={t.note || t.category} sub={`${t.date}｜${t.category}｜${t.account}`} value={money(t.amount)} tone="bad" />)}</div></details></Card>
   </>;
 }
 
 function Entry({ transactions, setTransactions, onDelete }) {
-  const [form, setForm] = useState({ date: today(), type: "支出", amount: "", account: "自用", category: "早餐", note: "" });
+  const [form, setForm] = useState({ date: today(), type: "支出", amount: "", account: "自用", category: "飲食", note: "" });
   function save() {
     const amount = Number(form.amount || 0);
     if (!amount) return;
@@ -134,8 +138,8 @@ function Entry({ transactions, setTransactions, onDelete }) {
         <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inputStyle()}>{TYPES.map((x) => <option key={x}>{x}</option>)}</select>
         <input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={inputStyle()} placeholder="金額" inputMode="numeric" />
         <select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} style={inputStyle()}>{ACCOUNTS.map((x) => <option key={x}>{x}</option>)}</select>
-        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inputStyle()}>{ALL_CATEGORIES.map((x) => <option key={x}>{x}</option>)}</select>
-        <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={inputStyle()} placeholder="備註；空白時自動用類別名稱" />
+        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inputStyle()}>{ALL_CATEGORIES.map((x) => x === "────────" ? <option key={x} disabled>{x}</option> : <option key={x}>{x}</option>)}</select>
+        <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={inputStyle()} placeholder="備註；空白時自動用分類名稱" />
         {isFixedCategory(form.category) ? <div style={{ color: "#fde68a", fontSize: 12, fontWeight: 850 }}>此類別會自動列入固定支出。</div> : null}
         <button onClick={save} style={{ border: "none", borderRadius: 16, padding: 14, background: "linear-gradient(90deg,#38bdf8,#22c55e)", color: "#020617", fontWeight: 1000 }}>儲存這筆</button>
       </div>
