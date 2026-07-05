@@ -1,6 +1,7 @@
 const { hasMegaNodeKey } = require("../../../lib/xstocks/transfer-source");
 const { fetchMoralisTokenTransfers, hasMoralisKey } = require("../../../lib/xstocks/moralis");
 const { fetchMegaNodeTransfers } = require("../../../lib/xstocks/meganode");
+const { fetchPublicRpcTransfers, hasPublicRpcConfig } = require("../../../lib/xstocks/publicRpcLogs");
 const { fetchBscScanTokenTransfers, hasBscScanKey } = require("../../../lib/xstocks/bscscan");
 const { fetchWalletBalancesViaRpc } = require("../../../lib/xstocks/rpcBalances");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol, txAmount } = require("../../../lib/xstocks/costBasis");
@@ -71,6 +72,7 @@ async function runTransferSourceDiagnostics(walletAddress) {
   const sources = [
     { name: "Moralis", configured: hasMoralisKey(), fetcher: fetchMoralisTokenTransfers },
     { name: "MegaNode / NodeReal", configured: hasMegaNodeKey(), fetcher: fetchMegaNodeTransfers },
+    { name: "Public BSC RPC", configured: hasPublicRpcConfig(), fetcher: fetchPublicRpcTransfers },
     { name: "BscScan / Etherscan V2", configured: hasBscScanKey(), fetcher: fetchBscScanTokenTransfers },
   ];
   const results = [];
@@ -111,9 +113,10 @@ export default async function handler(req, res) {
     walletConfigured: isEvmAddress(walletAddress),
     moralisConfigured: hasMoralisKey(),
     megaNodeConfigured: hasMegaNodeKey(),
+    publicRpcConfigured: hasPublicRpcConfig(),
     bscScanConfigured: hasBscScanKey(),
     watchlist: WATCHLIST,
-    policy: { xstocksQuantitySource: "BSC balanceOf", transferSourcePriority: "Moralis -> MegaNode / NodeReal -> BscScan / Etherscan V2", costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY", noEstimatedCost: true, noFallbackCost: true }
+    policy: { xstocksQuantitySource: "BSC balanceOf", transferSourcePriority: "Moralis -> MegaNode / NodeReal -> Public BSC RPC -> BscScan / Etherscan V2", costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY", noEstimatedCost: true, noFallbackCost: true }
   };
   if (!isEvmAddress(walletAddress)) return res.status(200).json({ ...base, status: "NO_WALLET_ADDRESS", message: "WALLET_ADDRESS missing or invalid." });
 
