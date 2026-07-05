@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
 function tone(status) {
-  if (["PASS", "PASS_API_SYNCED"].includes(status)) {
+  if (["PASS", "PASS_API_SYNCED", "VERIFIED_TX_REGISTRY_PASS", "PASS_WITH_VERIFIED_TX_REGISTRY"].includes(status)) {
     return { color: "#86efac", border: "rgba(34,197,94,.35)", bg: "rgba(34,197,94,.12)" };
   }
-  if (["PARTIAL_COST_BASIS", "ONLY_TRANSFER_IN_NO_BUY_PATTERN", "NO_BUY_RECORDS", "TRANSFER_API_RETURNED_ZERO", "ZERO", "OFF", "MISSING"].includes(status)) {
+  if (["PARTIAL_COST_BASIS", "ONLY_TRANSFER_IN_NO_BUY_PATTERN", "NO_BUY_RECORDS", "TRANSFER_API_RETURNED_ZERO", "ZERO", "OFF", "MISSING", "VERIFIED_TX_REGISTRY_PARTIAL_LIVE_BALANCE"].includes(status)) {
     return { color: "#fde68a", border: "rgba(245,158,11,.35)", bg: "rgba(245,158,11,.12)" };
   }
   return { color: "#fca5a5", border: "rgba(239,68,68,.35)", bg: "rgba(239,68,68,.12)" };
@@ -53,6 +53,9 @@ export default function CostBasisAuditPage() {
 
   useEffect(() => { load(); }, []);
   const t = tone(data?.status);
+  const expectedCount = data?.expectedSymbolCount ?? data?.watchlist?.length ?? 0;
+  const liveCount = data?.liveSymbolCount ?? data?.liveBalanceCount ?? 0;
+  const missingLive = data?.missingLiveSymbols || [];
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 40px" }}>
@@ -75,12 +78,20 @@ export default function CostBasisAuditPage() {
       </Card>
 
       <Card>
+        <Title title="Universe 覆蓋檢查" right={`${liveCount} / ${expectedCount}`} />
+        <Row title="Sealed xStocks Universe" sub={(data?.expectedSymbols || data?.watchlist || []).join(" / ")} value={expectedCount} status={expectedCount === 9 ? "PASS" : "FAIL"} />
+        <Row title="Live Balance Symbols" sub={(data?.liveSymbols || []).join(" / ") || "沒有正數 balance"} value={liveCount} status={liveCount === expectedCount ? "PASS" : "VERIFIED_TX_REGISTRY_PARTIAL_LIVE_BALANCE"} />
+        <Row title="Missing From Live Balance" sub="有在 sealed universe，但 balanceOf 正數持倉沒有出現" value={missingLive.length ? missingLive.join(", ") : "NONE"} status={missingLive.length ? "MISSING" : "PASS"} />
+      </Card>
+
+      <Card>
         <Title title="來源設定" right={data?.walletAddress || "wallet"} />
         <Row title="WALLET_ADDRESS" value={data?.walletConfigured ? "PASS" : "FAIL"} status={data?.walletConfigured ? "PASS" : "FAIL"} />
         <Row title="Moralis" value={data?.moralisConfigured ? "ON" : "OFF"} status={data?.moralisConfigured ? "PASS" : "OFF"} />
         <Row title="MegaNode / NodeReal" value={data?.megaNodeConfigured ? "ON" : "OFF"} status={data?.megaNodeConfigured ? "PASS" : "OFF"} />
         <Row title="BscScan / Etherscan V2" value={data?.bscScanConfigured ? "ON" : "OFF"} status={data?.bscScanConfigured ? "PASS" : "OFF"} />
         <Row title="最後使用來源" sub="有資料的第一個 transfer source" value={data?.transferSourceUsed || "—"} status={data?.transferSourceUsed && data.transferSourceUsed !== "none" ? "PASS" : "ZERO"} />
+        <Row title="Verified Tx Registry" sub="tx hash receipt/log 驗證成本來源" value={data?.verifiedTxRegistryCount ?? 0} status={(data?.verifiedTxRegistryCount || 0) > 0 ? "PASS" : "MISSING"} />
         <Row title="規則" sub="同一 tx hash 內 stablecoin OUT + xStock IN 才算 BUY" value="STRICT" />
       </Card>
 
@@ -102,8 +113,8 @@ export default function CostBasisAuditPage() {
       </Card>
 
       <Card>
-        <Title title="鏈上持倉成本狀態" right={`${data?.liveBalanceCount ?? 0} 檔`} />
-        {(data?.liveHoldings || []).map((h) => <Row key={h.symbol} title={h.symbol} sub={`${h.quantity}｜${h.contractAddress || "no contract"}`} value={h.costStatus} status={h.costStatus === "PASS" ? "PASS" : "MISSING"} />)}
+        <Title title="鏈上正數持倉成本狀態" right={`${data?.liveBalanceCount ?? 0} 檔`} />
+        {(data?.liveHoldings || []).map((h) => <Row key={h.symbol} title={h.symbol} sub={`${h.quantity}｜${h.contractAddress || "no contract"}｜${h.costBasisSource || "source?"}`} value={h.costStatus} status={h.costStatus === "PASS" ? "PASS" : "MISSING"} />)}
       </Card>
 
       <Card>
@@ -118,10 +129,9 @@ export default function CostBasisAuditPage() {
       <Card>
         <Title title="下一步判斷" />
         <div style={{ color: "#cbd5e1", lineHeight: 1.75, fontSize: 14, fontWeight: 800 }}>
-          如果 Moralis = ZERO，但 BscScan = PASS：代表 Moralis endpoint 問題，成本可改吃 BscScan。<br />
-          如果 Moralis / BscScan 都是 ZERO：代表目前這個地址查不到 transfer history，可能是 provider 限制或地址不是交易發生地址。<br />
-          如果有 xStock IN 但沒有 stablecoin OUT：代表目前錢包看到的是轉入，不是買入交易。<br />
-          如果 BUY Pattern 有數字但 Official BUY = 0：代表 costBasis parser 有 bug。
+          先看 Universe 覆蓋檢查：sealed universe 應為 9 檔。若 live balance 只有 8 檔，要先查缺的 symbol 是 0 balance、合約錯誤，還是 balanceOf 失敗。<br />
+          Transfer providers 失敗不等於成本無效；verified tx registry 可作為已驗證 tx hash 成本來源。<br />
+          但不能把 8 檔說成 9 檔，也不能把沒有正數 balance 的 symbol 當成已持倉。
         </div>
       </Card>
     </div>
