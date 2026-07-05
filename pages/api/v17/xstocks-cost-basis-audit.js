@@ -5,6 +5,7 @@ const { fetchPublicRpcTransfers, hasPublicRpcConfig } = require("../../../lib/xs
 const { fetchBscScanTokenTransfers, hasBscScanKey } = require("../../../lib/xstocks/bscscan");
 const { fetchWalletBalancesViaRpc } = require("../../../lib/xstocks/rpcBalances");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol, txAmount } = require("../../../lib/xstocks/costBasis");
+const { VERIFIED_TX_COST_SOURCES } = require("../../../lib/xstocks/verifiedTxCostSources");
 const { WATCHLIST, STABLECOINS, toLower } = require("../../../lib/xstocks/constants");
 
 function cleanAddress(value) { return String(value || "").trim(); }
@@ -13,6 +14,23 @@ function maskAddress(address) { const a = cleanAddress(address); return a ? `${a
 function upper(value) { return String(value || "").trim().toUpperCase(); }
 function safeNumber(value) { const n = Number(value || 0); return Number.isFinite(n) ? n : 0; }
 function normalizeSymbol(symbol) { const s = upper(symbol); return s.endsWith("ON") ? s : `${s}ON`; }
+function verifiedCostMap() {
+  const map = new Map();
+  for (const source of Object.values(VERIFIED_TX_COST_SOURCES || {})) {
+    const symbol = normalizeSymbol(source.symbol);
+    if (!symbol || !(safeNumber(source.totalCost) > 0)) continue;
+    map.set(symbol, {
+      symbol,
+      totalCost: safeNumber(source.totalCost),
+      buyCount: safeNumber(source.buyCount),
+      sellCount: 0,
+      costBasisSource: "verified_tx_hash_receipt",
+      txHashes: source.txHashes || [],
+      verifiedRule: "stablecoin OUT + xStock IN in same tx hash = BUY",
+    });
+  }
+  return map;
+}
 
 const STABLE_SYMBOLS = new Set([...STABLECOINS, "USDT", "USDC", "BUSD", "BSC-USD", "USDON", "USDon"].map(upper));
 function isStablecoinLike(tx) {
@@ -106,6 +124,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, message: "Method not allowed" });
   }
   const walletAddress = cleanAddress(process.env.WALLET_ADDRESS);
+  const verifiedMap = verifiedCostMap();
   const base = {
     ok: true,
     checkedAt: new Date().toISOString(),
@@ -115,8 +134,17 @@ export default async function handler(req, res) {
     megaNodeConfigured: hasMegaNodeKey(),
     publicRpcConfigured: hasPublicRpcConfig(),
     bscScanConfigured: hasBscScanKey(),
+    verifiedTxRegistryConfigured: verifiedMap.size > 0,
+    verifiedTxRegistryCount: verifiedMap.size,
     watchlist: WATCHLIST,
-    policy: { xstocksQuantitySource: "BSC balanceOf", transferSourcePriority: "Moralis -> MegaNode / NodeReal -> Public BSC RPC -> BscScan / Etherscan V2", costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY", noEstimatedCost: true, noFallbackCost: true }
+    policy: {
+      xstocksQuantitySource: "BSC balanceOf",
+      transferSourcePriority: "Moralis -> MegaNode / NodeReal -> Public BSC RPC -> BscScan / Etherscan V2",
+      verifiedFallbackSource: "verified_tx_hash_receipt registry",
+      costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY",
+      noEstimatedCost: true,
+      noFallbackCost: true
+    }
   };
   if (!isEvmAddress(walletAddress)) return res.status(200).json({ ...base, status: "NO_WALLET_ADDRESS", message: "WALLET_ADDRESS missing or invalid." });
 
@@ -140,24 +168,72 @@ export default async function handler(req, res) {
   const officialBuyRecords = buyRecords.filter((r) => r.type === "BUY");
   const transferInRecords = buyRecords.filter((r) => r.type === "TRANSFER_IN");
   const sellRecords = buyRecords.filter((r) => r.type === "SELL");
-  const costHoldings = calculateHoldings(buyRecords);
-  const costMap = normalizeHoldingMap(costHoldings);
+  const transferCostHoldings = calculateHoldings(buyRecords);
+  const transferCostMap = normalizeHoldingMap(transferCostHoldings);
+  const costHoldingsMap = new Map(verifiedMap);
+  for (const h of transferCostHoldings || []) {
+    if (safeNumber(h.totalCost) > 0) costHoldingsMap.set(normalizeSymbol(h.symbol), { ...h, costBasisSource: h.costBasisSource || "transfer_history" });
+  }
+  const costHoldings = [...costHoldingsMap.values()].sort((a, b) => String(a.symbol).localeCompare(String(b.symbol)));
   const liveHoldings = (liveBalanceResult.holdings || []).filter((h) => safeNumber(h.quantity) > 0).map((h) => {
     const symbol = normalizeSymbol(h.symbol);
-    const cost = costMap.get(symbol);
-    return { symbol, quantity: safeNumber(h.quantity), contractAddress: h.contractAddress || null, balanceSource: h.source || null, costStatus: cost?.totalCost > 0 ? "PASS" : "MISSING", totalCost: safeNumber(cost?.totalCost), buyCount: safeNumber(cost?.buyCount), sellCount: safeNumber(cost?.sellCount) };
+    const transferCost = transferCostMap.get(symbol);
+    const verifiedCost = verifiedMap.get(symbol);
+    const cost = transferCost?.totalCost > 0 ? transferCost : verifiedCost;
+    const source = transferCost?.totalCost > 0 ? "transfer_history" : verifiedCost?.totalCost > 0 ? "verified_tx_hash_receipt" : "missing";
+    return {
+      symbol,
+      quantity: safeNumber(h.quantity),
+      contractAddress: h.contractAddress || null,
+      balanceSource: h.source || null,
+      costStatus: cost?.totalCost > 0 ? "PASS" : "MISSING",
+      costBasisSource: source,
+      totalCost: safeNumber(cost?.totalCost),
+      buyCount: safeNumber(cost?.buyCount),
+      sellCount: safeNumber(cost?.sellCount),
+      txHashes: cost?.txHashes || cost?.verifiedTxHashes || []
+    };
   });
 
   const transferSummary = summarizeTransfers(transfers || [], walletAddress);
+  const liveMissingCount = liveHoldings.filter((h) => h.costStatus === "MISSING").length;
+  const liveVerifiedCount = liveHoldings.filter((h) => h.costBasisSource === "verified_tx_hash_receipt").length;
   let status = "CHECK";
   let diagnosis = "";
-  if (transferError) { status = "TRANSFER_FETCH_ERROR"; diagnosis = "Transfer API threw an error before returning data."; }
-  else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "All configured transfer sources returned 0 or no usable ERC20 transfers for this wallet, so cost basis cannot be reconstructed."; }
+  if (transferError) { status = liveMissingCount === 0 ? "VERIFIED_TX_REGISTRY_PASS_TRANSFER_ERROR" : "TRANSFER_FETCH_ERROR"; diagnosis = liveMissingCount === 0 ? "Transfer API errored, but all live holdings have verified tx hash receipt cost sources." : "Transfer API threw an error before returning data."; }
+  else if (!transfers.length && liveMissingCount === 0 && liveHoldings.length > 0) { status = "VERIFIED_TX_REGISTRY_PASS"; diagnosis = "Transfer providers returned zero/error, but all live xStock holdings have verified tx hash receipt cost sources."; }
+  else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "All configured transfer sources returned 0 or no usable ERC20 transfers for this wallet, so transfer-history cost basis cannot be reconstructed. Verified tx registry may still provide audited costs for specific holdings."; }
+  else if (officialBuyRecords.length === 0 && transferInRecords.length > 0 && liveMissingCount === 0) { status = "VERIFIED_TX_REGISTRY_PASS_ONLY_TRANSFER_IN"; diagnosis = "Transfer scan lacks same-hash BUY patterns, but all live holdings have verified tx hash receipt cost sources."; }
   else if (officialBuyRecords.length === 0 && transferInRecords.length > 0) { status = "ONLY_TRANSFER_IN_NO_BUY_PATTERN"; diagnosis = "xStock inflows exist, but no same-hash stablecoin outflow was found. These are transfer-ins, not buys under the current cost rule."; }
   else if (officialBuyRecords.length === 0 && transferSummary.xstockTransferCount === 0) { status = "TRANSFERS_FOUND_BUT_NO_XSTOCK_MATCH"; diagnosis = "Transfers exist, but none match known xStock contracts/symbols. Contract registry or symbol mapping may be wrong."; }
   else if (officialBuyRecords.length === 0) { status = "NO_BUY_RECORDS"; diagnosis = "Transfers exist, but no BUY pattern was found."; }
-  else if (liveHoldings.some((h) => h.costStatus === "MISSING")) { status = "PARTIAL_COST_BASIS"; diagnosis = "Some xStocks have cost basis, but some live holdings still lack cost."; }
-  else { status = "PASS"; diagnosis = "Live xStocks and transfer-history cost basis are both available."; }
+  else if (liveMissingCount > 0) { status = "PARTIAL_COST_BASIS"; diagnosis = "Some xStocks have cost basis, but some live holdings still lack cost."; }
+  else { status = liveVerifiedCount > 0 ? "PASS_WITH_VERIFIED_TX_REGISTRY" : "PASS"; diagnosis = liveVerifiedCount > 0 ? "Live xStocks all have cost basis; some costs come from verified tx hash receipt registry." : "Live xStocks and transfer-history cost basis are both available."; }
 
-  return res.status(200).json({ ...base, status, diagnosis, transferError, transferSourceUsed: selectedSource, sourceDiagnostics, transferCount: transfers.length, transferSummary, buyRecordCount: buyRecords.length, officialBuyRecordCount: officialBuyRecords.length, transferInRecordCount: transferInRecords.length, sellRecordCount: sellRecords.length, costHoldingCount: costHoldings.length, liveBalanceCount: liveHoldings.length, liveBalanceErrors: liveBalanceResult.errors || [], liveHoldings, costHoldings, sampleBuyRecords: buyRecords.slice(0, 20).map((r) => ({ symbol: r.symbol, type: r.type, quantity: r.quantity, costUsd: r.costUsd, txHash: r.txHash, stablecoinOutflowCount: r.stablecoinOutflowCount, warning: r.warning || null })) });
+  return res.status(200).json({
+    ...base,
+    status,
+    diagnosis,
+    transferError,
+    transferSourceUsed: selectedSource,
+    sourceDiagnostics,
+    transferCount: transfers.length,
+    transferSummary,
+    buyRecordCount: buyRecords.length,
+    officialBuyRecordCount: officialBuyRecords.length,
+    transferInRecordCount: transferInRecords.length,
+    sellRecordCount: sellRecords.length,
+    transferCostHoldingCount: transferCostHoldings.length,
+    verifiedTxCostHoldingCount: verifiedMap.size,
+    costHoldingCount: costHoldings.length,
+    liveBalanceCount: liveHoldings.length,
+    liveCostMissingCount: liveMissingCount,
+    liveVerifiedCostCount: liveVerifiedCount,
+    liveBalanceErrors: liveBalanceResult.errors || [],
+    liveHoldings,
+    costHoldings,
+    verifiedTxCostSources: [...verifiedMap.values()],
+    transferCostHoldings,
+    sampleBuyRecords: buyRecords.slice(0, 20).map((r) => ({ symbol: r.symbol, type: r.type, quantity: r.quantity, costUsd: r.costUsd, txHash: r.txHash, stablecoinOutflowCount: r.stablecoinOutflowCount, warning: r.warning || null }))
+  });
 }
