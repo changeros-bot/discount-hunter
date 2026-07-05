@@ -1,4 +1,4 @@
-const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey, hasBscScanKey, scoreTransfers } = require("../../../lib/xstocks/transfer-source");
+const { fetchWalletTokenTransfers, diagnoseTransferSources, hasMoralisKey, hasMegaNodeKey, hasBscScanKey, scoreTransfers } = require("../../../lib/xstocks/transfer-source");
 const { fetchWalletBalancesViaRpc } = require("../../../lib/xstocks/rpcBalances");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol, txAmount } = require("../../../lib/xstocks/costBasis");
 const { WATCHLIST, STABLECOINS, toLower } = require("../../../lib/xstocks/constants");
@@ -75,19 +75,23 @@ export default async function handler(req, res) {
     megaNodeConfigured: hasMegaNodeKey(),
     bscScanConfigured: hasBscScanKey(),
     watchlist: WATCHLIST,
-    policy: {
-      xstocksQuantitySource: "BSC balanceOf",
-      transferSourcePriority: "Unified source: prefer provider that produces BUY cost basis",
-      costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY",
-      noEstimatedCost: true,
-      noFallbackCost: true
-    }
+    policy: { xstocksQuantitySource: "BSC balanceOf", transferSourcePriority: "Provider diagnostics enabled; selected source still prefers BUY cost basis", costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY", noEstimatedCost: true, noFallbackCost: true }
   };
   if (!isEvmAddress(walletAddress)) return res.status(200).json({ ...base, status: "NO_WALLET_ADDRESS", diagnosis: "WALLET_ADDRESS missing or invalid." });
 
   let transfers = [];
   let transferError = null;
-  try { transfers = await fetchWalletTokenTransfers(walletAddress); } catch (error) { transferError = error.message || String(error); }
+  let sourceDiagnostics = [];
+  let selectedSourceName = "none";
+  try {
+    const diagnosisResult = await diagnoseTransferSources(walletAddress);
+    sourceDiagnostics = diagnosisResult.diagnostics || [];
+    selectedSourceName = diagnosisResult.selected?.name || "none";
+    transfers = diagnosisResult.selected?.transfers || [];
+  } catch (error) {
+    transferError = error.message || String(error);
+    try { transfers = await fetchWalletTokenTransfers(walletAddress); } catch {}
+  }
 
   let liveBalanceResult = { holdings: [], errors: [] };
   try { liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, WATCHLIST, []); } catch (error) { liveBalanceResult = { holdings: [], errors: [error.message] }; }
@@ -102,23 +106,14 @@ export default async function handler(req, res) {
   const liveHoldings = (liveBalanceResult.holdings || []).filter((h) => safeNumber(h.quantity) > 0).map((h) => {
     const symbol = normalizeSymbol(h.symbol);
     const cost = costMap.get(symbol);
-    return {
-      symbol,
-      quantity: safeNumber(h.quantity),
-      contractAddress: h.contractAddress || null,
-      balanceSource: h.source || null,
-      costStatus: cost?.totalCost > 0 ? "PASS" : "MISSING",
-      totalCost: safeNumber(cost?.totalCost),
-      buyCount: safeNumber(cost?.buyCount),
-      sellCount: safeNumber(cost?.sellCount)
-    };
+    return { symbol, quantity: safeNumber(h.quantity), contractAddress: h.contractAddress || null, balanceSource: h.source || null, costStatus: cost?.totalCost > 0 ? "PASS" : "MISSING", totalCost: safeNumber(cost?.totalCost), buyCount: safeNumber(cost?.buyCount), sellCount: safeNumber(cost?.sellCount) };
   });
   const transferSummary = summarizeTransfers(transfers || [], walletAddress);
 
   let status = "CHECK";
   let diagnosis = "";
   if (transferError) { status = "TRANSFER_FETCH_ERROR"; diagnosis = transferError; }
-  else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "Unified transfer source returned zero transfers."; }
+  else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "All provider diagnostics returned zero/error; check sourceDiagnostics for exact provider reason."; }
   else if (officialBuyRecords.length === 0 && transferInRecords.length > 0) { status = "ONLY_TRANSFER_IN_NO_BUY_PATTERN"; diagnosis = "xStock inflows exist, but no same-hash stablecoin outflow was found."; }
   else if (officialBuyRecords.length === 0) { status = "NO_BUY_RECORDS"; diagnosis = "Transfers exist, but no BUY pattern was found."; }
   else if (liveHoldings.some((h) => h.costStatus === "MISSING")) { status = "PARTIAL_COST_BASIS"; diagnosis = "Some live xStocks still lack cost basis."; }
@@ -129,8 +124,8 @@ export default async function handler(req, res) {
     status,
     diagnosis,
     transferError,
-    transferSourceUsed: "unified_fetchWalletTokenTransfers",
-    sourceDiagnostics: [{ name: "Unified transfer source", configured: true, status: score.usableForCostBasis ? "PASS" : transfers.length ? "NO_BUY_COST" : "ZERO", transferCount: transfers.length, error: null, score }],
+    transferSourceUsed: selectedSourceName,
+    sourceDiagnostics,
     transferCount: transfers.length,
     transferSummary,
     buyRecordCount: buyRecords.length,
