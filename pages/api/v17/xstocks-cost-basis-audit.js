@@ -1,4 +1,7 @@
-const { fetchWalletTokenTransfers, diagnoseTransferSources, hasMoralisKey, hasMegaNodeKey, hasBscScanKey, scoreTransfers } = require("../../../lib/xstocks/transfer-source");
+const { hasMegaNodeKey } = require("../../../lib/xstocks/transfer-source");
+const { fetchMoralisTokenTransfers, hasMoralisKey } = require("../../../lib/xstocks/moralis");
+const { fetchMegaNodeTransfers } = require("../../../lib/xstocks/meganode");
+const { fetchBscScanTokenTransfers, hasBscScanKey } = require("../../../lib/xstocks/bscscan");
 const { fetchWalletBalancesViaRpc } = require("../../../lib/xstocks/rpcBalances");
 const { buildBuyRecordsFromTransfers, calculateHoldings, getXStockSymbol, txAmount } = require("../../../lib/xstocks/costBasis");
 const { WATCHLIST, STABLECOINS, toLower } = require("../../../lib/xstocks/constants");
@@ -34,6 +37,8 @@ function summarizeTransfers(transfers, walletAddress) {
   let xstockTransferCount = 0;
   let stableTransferCount = 0;
   let possibleBuyHashCount = 0;
+  let xstockInWithoutStableOutCount = 0;
+  let stableOutWithoutXstockInCount = 0;
   for (const [hash, txs] of byHash.entries()) {
     const xIn = txs.filter((tx) => getXStockSymbol(tx) && toLower(tx.to) === my);
     const xOut = txs.filter((tx) => getXStockSymbol(tx) && toLower(tx.from) === my);
@@ -42,6 +47,8 @@ function summarizeTransfers(transfers, walletAddress) {
     xstockTransferCount += xIn.length + xOut.length;
     stableTransferCount += stableOut.length + stableIn.length;
     if (xIn.length > 0 && stableOut.length > 0) possibleBuyHashCount += 1;
+    if (xIn.length > 0 && stableOut.length === 0) xstockInWithoutStableOutCount += 1;
+    if (stableOut.length > 0 && xIn.length === 0) stableOutWithoutXstockInCount += 1;
     if (sample.length < 20 && (xIn.length || xOut.length || stableOut.length || stableIn.length)) {
       sample.push({
         hash,
@@ -53,18 +60,49 @@ function summarizeTransfers(transfers, walletAddress) {
       });
     }
   }
-  return { uniqueHashCount: byHash.size, xstockTransferCount, stableTransferCount, possibleBuyHashCount, sample };
+  return { uniqueHashCount: byHash.size, xstockTransferCount, stableTransferCount, possibleBuyHashCount, xstockInWithoutStableOutCount, stableOutWithoutXstockInCount, sample };
 }
 function normalizeHoldingMap(holdings) {
   const map = new Map();
   for (const h of holdings || []) map.set(normalizeSymbol(h.symbol), h);
   return map;
 }
+async function runTransferSourceDiagnostics(walletAddress) {
+  const sources = [
+    { name: "Moralis", configured: hasMoralisKey(), fetcher: fetchMoralisTokenTransfers },
+    { name: "MegaNode / NodeReal", configured: hasMegaNodeKey(), fetcher: fetchMegaNodeTransfers },
+    { name: "BscScan / Etherscan V2", configured: hasBscScanKey(), fetcher: fetchBscScanTokenTransfers },
+  ];
+  const results = [];
+  let selected = [];
+  let selectedSource = "none";
+  for (const source of sources) {
+    if (!source.configured) {
+      results.push({ name: source.name, configured: false, status: "OFF", transferCount: 0, error: null });
+      continue;
+    }
+    try {
+      const rows = await source.fetcher(walletAddress);
+      const transferCount = Array.isArray(rows) ? rows.length : 0;
+      const status = transferCount > 0 ? "PASS" : "ZERO";
+      results.push({ name: source.name, configured: true, status, transferCount, error: null });
+      if (selected.length === 0 && transferCount > 0) {
+        selected = rows;
+        selectedSource = source.name;
+      }
+    } catch (error) {
+      results.push({ name: source.name, configured: true, status: "ERROR", transferCount: 0, error: error.message || String(error) });
+    }
+  }
+  return { transfers: selected, selectedSource, sourceDiagnostics: results };
+}
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-  if (req.method !== "GET" && req.method !== "POST") return res.status(405).json({ ok: false, message: "Method not allowed" });
-
+  if (req.method !== "GET" && req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ ok: false, message: "Method not allowed" });
+  }
   const walletAddress = cleanAddress(process.env.WALLET_ADDRESS);
   const base = {
     ok: true,
@@ -75,28 +113,26 @@ export default async function handler(req, res) {
     megaNodeConfigured: hasMegaNodeKey(),
     bscScanConfigured: hasBscScanKey(),
     watchlist: WATCHLIST,
-    policy: { xstocksQuantitySource: "BSC balanceOf", transferSourcePriority: "Provider diagnostics enabled; selected source still prefers BUY cost basis", costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY", noEstimatedCost: true, noFallbackCost: true }
+    policy: { xstocksQuantitySource: "BSC balanceOf", transferSourcePriority: "Moralis -> MegaNode / NodeReal -> BscScan / Etherscan V2", costBasisRule: "stablecoin OUT + xStock IN in same tx hash = BUY", noEstimatedCost: true, noFallbackCost: true }
   };
-  if (!isEvmAddress(walletAddress)) return res.status(200).json({ ...base, status: "NO_WALLET_ADDRESS", diagnosis: "WALLET_ADDRESS missing or invalid." });
+  if (!isEvmAddress(walletAddress)) return res.status(200).json({ ...base, status: "NO_WALLET_ADDRESS", message: "WALLET_ADDRESS missing or invalid." });
 
   let transfers = [];
   let transferError = null;
+  let selectedSource = "none";
   let sourceDiagnostics = [];
-  let selectedSourceName = "none";
   try {
-    const diagnosisResult = await diagnoseTransferSources(walletAddress);
-    sourceDiagnostics = diagnosisResult.diagnostics || [];
-    selectedSourceName = diagnosisResult.selected?.name || "none";
-    transfers = diagnosisResult.selected?.transfers || [];
+    const result = await runTransferSourceDiagnostics(walletAddress);
+    transfers = result.transfers;
+    selectedSource = result.selectedSource;
+    sourceDiagnostics = result.sourceDiagnostics;
   } catch (error) {
-    transferError = error.message || String(error);
-    try { transfers = await fetchWalletTokenTransfers(walletAddress); } catch {}
+    transferError = error.message;
   }
 
   let liveBalanceResult = { holdings: [], errors: [] };
   try { liveBalanceResult = await fetchWalletBalancesViaRpc(walletAddress, WATCHLIST, []); } catch (error) { liveBalanceResult = { holdings: [], errors: [error.message] }; }
 
-  const score = scoreTransfers(transfers || [], walletAddress);
   const buyRecords = buildBuyRecordsFromTransfers(transfers || [], walletAddress);
   const officialBuyRecords = buyRecords.filter((r) => r.type === "BUY");
   const transferInRecords = buyRecords.filter((r) => r.type === "TRANSFER_IN");
@@ -108,35 +144,17 @@ export default async function handler(req, res) {
     const cost = costMap.get(symbol);
     return { symbol, quantity: safeNumber(h.quantity), contractAddress: h.contractAddress || null, balanceSource: h.source || null, costStatus: cost?.totalCost > 0 ? "PASS" : "MISSING", totalCost: safeNumber(cost?.totalCost), buyCount: safeNumber(cost?.buyCount), sellCount: safeNumber(cost?.sellCount) };
   });
-  const transferSummary = summarizeTransfers(transfers || [], walletAddress);
 
+  const transferSummary = summarizeTransfers(transfers || [], walletAddress);
   let status = "CHECK";
   let diagnosis = "";
-  if (transferError) { status = "TRANSFER_FETCH_ERROR"; diagnosis = transferError; }
-  else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "All provider diagnostics returned zero/error; check sourceDiagnostics for exact provider reason."; }
-  else if (officialBuyRecords.length === 0 && transferInRecords.length > 0) { status = "ONLY_TRANSFER_IN_NO_BUY_PATTERN"; diagnosis = "xStock inflows exist, but no same-hash stablecoin outflow was found."; }
+  if (transferError) { status = "TRANSFER_FETCH_ERROR"; diagnosis = "Transfer API threw an error before returning data."; }
+  else if (!transfers.length) { status = "TRANSFER_API_RETURNED_ZERO"; diagnosis = "All configured transfer sources returned 0 or no usable ERC20 transfers for this wallet, so cost basis cannot be reconstructed."; }
+  else if (officialBuyRecords.length === 0 && transferInRecords.length > 0) { status = "ONLY_TRANSFER_IN_NO_BUY_PATTERN"; diagnosis = "xStock inflows exist, but no same-hash stablecoin outflow was found. These are transfer-ins, not buys under the current cost rule."; }
+  else if (officialBuyRecords.length === 0 && transferSummary.xstockTransferCount === 0) { status = "TRANSFERS_FOUND_BUT_NO_XSTOCK_MATCH"; diagnosis = "Transfers exist, but none match known xStock contracts/symbols. Contract registry or symbol mapping may be wrong."; }
   else if (officialBuyRecords.length === 0) { status = "NO_BUY_RECORDS"; diagnosis = "Transfers exist, but no BUY pattern was found."; }
-  else if (liveHoldings.some((h) => h.costStatus === "MISSING")) { status = "PARTIAL_COST_BASIS"; diagnosis = "Some live xStocks still lack cost basis."; }
+  else if (liveHoldings.some((h) => h.costStatus === "MISSING")) { status = "PARTIAL_COST_BASIS"; diagnosis = "Some xStocks have cost basis, but some live holdings still lack cost."; }
   else { status = "PASS"; diagnosis = "Live xStocks and transfer-history cost basis are both available."; }
 
-  return res.status(200).json({
-    ...base,
-    status,
-    diagnosis,
-    transferError,
-    transferSourceUsed: selectedSourceName,
-    sourceDiagnostics,
-    transferCount: transfers.length,
-    transferSummary,
-    buyRecordCount: buyRecords.length,
-    officialBuyRecordCount: officialBuyRecords.length,
-    transferInRecordCount: transferInRecords.length,
-    sellRecordCount: sellRecords.length,
-    costHoldingCount: costHoldings.length,
-    liveBalanceCount: liveHoldings.length,
-    liveBalanceErrors: liveBalanceResult.errors || [],
-    liveHoldings,
-    costHoldings,
-    sampleBuyRecords: buyRecords.slice(0, 20).map((r) => ({ symbol: r.symbol, type: r.type, quantity: r.quantity, costUsd: r.costUsd, txHash: r.txHash, stablecoinOutflowCount: r.stablecoinOutflowCount, warning: r.warning || null }))
-  });
+  return res.status(200).json({ ...base, status, diagnosis, transferError, transferSourceUsed: selectedSource, sourceDiagnostics, transferCount: transfers.length, transferSummary, buyRecordCount: buyRecords.length, officialBuyRecordCount: officialBuyRecords.length, transferInRecordCount: transferInRecords.length, sellRecordCount: sellRecords.length, costHoldingCount: costHoldings.length, liveBalanceCount: liveHoldings.length, liveBalanceErrors: liveBalanceResult.errors || [], liveHoldings, costHoldings, sampleBuyRecords: buyRecords.slice(0, 20).map((r) => ({ symbol: r.symbol, type: r.type, quantity: r.quantity, costUsd: r.costUsd, txHash: r.txHash, stablecoinOutflowCount: r.stablecoinOutflowCount, warning: r.warning || null })) });
 }
