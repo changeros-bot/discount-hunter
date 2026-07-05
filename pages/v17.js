@@ -54,7 +54,9 @@ function hasChainVerifiableCost(holding) {
   if (!(cost > 0)) return false;
   if (holding?.costBasisMissing) return false;
   const source = String(holding?.costBasisSource || "");
-  return source.includes("transfer_history") || source.includes("binance_myTrades");
+  return source.includes("transfer_history")
+    || source.includes("binance_myTrades")
+    || source.includes("verified_tx_hash_receipt");
 }
 
 function mergeHoldingsBySymbol(...groups) {
