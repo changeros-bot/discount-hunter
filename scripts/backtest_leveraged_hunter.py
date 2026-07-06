@@ -41,7 +41,7 @@ BATCHES: Dict[str, List[str]] = {
     "C": ["AMD", "META", "MSFT", "COIN", "HOOD", "CRCL", "PLTR", "TSLA", "MSTR", "COHR", "CAMT", "MKSI"],
 }
 
-FORWARD_WINDOWS = (5, 10, 20, 60)
+FORWARD_WINDOWS = (5, 10, 20, 30, 60)
 
 
 @dataclass(frozen=True)
