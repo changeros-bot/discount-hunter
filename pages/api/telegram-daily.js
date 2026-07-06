@@ -10,6 +10,57 @@ function parsePercentValue(value) {
   return Number.isFinite(number) ? number : NaN;
 }
 
+function holdingValue(holding) {
+  return num(holding?.currentValue ?? holding?.marketValue ?? holding?.positionValue ?? holding?.rawCurrentValue ?? holding?.value);
+}
+
+function hasRealCost(holding) {
+  const cost = num(holding?.totalCost ?? holding?.cost ?? holding?.costBasis);
+  if (!(cost > 0)) return false;
+  if (holding?.costBasisMissing) return false;
+  const source = String(holding?.costBasisSource || "");
+  return source.includes("transfer_history")
+    || source.includes("binance_myTrades")
+    || source.includes("verified_tx_hash_receipt")
+    || source.includes("raw_buy_ledger")
+    || source === "";
+}
+
+function mergeHoldingsBySymbol(...groups) {
+  const map = new Map();
+  for (const group of groups || []) {
+    for (const holding of group || []) {
+      const symbol = String(holding?.symbol || "").trim().toUpperCase();
+      if (!symbol || num(holding?.quantity) <= 0) continue;
+      map.set(symbol, holding);
+    }
+  }
+  return [...map.values()];
+}
+
+function walletTotals({ wallet, exchange }) {
+  const holdings = mergeHoldingsBySymbol(wallet?.holdings || [], exchange?.holdings || []);
+  const live = holdings.filter((h) => num(h.quantity) > 0);
+  const known = live.filter(hasRealCost);
+  const missing = live.filter((h) => !hasRealCost(h));
+  const totalCost = known.reduce((sum, h) => sum + num(h.totalCost ?? h.cost ?? h.costBasis), 0);
+  const currentValue = live.reduce((sum, h) => sum + holdingValue(h), 0);
+  const costReady = live.length > 0 && missing.length === 0;
+  const pnl = costReady ? currentValue - totalCost : null;
+  const pnlPct = costReady && totalCost > 0 ? pnl / totalCost : null;
+  return {
+    holdings: live,
+    knownCount: known.length,
+    missingCount: missing.length,
+    missingSymbols: missing.map((h) => String(h.symbol || "").toUpperCase()).filter(Boolean),
+    totalCost: costReady ? totalCost : null,
+    currentValue,
+    pnl,
+    pnlPct,
+    costReady,
+  };
+}
+
 function getNextBuyPoint(asset) {
   const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
@@ -23,71 +74,102 @@ function getNextBuyPoint(asset) {
   const previousDepth = targetIndex === 0 ? 0 : ruleDepths[targetIndex - 1];
   const targetDepth = ruleDepths[targetIndex];
   const range = Math.max(1, targetDepth - previousDepth);
-  const progress = currentDepth >= targetDepth ? 100 : Math.min(100, Math.max(0, ((currentDepth - previousDepth) / range) * 100));
+  const reached = currentDepth >= targetDepth;
+  const progress = reached ? 100 : Math.min(100, Math.max(0, ((currentDepth - previousDepth) / range) * 100));
   const remaining = Math.max(0, targetDepth - currentDepth);
+  const model = asset.assetType === "crypto" || String(asset.symbol || "").toUpperCase() === "BTC"
+    ? "Cycle High"
+    : "52W High";
 
-  return { currentDepth, targetDepth, remaining, progress, targetAmount: amounts[targetIndex] || 0 };
+  return {
+    currentDepth,
+    targetDepth,
+    remaining,
+    progress,
+    reached,
+    targetAmount: amounts[targetIndex] || 0,
+    model,
+  };
 }
 
-function buildAlertRows(assets) {
-  return (assets || [])
+function buildSignalRows(assets) {
+  const rows = (assets || [])
     .map((asset) => {
       const next = getNextBuyPoint(asset);
       if (!next) return null;
-      const label = next.remaining <= 1 ? "🟢" : next.remaining <= 5 ? "🟡" : "⚪";
-      return { symbol: asset.symbol, ...next, label };
+      return { symbol: asset.symbol, name: asset.name, ...next };
     })
-    .filter(Boolean)
-    .filter((row) => row.remaining <= 5)
-    .sort((a, b) => a.remaining - b.remaining);
-}
+    .filter(Boolean);
 
-function walletTotals(wallet) {
-  const holdings = wallet?.holdings || [];
-  const totalCost = holdings.reduce((sum, h) => sum + num(h.totalCost ?? h.cost ?? h.costBasis), 0);
-  const currentValue = holdings.reduce((sum, h) => sum + num(h.currentValue ?? h.value ?? h.marketValue), 0);
-  const pnl = currentValue - totalCost;
-  const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
-  return { holdings, totalCost, currentValue, pnl, pnlPct };
+  return {
+    reached: rows.filter((row) => row.reached).sort((a, b) => b.targetDepth - a.targetDepth),
+    near: rows.filter((row) => !row.reached && row.remaining <= 5).sort((a, b) => a.remaining - b.remaining),
+  };
 }
 
 function formatMoney(value) {
-  const sign = value < 0 ? "-" : "";
-  return `${sign}$${Math.abs(value).toFixed(2)}`;
+  if (value === null || value === undefined) return "N/A";
+  const n = Number(value || 0);
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${Math.abs(n).toFixed(2)}`;
 }
 
-function buildMessage({ wallet, prices }) {
-  const totals = walletTotals(wallet);
-  const alerts = buildAlertRows(prices?.data || []);
+function formatSignedMoney(value) {
+  if (value === null || value === undefined) return "N/A";
+  const n = Number(value || 0);
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
+}
+
+function formatSignedPct(value) {
+  if (value === null || value === undefined) return "N/A";
+  const n = Number(value || 0) * 100;
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+function buildMessage({ wallet, exchange, prices }) {
+  const totals = walletTotals({ wallet, exchange });
+  const signals = buildSignalRows(prices?.data || []);
   const checkedAt = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
-  const holdingsCount = wallet?.debugCounts?.holdingsCount ?? totals.holdings.length;
 
   const lines = [
     "📊 DCA折價獵人日報",
     "",
     `時間：${checkedAt}`,
     "",
-    `總投入：${formatMoney(totals.totalCost)}`,
+    `總成本：${formatMoney(totals.totalCost)}`,
     `目前市值：${formatMoney(totals.currentValue)}`,
-    `未實現損益：${formatMoney(totals.pnl)}`,
-    `報酬率：${totals.pnlPct.toFixed(2)}%`,
-    `持倉數：${holdingsCount}`,
+    `未實現損益：${formatSignedMoney(totals.pnl)}`,
+    `報酬率：${formatSignedPct(totals.pnlPct)}`,
+    `持倉數：${totals.holdings.length}`,
+    `成本狀態：已取得 ${totals.knownCount}｜缺成本 ${totals.missingCount}`,
     "",
   ];
 
-  if (alerts.length > 0) {
-    lines.push(`🔔 買點警報：${alerts.length} 檔`);
-    alerts.forEach((row) => {
-      lines.push(`${row.label} ${row.symbol}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%｜建議 ${row.targetAmount}U`);
+  if (signals.reached.length > 0) {
+    lines.push(`🟢 已達買點：${signals.reached.length} 檔`);
+    signals.reached.forEach((row) => {
+      lines.push(`${row.symbol}｜${row.model}｜D${row.targetDepth}%｜進度 ${row.progress.toFixed(0)}%｜建議 ${row.targetAmount}U`);
     });
-  } else {
-    lines.push("🔔 買點警報：目前無即將觸發買點");
+    lines.push("");
+  }
+
+  if (signals.near.length > 0) {
+    lines.push(`🟡 接近買點：${signals.near.length} 檔`);
+    signals.near.forEach((row) => {
+      lines.push(`${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%｜暫不買`);
+    });
+  } else if (signals.reached.length === 0) {
+    lines.push("🔔 今日無達標買點，也無接近買點");
   }
 
   lines.push("");
-  lines.push(`Wallet：${holdingsCount} 檔持倉資料正常`);
+  if (totals.costReady) {
+    lines.push(`Wallet：${totals.holdings.length} 檔持倉資料正常`);
+  } else {
+    lines.push(`Wallet：${totals.holdings.length} 檔持倉；缺成本：${totals.missingSymbols.join("、") || "unknown"}`);
+  }
 
-  return { message: lines.join("\n"), alertCount: alerts.length, totals };
+  return { message: lines.join("\n"), alertCount: signals.reached.length, nearCount: signals.near.length, totals, signals };
 }
 
 async function readJsonSafe(response) {
@@ -104,17 +186,19 @@ async function handler(req, res) {
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const base = `${protocol}://${host}`;
 
-    const [walletRes, pricesRes] = await Promise.all([
+    const [walletRes, exchangeRes, pricesRes] = await Promise.all([
       fetch(`${base}/api/sync-wallet?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
         cache: "no-store",
       }),
+      fetch(`${base}/api/binance-exchange-position?t=${Date.now()}`, { cache: "no-store" }),
       fetch(`${base}/api/prices?t=${Date.now()}`, { cache: "no-store" }),
     ]);
 
     const wallet = await readJsonSafe(walletRes);
+    const exchange = await readJsonSafe(exchangeRes);
     const prices = await readJsonSafe(pricesRes);
 
     if (!walletRes.ok || !pricesRes.ok || wallet?.ok === false || prices?.ok === false) {
@@ -129,7 +213,7 @@ async function handler(req, res) {
       return res.status(500).json({ ok: false, sent: Boolean(telegram && !telegram.skipped), previewOnly: !shouldSendError, telegram, message });
     }
 
-    const daily = buildMessage({ wallet, prices });
+    const daily = buildMessage({ wallet, exchange, prices });
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const telegram = shouldSend ? await sendTelegramMessage(daily.message, { cooldownKey: "telegram-daily:daily-report", cooldownHours: 20 }) : null;
 
@@ -143,7 +227,10 @@ async function handler(req, res) {
       deduped: Boolean(telegram?.deduped),
       previewOnly: !shouldSend,
       alertCount: daily.alertCount,
+      nearCount: daily.nearCount,
       totals: daily.totals,
+      signals: daily.signals,
+      exchangeConfigured: Boolean(exchange?.configured),
       telegram,
       message: daily.message,
     });
