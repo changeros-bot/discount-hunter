@@ -39,12 +39,18 @@ const TYPES = ["收入", "支出", "一般轉帳", "借款", "還款"];
 const ASSET_TYPES = ["現金", "銀行", "ETF", "加密貨幣", "xStocks", "其他資產", "負債"];
 
 const today = () => new Date().toISOString().slice(0, 10);
+const monthStart = (date = today()) => `${date.slice(0, 7)}-01`;
+const addDays = (date, days) => { const d = new Date(`${date}T00:00:00`); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); };
+const lastMonthRange = () => { const d = new Date(`${today()}T00:00:00`); d.setDate(1); d.setMonth(d.getMonth() - 1); const start = d.toISOString().slice(0, 10); d.setMonth(d.getMonth() + 1); d.setDate(0); return { start, end: d.toISOString().slice(0, 10) }; };
+const defaultRange = () => ({ start: monthStart(), end: today() });
+const rangeLabel = (range) => `${range.start.replaceAll("-", "/")} - ${range.end.replaceAll("-", "/")}`;
 const num = (v) => { const n = Number(v || 0); return Number.isFinite(n) ? n : 0; };
 const nt = (n) => `$${num(n).toLocaleString("zh-TW", { maximumFractionDigits: 0 })}`;
 const usd = (n) => `$${num(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n) => Number.isFinite(Number(n)) ? `${(Number(n) * 100).toFixed(2)}%` : "—";
 const sum = (rows) => rows.reduce((s, t) => s + num(t.amount), 0);
 const isMonth = (t) => String(t.date || "").slice(0, 7) === MONTH;
+const inRange = (t, range) => { const d = String(t.date || ""); return d >= range.start && d <= range.end; };
 const isFixed = (c) => FIXED_CATEGORIES.includes(c) || c === "固定支出";
 const valueOfHolding = (h) => num(h.currentValue ?? h.marketValue ?? h.positionValue ?? h.rawCurrentValue);
 const costOfHolding = (h) => num(h.totalCost ?? h.portfolioTotalCost);
@@ -62,16 +68,16 @@ function groupOf(category) {
   return "其他";
 }
 
-function stats(transactions) {
-  const monthTx = transactions.filter(isMonth);
-  const expenses = monthTx.filter((t) => t.type === "支出");
-  const income = sum(monthTx.filter((t) => t.type === "收入"));
+function stats(transactions, range = { start: `${MONTH}-01`, end: today() }) {
+  const rangeTx = transactions.filter((t) => range ? inRange(t, range) : isMonth(t));
+  const expenses = rangeTx.filter((t) => t.type === "支出");
+  const income = sum(rangeTx.filter((t) => t.type === "收入"));
   const expense = sum(expenses);
   const living = sum(expenses.filter((t) => t.isLivingExpense === "Y"));
   const fixed = sum(expenses.filter((t) => t.isFixedExpense === "Y" || isFixed(t.category)));
   const groups = ["飲食", "服飾", "居住", "交通", "教育", "娛樂", "醫療", "金融", "固定支出", "生活用品", "其他"].map((name) => ({ name, amount: sum(expenses.filter((t) => groupOf(t.category) === name)) })).filter((x) => x.amount > 0);
   const foods = FOOD_CATEGORIES.map((name) => ({ name, amount: sum(expenses.filter((t) => t.category === name || (name === "早餐" && t.category === "飲食"))) }));
-  return { monthTx, expenses, income, expense, living, fixed, groups, foods };
+  return { rangeTx, monthTx: rangeTx, expenses, income, expense, living, fixed, groups, foods };
 }
 function spentForBudget(budget, s) {
   if (budget.category === "生活費") return s.living;
@@ -87,22 +93,69 @@ function Bar({ amount, max, danger }) { const width = max > 0 ? Math.min(100, Ma
 function SmallButton({ children, onClick, tone = "blue" }) { const bad = tone === "bad"; return <button onClick={onClick} style={{ border: `1px solid ${bad ? "rgba(239,68,68,.35)" : "rgba(56,189,248,.35)"}`, borderRadius: 12, padding: "8px 10px", background: bad ? "rgba(239,68,68,.12)" : "rgba(56,189,248,.12)", color: bad ? "#fca5a5" : "#bae6fd", fontWeight: 950, fontSize: 12 }}>{children}</button>; }
 function inputStyle() { return { width: "100%", background: "rgba(15,23,42,.88)", border: "1px solid rgba(148,163,184,.24)", color: "#f8fafc", borderRadius: 14, padding: 12, fontSize: 15, outline: "none" }; }
 
+function DateRangeFilter({ range, setRange }) {
+  const presets = [
+    ["本月", () => defaultRange()],
+    ["上月", () => lastMonthRange()],
+    ["近7天", () => ({ start: addDays(today(), -6), end: today() })],
+    ["近30天", () => ({ start: addDays(today(), -29), end: today() })],
+  ];
+  return <Card>
+    <Title title="日期篩選" right="Date Range" />
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <input type="date" value={range.start} onChange={(e) => setRange((r) => ({ ...r, start: e.target.value || r.start }))} style={inputStyle()} />
+      <input type="date" value={range.end} onChange={(e) => setRange((r) => ({ ...r, end: e.target.value || r.end }))} style={inputStyle()} />
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+      {presets.map(([label, getRange]) => <button key={label} onClick={() => setRange(getRange())} style={{ border: "1px solid rgba(56,189,248,.28)", borderRadius: 12, padding: "9px 4px", background: "rgba(56,189,248,.10)", color: "#bae6fd", fontSize: 12, fontWeight: 950 }}>{label}</button>)}
+    </div>
+    <div style={{ marginTop: 12, color: "#cbd5e1", fontSize: 12, fontWeight: 850 }}>統計區間：{rangeLabel(range)}</div>
+  </Card>;
+}
+
+function VerticalBarChart({ rows }) {
+  const max = Math.max(1, ...rows.map((r) => r.amount));
+  return <div style={{ display: "flex", alignItems: "end", gap: 10, minHeight: 210, padding: "12px 2px 0", borderTop: "1px solid rgba(148,163,184,.12)" }}>
+    {rows.length ? rows.map((r) => {
+      const height = Math.max(8, Math.round((r.amount / max) * 150));
+      return <div key={r.name} style={{ flex: 1, minWidth: 0, display: "grid", alignContent: "end", gap: 7, textAlign: "center" }}>
+        <div style={{ color: "#e2e8f0", fontSize: 11, fontWeight: 950 }}>{nt(r.amount)}</div>
+        <div style={{ height, borderRadius: "12px 12px 5px 5px", background: "linear-gradient(180deg,#38bdf8,#22c55e)", boxShadow: "0 10px 24px rgba(34,197,94,.18)" }} />
+        <div style={{ color: "#cbd5e1", fontSize: 11, fontWeight: 900, writingMode: r.name.length > 2 ? "vertical-rl" : "horizontal-tb", margin: "0 auto", minHeight: 30 }}>{r.name}</div>
+      </div>;
+    }) : <div style={{ color: "#94a3b8", fontSize: 13, fontWeight: 850 }}>這個區間沒有支出資料。</div>}
+  </div>;
+}
+
+function HorizontalBarChart({ rows }) {
+  const max = Math.max(1, ...rows.map((r) => r.amount));
+  return <div style={{ display: "grid", gap: 12 }}>
+    {rows.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "72px 1fr 64px", alignItems: "center", gap: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div>
+      <Bar amount={r.amount} max={max} danger={r.name === "菸"} />
+      <div style={{ textAlign: "right", fontWeight: 950 }}>{nt(r.amount)}</div>
+    </div>)}
+  </div>;
+}
+
 function Dashboard({ transactions, budgets }) {
-  const s = stats(transactions);
+  const [range, setRange] = useState(defaultRange);
+  const safeRange = range.start > range.end ? { start: range.end, end: range.start } : range;
+  const s = stats(transactions, safeRange);
   const livingBudget = budgets.find((b) => b.category === "生活費")?.amount || 8000;
   const rows = [...s.expenses].sort((a, b) => b.date.localeCompare(a.date));
-  const maxGroup = Math.max(1, ...s.groups.map((r) => r.amount));
-  const maxFood = Math.max(1, ...s.foods.map((r) => r.amount));
+  const activeFoods = s.foods.filter((r) => r.amount > 0);
   return <>
+    <DateRangeFilter range={safeRange} setRange={setRange} />
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-      <Metric label="本月收入" value={nt(s.income)} sub="薪水 / 兼職 / 其他" />
-      <Metric label="本月支出" value={nt(s.expense)} sub={s.expense >= 1105 ? "七月支出已更新" : "CHECK"} />
-      <Metric label="生活費已用" value={nt(s.living)} sub={`剩餘 ${nt(livingBudget - s.living)}`} />
-      <Metric label="固定支出" value={nt(s.fixed)} sub="手機 / 訂閱 / 保險" />
+      <Metric label="區間收入" value={nt(s.income)} sub="薪水 / 兼職 / 其他" />
+      <Metric label="區間支出" value={nt(s.expense)} sub={`${s.rangeTx.length} 筆交易納入統計`} />
+      <Metric label="區間生活費" value={nt(s.living)} sub={`剩餘 ${nt(livingBudget - s.living)}`} />
+      <Metric label="區間固定支出" value={nt(s.fixed)} sub="手機 / 訂閱 / 保險" />
     </div>
-    <Card><Title title="本月大類支出" right="月報初判" />{s.groups.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "86px 1fr 70px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxGroup} /><div style={{ textAlign: "right", fontWeight: 950 }}>{nt(r.amount)}</div></div>)}</Card>
-    <Card><Title title="飲食大類｜細項支出" right={`合計 ${nt(sum(s.foods))}`} />{s.foods.map((r) => <div key={r.name} style={{ display: "grid", gridTemplateColumns: "64px 1fr 64px", alignItems: "center", gap: 10, margin: "12px 0" }}><div style={{ fontSize: 13, fontWeight: 900 }}>{r.name}</div><Bar amount={r.amount} max={maxFood} danger={r.name === "菸"} /><div style={{ textAlign: "right", fontWeight: 950 }}>{nt(r.amount)}</div></div>)}</Card>
-    <Card style={{ padding: 0, overflow: "hidden" }}><details><summary style={{ listStyle: "none", cursor: "pointer", padding: 16 }}><Title title="最近交易" right={`${rows.length} 筆｜點開查看`} /><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>預設縮合。最近一筆：{rows[0]?.note || "—"} {nt(rows[0]?.amount || 0)}</div></summary><div style={{ padding: "0 16px 10px" }}>{rows.map((t) => <Row key={t.id} title={t.note || t.category} sub={`${t.date}｜${t.category}｜${t.account}`} value={nt(t.amount)} />)}</div></details></Card>
+    <Card><Title title="區間大類支出｜長條圖" right={rangeLabel(safeRange)} /><VerticalBarChart rows={s.groups} /></Card>
+    <Card><Title title="區間細項支出｜長條圖" right={`合計 ${nt(sum(activeFoods))}`} /><HorizontalBarChart rows={activeFoods.length ? activeFoods : s.foods} /></Card>
+    <Card style={{ padding: 0, overflow: "hidden" }}><details><summary style={{ listStyle: "none", cursor: "pointer", padding: 16 }}><Title title="區間交易紀錄" right={`${rows.length} 筆｜點開查看`} /><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>目前區間：{rangeLabel(safeRange)}。最近一筆：{rows[0]?.note || "—"} {nt(rows[0]?.amount || 0)}</div></summary><div style={{ padding: "0 16px 10px" }}>{rows.map((t) => <Row key={t.id} title={t.note || t.category} sub={`${t.date}｜${t.category}｜${t.account}`} value={nt(t.amount)} />)}</div></details></Card>
   </>;
 }
 
@@ -187,5 +240,5 @@ export default function FinancialOSPage() {
   useEffect(() => { try { localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budgets)); } catch {} }, [budgets]);
   useEffect(() => { try { localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(assets)); } catch {} }, [assets]);
   const tabs = useMemo(() => [["dashboard", "總覽"], ["entry", "記帳"], ["budget", "預算"], ["assets", "資產"]], []);
-  return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}><section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V2.1｜V17 投資鏡像</div></div><a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a></section>{tab === "dashboard" && <Dashboard transactions={transactions} budgets={budgets} />}{tab === "entry" && <Entry transactions={transactions} setTransactions={setTransactions} onDelete={(id) => setTransactions((p) => p.filter((t) => t.id !== id))} />}{tab === "budget" && <Budget transactions={transactions} budgets={budgets} setBudgets={setBudgets} />}{tab === "assets" && <Assets assets={assets} setAssets={setAssets} transactions={transactions} setTransactions={setTransactions} />}</div><nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}><div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", borderRadius: 12, padding: "9px 4px", background: tab === key ? "rgba(56,189,248,.13)" : "transparent", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900 }}>{label}</button>)}</div></nav></main>;
+  return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}><section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V2.2｜日期區間統計｜V17 投資鏡像</div></div><a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a></section>{tab === "dashboard" && <Dashboard transactions={transactions} budgets={budgets} />}{tab === "entry" && <Entry transactions={transactions} setTransactions={setTransactions} onDelete={(id) => setTransactions((p) => p.filter((t) => t.id !== id))} />}{tab === "budget" && <Budget transactions={transactions} budgets={budgets} setBudgets={setBudgets} />}{tab === "assets" && <Assets assets={assets} setAssets={setAssets} transactions={transactions} setTransactions={setTransactions} />}</div><nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}><div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", borderRadius: 12, padding: "9px 4px", background: tab === key ? "rgba(56,189,248,.13)" : "transparent", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900 }}>{label}</button>)}</div></nav></main>;
 }
