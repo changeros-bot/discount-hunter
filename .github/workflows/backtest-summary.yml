@@ -41,11 +41,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance
 
-      - name: Run Leveraged Hunter backtest and simulation
+      - name: Run Leveraged Hunter backtest, simulation, and regime analysis
         if: ${{ github.event.inputs.target == 'leveraged' || github.event.inputs.target == 'all' }}
         run: |
           python scripts/backtest_leveraged_hunter.py --batch A B --source ${{ github.event.inputs.source }}
           python scripts/simulate_leveraged_hunter.py
+          python scripts/analyze_leveraged_hunter_regimes.py
 
       - name: Run Discount Hunter simulation if events exist
         if: ${{ github.event.inputs.target == 'discount' || github.event.inputs.target == 'all' }}
