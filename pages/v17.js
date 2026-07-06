@@ -5,6 +5,45 @@ import { AssetCard, fmtAmount, PageShell, Section, TierProgress } from "../compo
 const REFRESH_MS = 60000;
 const CACHE_KEY = "v17-fast-open-cache";
 
+const CATEGORY_BY_SYMBOL = {
+  BTC: "比特幣引擎",
+  QQQ: "核心 ETF",
+  QQQM: "核心 ETF",
+  QQQON: "核心 ETF",
+  NVDA: "AI 基礎建設",
+  NVDAON: "AI 基礎建設",
+  TSM: "AI 基礎建設",
+  TSMON: "AI 基礎建設",
+  AVGO: "AI 基礎建設",
+  AVGOON: "AI 基礎建設",
+  AMD: "AI 基礎建設",
+  AMDON: "AI 基礎建設",
+  MRVL: "AI 基礎建設",
+  MRVLON: "AI 基礎建設",
+  GOOGL: "平台型公司",
+  GOOGLON: "平台型公司",
+  RKLB: "高成長深折扣",
+  RKLBon: "高成長深折扣",
+  RKLBon: "高成長深折扣",
+  RKLBON: "高成長深折扣",
+  SPCX: "高成長深折扣",
+  SPCXON: "高成長深折扣",
+};
+
+function symbolKey(symbol) {
+  return String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function categoryFor(row) {
+  const key = symbolKey(row?.symbol);
+  return CATEGORY_BY_SYMBOL[key] || (key.endsWith("ON") ? "代幣化美股" : "觀察資產");
+}
+
+function referenceModelFor(row) {
+  const key = symbolKey(row?.symbol);
+  return key === "BTC" ? "Cycle High 回撤" : "52週高點回撤";
+}
+
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, { cache: "no-store", ...options });
   const data = await res.json().catch(() => null);
@@ -113,7 +152,6 @@ function walletSummary(holdings = []) {
   const known = live.filter(hasChainVerifiableCost);
   const missing = live.filter((h) => !hasChainVerifiableCost(h));
   const knownCost = known.reduce((s, h) => s + Number(h.totalCost || 0), 0);
-  const knownValue = known.reduce((s, h) => s + holdingValue(h), 0);
   const totalValue = live.reduce((s, h) => s + holdingValue(h), 0);
   const missingValue = missing.reduce((s, h) => s + holdingValue(h), 0);
   const totalCostReady = live.length > 0 && missing.length === 0;
@@ -123,8 +161,6 @@ function walletSummary(holdings = []) {
   return {
     count: live.length,
     knownCount: known.length,
-    knownCost,
-    knownValue,
     totalValue,
     missingValue,
     totalCostReady,
@@ -134,6 +170,70 @@ function walletSummary(holdings = []) {
     costMissingCount: missing.length,
     missingSymbols: missing.map((h) => String(h.symbol || "").toUpperCase()).filter(Boolean),
   };
+}
+
+function Pill({ children, tone = "blue" }) {
+  const map = {
+    green: ["#bbf7d0", "rgba(34,197,94,.14)", "rgba(34,197,94,.26)"],
+    yellow: ["#fde68a", "rgba(245,158,11,.14)", "rgba(245,158,11,.26)"],
+    red: ["#fecaca", "rgba(248,113,113,.14)", "rgba(248,113,113,.26)"],
+    blue: ["#bae6fd", "rgba(14,165,233,.13)", "rgba(14,165,233,.22)"],
+  };
+  const [color, bg, border] = map[tone] || map.blue;
+  return <span style={{ color, background: bg, border: `1px solid ${border}`, borderRadius: 999, padding: "5px 8px", fontSize: 11, fontWeight: 1000 }}>{children}</span>;
+}
+
+function V18GovernanceCard() {
+  return <section style={{ margin: "12px 0 16px", padding: 14, borderRadius: 18, background: "linear-gradient(135deg, rgba(8,47,73,.72), rgba(15,23,42,.96))", border: "1px solid rgba(56,189,248,.28)", boxShadow: "0 14px 36px rgba(14,165,233,.12)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 1000, color: "#e0f2fe" }}>Discount Hunter</h2>
+        <div style={{ marginTop: 5, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>App V17.1｜Playbook Josh Portfolio V18.0｜Status Ready for Review</div>
+      </div>
+      <Pill tone="blue">V17.2 準備中</Pill>
+    </div>
+    <div style={{ marginTop: 12, display: "grid", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850, lineHeight: 1.55 }}>
+      <div>決策語意：買點只是「允許買入」，不是「必須買」。</div>
+      <div>自動交易進度：Phase 1 訊號只讀；後續逐版推進 Telegram 確認、下單草稿、有限半自動。</div>
+      <div>Quality：半自動開始，財務數字自動抓，質化條件由 Josh 最終確認。</div>
+    </div>
+  </section>;
+}
+
+function AssetMeta({ row }) {
+  return <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+    <Pill tone="blue">{categoryFor(row)}</Pill>
+    <Pill tone={symbolKey(row?.symbol) === "BTC" ? "yellow" : "green"}>{referenceModelFor(row)}</Pill>
+    <Pill tone="yellow">Quality：未檢查</Pill>
+  </div>;
+}
+
+function decisionFramework(row, walletSummaryData) {
+  if (walletSummaryData.costMissingCount > 0) {
+    return { label: "等待確認", tone: "yellow", reason: `成本資料缺 ${walletSummaryData.costMissingCount} 檔，先不升級為允許買入` };
+  }
+  return { label: "等待確認", tone: "yellow", reason: "價格到位；Quality / 部位 / 預算需人工確認後才可買" };
+}
+
+function DecisionStatusBox({ row, walletSummaryData }) {
+  const status = decisionFramework(row, walletSummaryData);
+  return <div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, background: "rgba(245,158,11,.12)", color: "#fde68a", border: "1px solid rgba(245,158,11,.24)", lineHeight: 1.5 }}>
+    <div>決策狀態：{status.label}</div>
+    <div style={{ marginTop: 3, fontSize: 12, color: "#fef3c7" }}>{status.reason}</div>
+    <div style={{ marginTop: 3, fontSize: 12, color: "#fef3c7" }}>訊號金額：{row.decision?.amountText || fmtAmount(row.decision?.amount)}｜不是強制買入</div>
+  </div>;
+}
+
+function QualityPreviewCard() {
+  return <details style={{ marginTop: 16, padding: 12, borderRadius: 16, background: "linear-gradient(135deg, rgba(30,41,59,.88), rgba(15,23,42,.94))", border: "1px solid rgba(56,189,248,.25)" }}>
+    <summary style={{ color: "#bae6fd", fontWeight: 1000, fontSize: 16 }}>中文 Quality Checklist｜半自動範圍</summary>
+    <div style={{ marginTop: 10, display: "grid", gap: 8, color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>
+      <div>客觀條件：營收成長、自由現金流、毛利率、資產負債表、資本支出趨勢。</div>
+      <div>質化條件：產業領導地位、護城河、管理層品質、投資假設是否成立。</div>
+      <div>狀態：通過 / 觀察 / 失敗 / 未檢查。</div>
+      <div>V17.2 先顯示框架；V17.3 做手動狀態保存；V17.4 接客觀財務資料。</div>
+    </div>
+  </details>;
 }
 
 function PortfolioSummaryCard({ summary, updatedAt }) {
@@ -177,7 +277,6 @@ function tierStatusStyle(row) {
   return { background: "rgba(34,197,94,.10)", color: "#bbf7d0", border: "1px solid rgba(34,197,94,.12)" };
 }
 function watchStatusStyle() { return { background: "rgba(14,165,233,.10)", color: "#bae6fd", border: "1px solid rgba(14,165,233,.18)" }; }
-function decisionStatusStyle() { return { background: "rgba(245,158,11,.12)", color: "#fde68a", border: "1px solid rgba(245,158,11,.24)" }; }
 
 function DecisionActions({ row, onAction, busy }) {
   const decision = row.decision || {};
@@ -303,19 +402,24 @@ export default function V17Dashboard() {
   const ledgerStatus = classified.summary.duplicateSymbols.length || classified.summary.missingSymbols.length ? "CHECK" : "PASS";
 
   return <PageShell loading={loading && !hydratedFromCache} updatedAt={updatedAt} error={error}>
-    <Section title="今日決策" count={classified.decisionRows.length} rows={classified.decisionRows} empty="已略過目前所有可執行買點，等待下一層" render={(row) => <AssetCard key={`decision-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...decisionStatusStyle() }}>待處理：{row.decision?.statusLabel || row.decision?.status || row.tier}｜建議 {row.decision?.amountText || fmtAmount(row.decision?.amount)}</div><TierProgress row={row} /><DecisionActions row={row} onAction={handleDecisionAction} busy={Boolean(actionBusy)} /></AssetCard>} />
+    <V18GovernanceCard />
+    <Section title="今日決策" count={classified.decisionRows.length} rows={classified.decisionRows} empty="已略過目前所有可執行買點，等待下一層" render={(row) => <AssetCard key={`decision-${row.symbol}`} row={row}><AssetMeta row={row} /><DecisionStatusBox row={row} walletSummaryData={ws} /><TierProgress row={row} /><DecisionActions row={row} onAction={handleDecisionAction} busy={Boolean(actionBusy)} /></AssetCard>} />
     <PortfolioSummaryCard summary={ws} updatedAt={wallet?.lastSyncTime || updatedAt} />
-    <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
-    <Collapsible title="👀 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row}><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...watchStatusStyle() }}>觀察中：尚未到第一買點</div><TierProgress row={row} /></AssetCard>} />
+    <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><AssetMeta row={row} /><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
+    <Collapsible title="👀 觀察區" count={classified.watchRows.length} rows={classified.watchRows} render={(row) => <AssetCard key={`watch-${row.symbol}`} row={row}><AssetMeta row={row} /><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...watchStatusStyle() }}>觀察中：尚未到第一買點</div><TierProgress row={row} /></AssetCard>} />
+    <QualityPreviewCard />
     <StateMachineCheck classified={classified} />
     <details style={{ marginTop: 14, padding: 12, borderRadius: 14, color: "#94a3b8", background: "rgba(15,23,42,.72)", border: "1px solid rgba(148,163,184,.16)" }}>
       <summary style={{ fontWeight: 1000 }}>系統資訊｜{source}｜Ledger {ledgerStatus}</summary>
       <div style={{ marginTop: 8, display: "grid", gap: 4, fontSize: 12 }}>
+        <div>App：Discount Hunter V17.1｜Playbook：Josh Portfolio V18.0｜V19：Future Draft</div>
         <div>Universe：BTC + QQQon + NVDAon + TSMon + AVGOon + SPCXon + GOOGLon + AMDon + MRVLon + RKLBon</div>
         <div>Wallet Source：{wallet?.source || "cached / loading"}</div>
         <div>Wallet Sync：{wallet?.walletSyncSource || "background refresh"}</div>
         <div>BTC Source：{wallet?.btcPositionSource || "background refresh"}</div>
+        <div>BTC 引擎：同頁顯示，但使用 Cycle High 回撤，不使用股票 52週高點邏輯</div>
         <div>Strict Mode：總成本必須包含 BTC + 全部 xStocks；缺任何一檔成本就不顯示總績效</div>
+        <div>Auto Trading：Phase 1 訊號只讀；後續版本逐步加入確認、草稿、限額與 Kill Switch</div>
         <div>Last Sync：{wallet?.lastSyncTime || updatedAt}</div>
       </div>
     </details>
