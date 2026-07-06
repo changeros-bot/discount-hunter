@@ -4,13 +4,13 @@ const projects = [
   {
     key: "discount-hunter",
     title: "DCA 折價獵人",
-    shortTitle: "DCA 折價獵人",
-    subtitle: "Discount Hunter V17.1",
+    shortTitle: "折價獵人",
+    subtitle: "App V17.1｜Playbook V18.0",
     status: "LIVE",
     href: "/v17",
     emoji: "🎯",
-    summary: "Snapshot-first 投資決策頁。顯示今日決策、持倉區、觀察區與 Wallet PnL。",
-    bullets: ["Universe 10 檔", "Snapshot Cache", "Wallet / Decision Engine PASS"]
+    summary: "品質優先、價格只是觸發器、買點只是允許買入。V18.1 回測前，折扣門檻不作最終規則。",
+    bullets: ["V18 Ready for Review", "V18.1 回測待完成", "自動交易逐版推進"]
   },
   {
     key: "leveraged-hunter",
@@ -25,7 +25,7 @@ const projects = [
   },
   {
     key: "ledger",
-    title: "Josh 多元記帳本",
+    title: "Josh 2026多元記帳本",
     shortTitle: "記帳本",
     subtitle: "多元記帳本 V4.4",
     status: "LIVE",
@@ -37,7 +37,7 @@ const projects = [
   {
     key: "fubon-dca",
     title: "富邦長期 DCA",
-    shortTitle: "富邦長期 DCA",
+    shortTitle: "富邦 DCA",
     subtitle: "0050 / VOO / QQQM",
     status: "SEALED",
     href: "/fubon-dca",
@@ -82,16 +82,16 @@ function ProjectCard({ project, index, total }) {
 function StatusDashboard({ statusData }) {
   const modules = statusData?.modules || [];
   const summary = statusData?.summary || { total: 4, live: 2, sealed: 1, draft: 1 };
-  const normalizedModules = (modules.length ? modules : projects.map((p) => ({ key: p.key, name: p.shortTitle, route: p.href, status: p.status, health: p.status }))).map((m) => ({
+  const normalizedModules = (modules.length ? modules : projects.map((p) => ({ key: p.key, name: p.shortTitle, route: p.href, status: p.status, health: p.key === "discount-hunter" ? "V18_READY_FOR_REVIEW" : p.status }))).map((m) => ({
     ...m,
-    name: m.name === "Josh Financial OS" || m.name === "Financial OS" ? "多元記帳本" : m.name,
+    name: m.name === "Josh Financial OS" || m.name === "Financial OS" ? "Josh 2026多元記帳本" : m.name,
     route: m.route === "/financial-os" ? "/financial-os" : m.route
   }));
 
   return <section style={{ marginTop: 12, background: "rgba(17,24,39,.92)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 14 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
       <h2 style={{ margin: 0, fontSize: 17, fontWeight: 1000 }}>系統狀態</h2>
-      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>{statusData?.updatedAt ? "已同步" : "本地預設"}</span>
+      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>{statusData?.registryVersion || "Josh Portfolio V18.0"}</span>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 12 }}>
       {[["總數", summary.total], ["LIVE", summary.live], ["SEALED", summary.sealed], ["DRAFT", summary.draft]].map(([label, value]) => <div key={label} style={{ background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.14)", borderRadius: 14, padding: 9, textAlign: "center" }}>
