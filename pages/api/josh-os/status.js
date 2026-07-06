@@ -4,8 +4,8 @@ const modules = [
     name: "DCA 折價獵人",
     route: "/v17",
     status: "LIVE",
-    health: "PASS",
-    note: "V17.1 sealed. Snapshot-first. Do not change core data flow."
+    health: "V19_READY_FOR_REVIEW",
+    note: "V17.1 app live. Josh Portfolio V19.0 Discount Hunter Playbook recorded in docs/V19_DISCOUNT_HUNTER_PLAYBOOK.md. V19.1 backtests pending."
   },
   {
     key: "leveraged-hunter",
@@ -13,15 +13,15 @@ const modules = [
     route: "/leveraged-hunter",
     status: "DRAFT",
     health: "PLANNING",
-    note: "Independent 00631L diagnostic module. Not part of V17.1 universe."
+    note: "Independent 00631L diagnostic module. Not part of Discount Hunter V19 engine."
   },
   {
     key: "financial-os",
-    name: "Josh Financial OS",
+    name: "Josh 2026多元記帳本",
     route: "/financial-os",
     status: "LIVE",
-    health: "PROTOTYPE",
-    note: "Multi-account ledger prototype with invoice sync skeleton and confirmation flow."
+    health: "V4.4_LOCAL_DB",
+    note: "多元記帳本 V4.4: income, expenses, budgets, living cost, manual assets, education category, and safe edit/delete."
   },
   {
     key: "fubon-dca",
@@ -41,6 +41,8 @@ export default function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
+    registryVersion: "Josh Portfolio V19.0",
+    playbook: "docs/V19_DISCOUNT_HUNTER_PLAYBOOK.md",
     updatedAt: new Date().toISOString(),
     summary: {
       total: modules.length,
