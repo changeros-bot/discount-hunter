@@ -11,6 +11,8 @@ const FILES = {
   leveraged: {
     summary: 'leveraged_hunter_simulation_summary.csv',
     events: 'leveraged_hunter_simulation.csv',
+    byTicker: 'leveraged_hunter_simulation_by_ticker.csv',
+    bySignal: 'leveraged_hunter_simulation_by_signal.csv',
   },
 };
 
@@ -45,7 +47,7 @@ function coerce(value) {
 
 function readCsv(fileName, limit = 50) {
   const fullPath = path.join(BACKTEST_DIR, fileName);
-  if (!fs.existsSync(fullPath)) return { exists: false, rows: [], path: fileName };
+  if (!fileName || !fs.existsSync(fullPath)) return { exists: false, rows: [], path: fileName };
   const raw = fs.readFileSync(fullPath, 'utf8').trim();
   if (!raw) return { exists: true, rows: [], path: fileName };
   const lines = raw.split(/\r?\n/).filter(Boolean);
@@ -59,7 +61,7 @@ function readCsv(fileName, limit = 50) {
 
 function latestRows(fileName, limit = 10) {
   const fullPath = path.join(BACKTEST_DIR, fileName);
-  if (!fs.existsSync(fullPath)) return { exists: false, rows: [], path: fileName };
+  if (!fileName || !fs.existsSync(fullPath)) return { exists: false, rows: [], path: fileName };
   const raw = fs.readFileSync(fullPath, 'utf8').trim();
   if (!raw) return { exists: true, rows: [], path: fileName };
   const lines = raw.split(/\r?\n/).filter(Boolean);
@@ -76,16 +78,24 @@ function buildProject(type) {
   const summary = readCsv(files.summary, 5);
   const recent = latestRows(files.events, 10);
   const firstSummary = summary.rows[0] || null;
+  const byTicker = files.byTicker ? readCsv(files.byTicker, 25) : { exists: false, rows: [], path: null };
+  const bySignal = files.bySignal ? readCsv(files.bySignal, 10) : { exists: false, rows: [], path: null };
   return {
     type,
     status: summary.exists ? 'ready' : 'missing',
     summary: firstSummary,
     recentRows: recent.rows,
+    byTicker: byTicker.rows,
+    bySignal: bySignal.rows,
     files: {
       summary: summary.path,
       events: recent.path,
+      byTicker: byTicker.path,
+      bySignal: bySignal.path,
       summaryExists: summary.exists,
       eventsExists: recent.exists,
+      byTickerExists: byTicker.exists,
+      bySignalExists: bySignal.exists,
     },
   };
 }
@@ -111,6 +121,7 @@ export default function handler(req, res) {
           takeProfit: '12%',
           stopLoss: '8%',
           holdDays: 30,
+          riskOffSignals: ['C_過度波動禁止型'],
         },
       },
     };
