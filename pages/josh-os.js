@@ -4,6 +4,7 @@ const projects = [
   {
     key: "discount-hunter",
     title: "DCA 折價獵人",
+    shortTitle: "DCA 折價獵人",
     subtitle: "Discount Hunter V17.1",
     status: "LIVE",
     href: "/v17",
@@ -14,6 +15,7 @@ const projects = [
   {
     key: "leveraged-hunter",
     title: "槓桿獵人",
+    shortTitle: "槓桿獵人",
     subtitle: "Leveraged Hunter",
     status: "DRAFT",
     href: "/leveraged-hunter",
@@ -22,18 +24,20 @@ const projects = [
     bullets: ["TAIEX 訊號", "00631L 實際/理論回撤", "獨立診斷模組"]
   },
   {
-    key: "financial-os",
-    title: "Josh Financial OS",
-    subtitle: "多元記帳本 V1.4",
+    key: "ledger",
+    title: "Josh 多元記帳本",
+    shortTitle: "記帳本",
+    subtitle: "多元記帳本 V4.4",
     status: "LIVE",
     href: "/financial-os",
     emoji: "💰",
-    summary: "三帳戶、五交易類型、預算、生活費、資產、載具發票同步與確認入帳 prototype。",
-    bullets: ["總覽 / 記帳 / 預算 / 資產", "載具發票同步", "確認後才入帳"]
+    summary: "收入、支出、預算、生活費、資產與投資扣款整合。以 Local DB 記錄個人現金流。",
+    bullets: ["總覽 / 記帳 / 預算 / 資產", "教育分類與預算", "資產編輯與安全刪除"]
   },
   {
     key: "fubon-dca",
     title: "富邦長期 DCA",
+    shortTitle: "富邦長期 DCA",
     subtitle: "0050 / VOO / QQQM",
     status: "SEALED",
     href: "/fubon-dca",
@@ -71,13 +75,19 @@ function ProjectCard({ project, index, total }) {
         <span style={{ width: 8, height: 8, borderRadius: 999, background: "#38bdf8", display: "inline-block" }} />{item}
       </div>)}
     </div>
-    <a href={project.href} style={{ display: "block", textAlign: "center", textDecoration: "none", borderRadius: 18, padding: "15px 14px", color: "#020617", background: "linear-gradient(90deg,#38bdf8,#22c55e)", fontSize: 15, fontWeight: 1000 }}>開啟 {project.title}</a>
+    <a href={project.href} style={{ display: "block", textAlign: "center", textDecoration: "none", borderRadius: 18, padding: "15px 14px", color: "#020617", background: "linear-gradient(90deg,#38bdf8,#22c55e)", fontSize: 15, fontWeight: 1000 }}>開啟 {project.shortTitle}</a>
   </section>;
 }
 
 function StatusDashboard({ statusData }) {
   const modules = statusData?.modules || [];
   const summary = statusData?.summary || { total: 4, live: 2, sealed: 1, draft: 1 };
+  const normalizedModules = (modules.length ? modules : projects.map((p) => ({ key: p.key, name: p.shortTitle, route: p.href, status: p.status, health: p.status }))).map((m) => ({
+    ...m,
+    name: m.name === "Josh Financial OS" || m.name === "Financial OS" ? "多元記帳本" : m.name,
+    route: m.route === "/financial-os" ? "/financial-os" : m.route
+  }));
+
   return <section style={{ marginTop: 12, background: "rgba(17,24,39,.92)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 14 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
       <h2 style={{ margin: 0, fontSize: 17, fontWeight: 1000 }}>系統狀態</h2>
@@ -90,7 +100,7 @@ function StatusDashboard({ statusData }) {
       </div>)}
     </div>
     <div style={{ display: "grid", gap: 8 }}>
-      {(modules.length ? modules : projects.map((p) => ({ key: p.key, name: p.title, route: p.href, status: p.status, health: p.status }))).map((m) => <a key={m.key} href={m.route} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, textDecoration: "none", color: "#f8fafc", background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.14)", borderRadius: 14, padding: 10 }}>
+      {normalizedModules.map((m) => <a key={m.key} href={m.route} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, textDecoration: "none", color: "#f8fafc", background: "rgba(15,23,42,.78)", border: "1px solid rgba(148,163,184,.14)", borderRadius: 14, padding: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 950 }}>{m.name}</div>
           <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 750, marginTop: 3 }}>{m.health}</div>
@@ -105,7 +115,7 @@ export default function JoshOSPager() {
   const [page, setPage] = useState(0);
   const [statusData, setStatusData] = useState(null);
   const project = projects[page];
-  const labels = useMemo(() => projects.map((p) => p.title.replace("Josh ", "")), []);
+  const labels = useMemo(() => projects.map((p) => p.shortTitle), []);
 
   useEffect(() => {
     fetch("/api/josh-os/status")
