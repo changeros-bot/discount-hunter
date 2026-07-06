@@ -1,157 +1,140 @@
-import { useEffect, useMemo, useState } from "react";
-
-const STORAGE_KEY="josh-financial-os-transactions-20260705-v11";
-const BUDGET_STORAGE_KEY="josh-financial-os-budgets-20260705-v1";
-const ASSET_STORAGE_KEY="josh-financial-os-assets-20260705-v1";
-const USD_TWD_RATE=32.5;
-const FOOD_CATEGORIES=["早餐","午餐","晚餐","飲料","咖啡","菸","點心/宵夜"];
-const FIXED_CATEGORIES=["手機月租費","手機月攤","ChatGPT","Google One","保險","房租","水電瓦斯","網路費"];
-const MAIN_CATEGORIES=["飲食","服飾","居住","交通","教育","娛樂","醫療","金融"];
-const OTHER_CATEGORIES=["機車","生活用品","醫療健康","家庭","投資","其他"];
-const ALL_CATEGORIES=[...MAIN_CATEGORIES,"生活費","固定支出","生活用品","────────",...FOOD_CATEGORIES,...FIXED_CATEGORIES,...OTHER_CATEGORIES];
-const ACCOUNTS=["家用","自用","投資"],TYPES=["收入","支出","一般轉帳","借款","還款"],ASSET_TYPES=["現金","銀行","ETF","加密貨幣","xStocks","其他資產","負債"];
-const seedAssets=[{id:"asset-cash",name:"現金",type:"現金",amount:0,note:"手動輸入"},{id:"asset-bank",name:"銀行",type:"銀行",amount:0,note:"手動輸入"}];
-const seedBudgets=[{id:"budget-living",name:"生活費",category:"生活費",amount:8000}];
-const rawRows=`2026-06-30|芬+蠶豆酥|130
-2026-06-30|眼鏡鏈條|107
-2026-06-29|電信費|1773
-2026-06-29|芬+飲料|115
-2026-06-29|蠶豆酥|45
-2026-06-28|芬+麵包|113
-2026-06-28|黑咖啡|30
-2026-06-28|早餐|70
-2026-06-28|加油|188
-2026-06-27|晚餐|205
-2026-06-27|兩人雨衣|487
-2026-06-27|芬+飲料|115
-2026-06-27|早餐|80
-2026-06-26|芬+飲料|106
-2026-06-26|冰美式|30
-2026-06-26|Google one|65
-2026-06-24|芬+黑咖啡|115
-2026-06-24|早餐|45
-2026-06-24|Chatgpt 月費|660
-2026-06-23|芬+飲料|115
-2026-06-23|Chatgpt 月費|660
-2026-06-23|早餐|85
-2026-06-23|芬|85
-2026-06-22|Badoo|375
-2026-06-22|加油|100
-2026-06-22|芬|85
-2026-06-22|早餐|45
-2026-06-21|咖啡|30
-2026-06-21|芬|85
-2026-06-21|洗鼻器|610
-2026-06-21|北港蠶豆酥|140
-2026-06-21|早餐|45
-2026-06-20|午餐|168
-2026-06-20|芬+中冰拿|130
-2026-06-18|芬+飲料|100
-2026-06-17|芬|85
-2026-06-17|蠶豆酥|45
-2026-06-17|早餐|45
-2026-06-17|芬+打火機|110
-2026-06-16|中餐|53
-2026-06-16|中餐|53
-2026-06-16|芬|85
-2026-06-16|早餐|80
-2026-06-15|午餐|53
-2026-06-15|洗鼻器|610
-2026-06-15|芬|80
-2026-06-15|早餐|80
-2026-06-14|蠶豆酥|37
-2026-06-14|中餐|144
-2026-06-14|芬|85
-2026-06-14|早餐|80
-2026-06-13|足球|1000
-2026-06-13|蠶豆酥|45
-2026-06-13|早餐|80
-2026-06-13|芬|85
-2026-06-12|蠶豆|45
-2026-06-12|芬+黑咖啡|115
-2026-06-12|早餐|50
-2026-06-11|諾音飲料|160
-2026-06-11|中餐|125
-2026-06-11|芬+黑咖啡|130
-2026-06-10|加油|186
-2026-06-10|晚餐|130
-2026-06-10|飲料|20
-2026-06-10|停車費|20
-2026-06-10|耳朵醫藥費|3450
-2026-06-10|看耳朵|400
-2026-06-10|早餐|60
-2026-06-10|芬+飲料|160
-2026-06-09|中熟拿|40
-2026-06-08|菸|85
-2026-06-08|中餐|120
-2026-06-08|晚餐|199
-2026-06-07|中餐|164
-2026-06-07|早餐|45
-2026-06-07|菸+黑咖啡|115
-2026-06-06|晚餐|184
-2026-06-06|看耳朵|220
-2026-06-05|中餐|70
-2026-06-05|菸+飲料|115
-2026-06-04|菸+飲料|105
-2026-06-04|中冰拿|45
-2026-06-04|機車排氣檢驗過期罰單|1515
-2026-06-03|感訓費用|1300
-2026-06-03|菸|85
-2026-06-03|晚餐|190
-2026-06-03|富邦開戶|200
-2026-06-03|咖啡|30
-2026-06-02|飲料+菸|124
-2026-06-02|午餐|184
-2026-06-02|早餐|50
-2026-06-02|菸|85
-2026-06-01|早餐|50
-2026-06-01|菸|85
-2026-07-06|加油|155
-2026-07-06|早餐|60
-2026-07-05|蠶豆酥|45
-2026-07-05|早餐|80
-2026-07-04|晚餐|100
-2026-07-04|咖啡|30
-2026-07-04|早餐|45
-2026-07-04|菸|85
-2026-07-03|挫冰|65
-2026-07-03|雞排|80
-2026-07-03|咖啡+太陽餅|100
-2026-07-03|菸|85
-2026-07-03|中冰拿|45
-2026-07-03|早餐|70
-2026-07-02|菸|85
-2026-07-02|中冰拿|40
-2026-07-01|菸+黑咖啡|115
-2026-07-01|早餐|80`;
-const today=()=>new Date().toISOString().slice(0,10),monthStart=(d=today())=>`${d.slice(0,7)}-01`;
-const addDays=(date,days)=>{const d=new Date(`${date}T00:00:00`);d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)};
-const lastMonthRange=()=>{const d=new Date(`${today()}T00:00:00`);d.setDate(1);d.setMonth(d.getMonth()-1);const start=d.toISOString().slice(0,10);d.setMonth(d.getMonth()+1);d.setDate(0);return{start,end:d.toISOString().slice(0,10)}};
-const defaultRange=()=>({start:monthStart(),end:today()}),num=v=>{const n=Number(v||0);return Number.isFinite(n)?n:0};
-const nt=n=>`$${num(n).toLocaleString("zh-TW",{maximumFractionDigits:0})}`,usd=n=>`USD ${num(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-const sum=xs=>xs.reduce((s,x)=>s+num(x.amount),0),inRange=(t,r)=>String(t.date||"")>=r.start&&String(t.date||"")<=r.end,rangeLabel=r=>`${r.start.replaceAll("-","/")} - ${r.end.replaceAll("-","/")}`;
-const isFixed=c=>FIXED_CATEGORIES.includes(c)||c==="固定支出",valueOfHolding=h=>num(h.currentValue??h.marketValue??h.positionValue??h.rawCurrentValue);
-function cat(note){if(/Chat/i.test(note))return"ChatGPT";if(/Google/i.test(note))return"Google One";if(/電信|手機/.test(note))return"手機月租費";if(/加油|停車|機車|罰單/.test(note))return"機車";if(/耳|鼻|醫|看耳朵|洗鼻器/.test(note))return"醫療健康";if(/富邦/.test(note))return"金融";if(/Badoo|足球/.test(note))return"娛樂";if(/雨衣/.test(note))return"服飾";if(/眼鏡|打火機/.test(note))return"生活用品";if(/感訓/.test(note))return"其他";if(/早餐/.test(note))return"早餐";if(/午餐|中餐/.test(note))return"午餐";if(/晚餐/.test(note))return"晚餐";if(/咖啡|冰美式|冰拿|熟拿|黑咖啡/.test(note))return"咖啡";if(/菸|芬/.test(note))return"菸";if(/飲料/.test(note))return"飲料";if(/豆|酥|麵包|挫冰|雞排|冰/.test(note))return"點心/宵夜";return"其他"}
-function groupOf(c){if(c==="飲食"||FOOD_CATEGORIES.includes(c))return"飲食";if(c==="機車")return"交通";if(c==="醫療健康")return"醫療";if(c==="保險"||c==="投資")return"金融";if(isFixed(c))return"固定支出";if(MAIN_CATEGORIES.includes(c))return c;if(c==="生活用品")return"生活用品";return"其他"}
-function isLiving(c){return FOOD_CATEGORIES.includes(c)||c==="生活用品"||c==="機車"||c==="生活費"}
-function assetValue(a){return num(a.amount)}
-function assetSub(a){return `${a.type}｜${a.note||"手動輸入"}`}
-const seedTransactions=rawRows.split("\n").map((line,i)=>{const[date,note,amount]=line.split("|");const category=cat(note);return{id:`seed-${date}-${i}-${note}`,date,type:"支出",amount:num(amount),account:"自用",category,note,isLivingExpense:isLiving(category)?"Y":"N",isFixedExpense:isFixed(category)?"Y":"N",affectsBudget:"Y"}});
-function stats(transactions,range){const tx=transactions.filter(t=>inRange(t,range)),expenses=tx.filter(t=>t.type==="支出"),income=sum(tx.filter(t=>t.type==="收入"));const expense=sum(expenses),living=sum(expenses.filter(t=>t.isLivingExpense==="Y"||isLiving(t.category))),fixed=sum(expenses.filter(t=>t.isFixedExpense==="Y"||isFixed(t.category)));const groups=["飲食","服飾","居住","交通","教育","娛樂","醫療","金融","固定支出","生活用品","其他"].map(name=>({name,amount:sum(expenses.filter(t=>groupOf(t.category)===name))})).filter(x=>x.amount>0);const foods=FOOD_CATEGORIES.map(name=>({name,amount:sum(expenses.filter(t=>t.category===name))}));return{tx,expenses,income,expense,living,fixed,groups,foods}}
-function spentForBudget(b,s){if(b.category==="生活費")return s.living;if(b.category==="固定支出")return s.fixed;return sum(s.expenses.filter(t=>groupOf(t.category)===b.category||t.category===b.category))}
-function Card({children,style}){return <section style={{background:"linear-gradient(160deg, rgba(17,24,39,.95), rgba(15,23,42,.96))",border:"1px solid rgba(34,197,94,.36)",borderRadius:22,padding:16,marginBottom:12,boxShadow:"0 0 0 1px rgba(34,197,94,.06), 0 18px 46px rgba(34,197,94,.13), 0 12px 34px rgba(0,0,0,.28)",...style}}>{children}</section>}
-function Title({title,right}){return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><h2 style={{margin:0,fontSize:18,fontWeight:950}}>{title}</h2>{right?<span style={{color:"#86efac",fontSize:12,fontWeight:900}}>{right}</span>:null}</div>}
-function Metric({label,value,sub,alert}){return <Card style={{marginBottom:0,padding:14,borderColor:alert?"rgba(255,82,82,.55)":undefined,boxShadow:alert?"0 0 0 1px rgba(255,82,82,.12), 0 18px 46px rgba(255,82,82,.18), 0 12px 34px rgba(0,0,0,.28)":undefined}}><div style={{color:"#94a3b8",fontSize:12,fontWeight:800,marginBottom:8}}>{label}</div><div style={{fontSize:24,fontWeight:1000}}>{value}</div>{sub?<div style={{color:alert?"#ff5252":"#94a3b8",fontSize:12,marginTop:6,fontWeight:alert?950:700}}>{sub}</div>:null}</Card>}
-function Row({title,sub,value,action,tone="bad"}){const color=tone==="good"?"#86efac":tone==="bad"?"#fca5a5":"#f8fafc";return <div style={{display:"grid",gridTemplateColumns:action?"1fr auto auto":"1fr auto",gap:10,alignItems:"center",padding:"11px 0",borderBottom:"1px solid rgba(148,163,184,.12)"}}><div><div style={{fontSize:14,fontWeight:950}}>{title}</div>{sub?<div style={{color:"#94a3b8",fontSize:12,marginTop:4}}>{sub}</div>:null}</div><div style={{color,fontWeight:1000,whiteSpace:"nowrap"}}>{value}</div>{action}</div>}
-function SmallButton({children,onClick,tone="blue"}){const bad=tone==="bad";return <button onClick={onClick} style={{border:`1px solid ${bad?"rgba(248,113,113,.34)":"rgba(34,197,94,.42)"}`,borderRadius:12,padding:bad?"6px 8px":"8px 10px",background:bad?"rgba(15,23,42,.3)":"rgba(34,197,94,.12)",color:bad?"#fca5a5":"#bbf7d0",fontWeight:950,fontSize:bad?11:12}}>{children}</button>}
-function inputStyle(){return{width:"100%",background:"rgba(15,23,42,.88)",border:"1px solid rgba(34,197,94,.28)",color:"#f8fafc",borderRadius:14,padding:12,fontSize:15,outline:"none"}}
-function Bar({amount,max,danger}){const width=amount>0?Math.min(100,Math.max(3,Math.round(amount/max*100))):0;return <div style={{height:12,borderRadius:999,background:amount===0?"rgba(15,23,42,.82)":"#243044",border:amount===0?"1px dashed rgba(148,163,184,.20)":"none",overflow:"hidden"}}><div style={{height:"100%",width:`${width}%`,borderRadius:999,background:danger?"linear-gradient(90deg,#f59e0b,#ef4444)":"linear-gradient(90deg,#38bdf8,#22c55e)"}}/></div>}
-function DateRangeFilter({range,setRange}){const presets=[["本月",()=>({start:monthStart(),end:today()})],["上月",lastMonthRange],["近7天",()=>({start:addDays(today(),-6),end:today()})],["近30天",()=>({start:addDays(today(),-29),end:today()})],["六月",()=>({start:"2026-06-01",end:"2026-06-30"})]];return <Card><Title title="日期篩選" right="Date Range"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><input type="date" value={range.start} onChange={e=>setRange(r=>({...r,start:e.target.value||r.start}))} style={inputStyle()}/><input type="date" value={range.end} onChange={e=>setRange(r=>({...r,end:e.target.value||r.end}))} style={inputStyle()}/></div><div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>{presets.map(([label,getRange])=><button key={label} onClick={()=>setRange(getRange())} style={{border:"1px solid rgba(34,197,94,.35)",borderRadius:12,padding:"9px 3px",background:"rgba(34,197,94,.12)",color:"#bbf7d0",fontSize:11,fontWeight:950}}>{label}</button>)}</div><div style={{marginTop:12,color:"#cbd5e1",fontSize:12,fontWeight:850}}>統計區間：{rangeLabel(range)}</div></Card>}
-function VerticalBarChart({rows}){const max=Math.max(1,...rows.map(r=>r.amount));return <div style={{display:"flex",alignItems:"end",gap:10,minHeight:210,padding:"12px 2px 0",borderTop:"1px solid rgba(34,197,94,.18)"}}>{rows.length?rows.map(r=>{const height=Math.max(8,Math.round(r.amount/max*150));return <div key={r.name} style={{flex:1,minWidth:0,display:"grid",alignContent:"end",gap:7,textAlign:"center"}}><div style={{color:"#e2e8f0",fontSize:11,fontWeight:950}}>{nt(r.amount)}</div><div style={{height,borderRadius:"12px 12px 5px 5px",background:"linear-gradient(180deg,#38bdf8,#22c55e)",boxShadow:"0 10px 24px rgba(34,197,94,.18)"}}/><div style={{color:"#cbd5e1",fontSize:11,fontWeight:900,writingMode:r.name.length>2?"vertical-rl":"horizontal-tb",margin:"0 auto",minHeight:30}}>{r.name}</div></div>}):<div style={{color:"#94a3b8",fontSize:13,fontWeight:850}}>這個區間沒有支出資料。</div>}</div>}
-function HorizontalBarChart({rows}){const max=Math.max(1,...rows.map(r=>r.amount));return <div style={{display:"grid",gap:12}}>{rows.map(r=><div key={r.name} style={{display:"grid",gridTemplateColumns:"72px 1fr 64px",alignItems:"center",gap:10}}><div style={{fontSize:13,fontWeight:900}}>{r.name}{r.name==="菸"?<span style={{color:"#f97316",marginLeft:4,fontSize:10}}>警示</span>:null}</div><Bar amount={r.amount} max={max} danger={r.name==="菸"}/><div style={{textAlign:"right",fontWeight:950}}>{nt(r.amount)}</div></div>)}</div>}
-function Dashboard({transactions,budgets}){const[range,setRange]=useState(defaultRange);const safeRange=range.start>range.end?{start:range.end,end:range.start}:range;const s=stats(transactions,safeRange);const livingBudget=budgets.find(b=>b.category==="生活費")?.amount||8000;const remain=livingBudget-s.living;const activeFoods=s.foods.filter(r=>r.amount>0);const txRows=[...s.expenses].sort((a,b)=>b.date.localeCompare(a.date));return <><DateRangeFilter range={safeRange} setRange={setRange}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><Metric label="區間收入" value={nt(s.income)} sub="薪水 / 兼職 / 其他"/><Metric label="區間支出總額" value={nt(s.expense)} sub={`${s.expenses.length} 筆支出`}/><Metric label="生活費" value={nt(s.living)} sub={remain<0?`超支 ${nt(Math.abs(remain))}`:`剩餘 ${nt(remain)}`} alert={remain<0}/><Metric label="區間固定支出" value={nt(s.fixed)} sub="手機 / 訂閱 / 保險"/></div><Card><Title title="區間大類支出｜長條圖" right={rangeLabel(safeRange)}/><VerticalBarChart rows={s.groups}/></Card><Card><Title title="區間細項支出｜長條圖" right={`合計 ${nt(sum(activeFoods))}`}/><HorizontalBarChart rows={activeFoods.length?activeFoods:s.foods}/></Card><Card style={{padding:0,overflow:"hidden"}}><details><summary style={{listStyle:"none",cursor:"pointer",padding:16}}><Title title="區間交易紀錄" right={`${txRows.length} 筆｜點開查看`}/><div style={{color:"#94a3b8",fontSize:12,fontWeight:850}}>目前區間：{rangeLabel(safeRange)}。最近一筆：{txRows[0]?.note||"—"} {nt(txRows[0]?.amount||0)}</div></summary><div style={{padding:"0 16px 10px"}}>{txRows.map(t=><Row key={t.id} title={t.note||t.category} sub={`${t.date}｜${t.category}｜${t.account}`} value={nt(t.amount)}/>)}</div></details></Card></>}
-function Entry({transactions,setTransactions,onDelete}){const[form,setForm]=useState({date:today(),type:"支出",amount:"",account:"自用",category:"飲食",note:""});function save(){const amount=num(form.amount);if(!amount)return;const category=form.category==="飲食"?cat(form.note):form.category;const fixed=isFixed(category);const note=form.note.trim()||category;setTransactions([{id:`manual-${Date.now()}`,...form,category,amount,note,isLivingExpense:isLiving(category)?"Y":"N",isFixedExpense:fixed?"Y":"N",affectsBudget:"Y"},...transactions]);setForm({...form,amount:"",note:""})}return <><Card><Title title="新增交易" right="手動"/><div style={{display:"grid",gap:10}}><input value={form.date} onChange={e=>setForm({...form,date:e.target.value})} style={inputStyle()} type="date"/><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} style={inputStyle()}>{TYPES.map(x=><option key={x}>{x}</option>)}</select><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} style={inputStyle()} placeholder="金額" inputMode="numeric"/><select value={form.account} onChange={e=>setForm({...form,account:e.target.value})} style={inputStyle()}>{ACCOUNTS.map(x=><option key={x}>{x}</option>)}</select><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} style={inputStyle()}>{ALL_CATEGORIES.map(x=>x==="────────"?<option key={x} disabled>{x}</option>:<option key={x}>{x}</option>)}</select><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} style={inputStyle()} placeholder="備註；例如 芬+蠶豆酥"/><div style={{color:"#94a3b8",fontSize:11,fontWeight:800}}>？ 自動分類採關鍵字規則：菸/芬、咖啡、早餐、ChatGPT、Google、電信、加油、醫療等。</div><button onClick={save} style={{border:"none",borderRadius:16,padding:14,background:"linear-gradient(90deg,#38bdf8,#22c55e)",color:"#020617",fontWeight:1000}}>儲存這筆</button></div></Card><Card><Title title="交易清單" right={`${transactions.length} 筆`}/>{transactions.map(t=><Row key={t.id} title={t.note||t.category} sub={`${t.date}｜${t.category}｜${t.account}${isFixed(t.category)?"｜固定":""}`} value={nt(t.amount)} action={<SmallButton tone="bad" onClick={()=>onDelete(t.id)}>刪</SmallButton>}/>)}</Card></>}
-function Budget({transactions,budgets,setBudgets}){const s=stats(transactions,{start:monthStart(),end:today()});const[form,setForm]=useState({name:"",category:"生活費",amount:""});function saveBudget(){const amount=num(form.amount);if(!amount)return;const name=form.name.trim()||form.category;setBudgets(prev=>[{id:`budget-${Date.now()}`,name,category:form.category,amount},...prev]);setForm({name:"",category:"生活費",amount:""})}return <><Card><Title title="新增預算" right={today().slice(0,7)}/><div style={{display:"grid",gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={inputStyle()} placeholder="預算名稱"/><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} style={inputStyle()}>{ALL_CATEGORIES.filter(x=>x!=="────────").map(x=><option key={x}>{x}</option>)}</select><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} style={inputStyle()} placeholder="預算金額" inputMode="numeric"/><button onClick={saveBudget} style={{border:"none",borderRadius:16,padding:14,background:"linear-gradient(90deg,#38bdf8,#22c55e)",color:"#020617",fontWeight:1000}}>新增這個預算</button></div></Card><Card><Title title="預算控管" right={`${budgets.length} 組`}/>{budgets.map(b=>{const spent=spentForBudget(b,s);const rate=b.amount?Math.round(spent/b.amount*100):0;return <div key={b.id} style={{marginBottom:16}}><Row title={b.name} sub={`${b.category}｜已用 ${nt(spent)} / 預算 ${nt(b.amount)}｜${rate===0?"尚未使用":"即時生效 ✓"}`} value={`${rate}%`} tone={rate>100?"bad":"good"} action={<SmallButton tone="bad" onClick={()=>setBudgets(p=>p.filter(x=>x.id!==b.id))}>刪</SmallButton>}/><Bar amount={spent} max={b.amount||1} danger={rate>100}/><input value={b.amount} onChange={e=>setBudgets(p=>p.map(x=>x.id===b.id?{...x,amount:num(e.target.value)}:x))} style={{...inputStyle(),marginTop:8}} inputMode="numeric"/></div>})}</Card></>}
-function useHunterSnapshot(){const[hunter,setHunter]=useState({loading:false,error:"",total:0,holdings:[],updatedAt:""});async function refreshHunter(){setHunter(s=>({...s,loading:true,error:""}));try{const[wallet,btc]=await Promise.all([fetch(`/api/sync-wallet?t=${Date.now()}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}).then(r=>r.json()).catch(()=>null),fetch(`/api/binance-exchange-position?t=${Date.now()}`).then(r=>r.json()).catch(()=>null)]);const holdings=[...(Array.isArray(wallet?.holdings)?wallet.holdings:[]),...(Array.isArray(btc?.holdings)?btc.holdings:[])].filter(h=>valueOfHolding(h)>0);const total=holdings.reduce((s,h)=>s+valueOfHolding(h),0);setHunter({loading:false,error:"",total,holdings,updatedAt:wallet?.lastSyncTime||btc?.checkedAt||new Date().toISOString()})}catch(e){setHunter({loading:false,error:e.message||"V17 投資資產讀取失敗",total:0,holdings:[],updatedAt:""})}}useEffect(()=>{refreshHunter()},[]);return{hunter,refreshHunter}}
-function Assets({assets,setAssets,transactions,setTransactions}){const[form,setForm]=useState({name:"",type:"現金",amount:"",note:""});const{hunter,refreshHunter}=useHunterSnapshot();const total=assets.reduce((s,a)=>s+(a.type==="負債"?-assetValue(a):assetValue(a)),0);const grand=total+hunter.total*USD_TWD_RATE;function addAsset(){const amount=num(form.amount);if(!form.name.trim()&&!amount)return;setAssets(prev=>[{id:`asset-${Date.now()}`,name:form.name.trim()||form.type,type:form.type,amount,note:form.note.trim()||"手動輸入"},...prev]);setForm({name:"",type:"現金",amount:"",note:""})}function exportJson(){const blob=new Blob([JSON.stringify({version:"financial-os-v2",exportedAt:new Date().toISOString(),transactions,assets},null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`josh-financial-os-${today()}.json`;a.click();URL.revokeObjectURL(url)}return <><Card style={{padding:18}}><Title title="綜合總資產" right="TWD 估算"/><div style={{fontSize:42,lineHeight:1.05,fontWeight:1000}}>{nt(grand)}</div><div style={{color:"#94a3b8",fontSize:12,lineHeight:1.65,marginTop:10,fontWeight:850}}>手動資產 {nt(total)} + 獵人投資 {usd(hunter.total)} × 匯率 {USD_TWD_RATE}</div></Card><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><Metric label="手動資產" value={nt(total)} sub="依銀行約當台幣填入"/><Metric label="獵人投資市值" value={hunter.loading?"讀取中":usd(hunter.total)} sub="BTC + xStocks"/></div><Card style={{padding:12}}><div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center"}}><div style={{color:"#94a3b8",fontSize:12,fontWeight:850}}>{hunter.error?hunter.error:`獵人資產已同步 ${hunter.holdings.length} 檔；匯率暫用 ${USD_TWD_RATE}，後續接 API。`}</div><SmallButton onClick={refreshHunter}>{hunter.loading?"同步中":"↻"}</SmallButton></div></Card><Card><Title title="新增手動資產" right="LocalStorage"/><div style={{display:"grid",gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={inputStyle()} placeholder="資產名稱"/><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} style={inputStyle()}>{ASSET_TYPES.map(x=><option key={x}>{x}</option>)}</select><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} style={inputStyle()} placeholder="金額；填銀行顯示的約當台幣" inputMode="numeric"/><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} style={inputStyle()} placeholder="備註；例：台幣1384+外幣1915"/><button onClick={addAsset} style={{border:"none",borderRadius:16,padding:14,background:"linear-gradient(90deg,#38bdf8,#22c55e)",color:"#020617",fontWeight:1000}}>新增資產</button></div></Card><Card><Title title="手動資產清單" right={`${assets.length} 筆`}/>{assets.map(a=><Row key={a.id} title={a.name} sub={assetSub(a)} value={nt(assetValue(a))} tone={a.type==="負債"?"bad":"good"} action={<SmallButton tone="bad" onClick={()=>setAssets(p=>p.filter(x=>x.id!==a.id))}>刪</SmallButton>}/>)}</Card><Card><Title title="備份 / 還原" right="LocalStorage"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><SmallButton onClick={exportJson}>匯出 JSON</SmallButton><SmallButton tone="bad" onClick={()=>setTransactions(seedTransactions)}>重置支出</SmallButton></div><div style={{color:"#94a3b8",fontSize:11,marginTop:10,lineHeight:1.6}}>提醒：手動資產請填銀行顯示的約當台幣；獵人投資才使用 USD × 匯率估算。</div></Card></>}
-export default function FinancialOSPage(){const[tab,setTab]=useState("dashboard"),[transactions,setTransactions]=useState(seedTransactions),[budgets,setBudgets]=useState(seedBudgets),[assets,setAssets]=useState(seedAssets);useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||"null");if(Array.isArray(saved)){const ids=new Set(saved.map(t=>t.id));setTransactions([...seedTransactions.filter(t=>!ids.has(t.id)),...saved])}else setTransactions(seedTransactions)}catch{setTransactions(seedTransactions)}try{const b=JSON.parse(localStorage.getItem(BUDGET_STORAGE_KEY)||"null");if(Array.isArray(b))setBudgets(b.map(x=>x.id==="budget-living"?{...x,name:"生活費",category:"生活費"}:x))}catch{}try{const a=JSON.parse(localStorage.getItem(ASSET_STORAGE_KEY)||"null");if(Array.isArray(a))setAssets(a)}catch{}},[]);useEffect(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(transactions))}catch{}},[transactions]);useEffect(()=>{try{localStorage.setItem(BUDGET_STORAGE_KEY,JSON.stringify(budgets))}catch{}},[budgets]);useEffect(()=>{try{localStorage.setItem(ASSET_STORAGE_KEY,JSON.stringify(assets))}catch{}},[assets]);const tabs=useMemo(()=>[["dashboard","總覽"],["entry","記帳"],["budget","預算"],["assets","資產"]],[]);return <main style={{minHeight:"100vh",color:"#f8fafc",background:"radial-gradient(circle at 50% -10%, rgba(34,197,94,.16), transparent 28%), linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif"}}><div style={{maxWidth:430,margin:"0 auto",padding:"18px 14px 130px"}}><section style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:14}}><div><div style={{fontSize:22,fontWeight:1000}}>Josh Financial OS</div><div style={{color:"#94a3b8",fontSize:12,fontWeight:800,marginTop:5}}>多元記帳本 V2.9｜補齊 7/1-7/6 支出</div></div><a href="/josh-os" style={{color:"#bbf7d0",textDecoration:"none",border:"1px solid rgba(34,197,94,.42)",borderRadius:999,padding:"7px 10px",fontSize:12,fontWeight:950}}>四合一</a></section>{tab==="dashboard"&&<Dashboard transactions={transactions} budgets={budgets}/>} {tab==="entry"&&<Entry transactions={transactions} setTransactions={setTransactions} onDelete={id=>setTransactions(p=>p.filter(t=>t.id!==id))}/>} {tab==="budget"&&<Budget transactions={transactions} budgets={budgets} setBudgets={setBudgets}/>} {tab==="assets"&&<Assets assets={assets} setAssets={setAssets} transactions={transactions} setTransactions={setTransactions}/>}</div><nav style={{position:"fixed",left:0,right:0,bottom:0,background:"rgba(2,6,23,.92)",backdropFilter:"blur(16px)",borderTop:"1px solid rgba(34,197,94,.24)",padding:"8px 10px 10px"}}><div style={{maxWidth:430,margin:"0 auto",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>{tabs.map(([key,label])=><button key={key} onClick={()=>setTab(key)} style={{border:"none",borderRadius:12,padding:"9px 4px",background:tab===key?"rgba(34,197,94,.16)":"transparent",color:tab===key?"#f8fafc":"#94a3b8",fontSize:11,fontWeight:900}}>{label}</button>)}</div></nav></main>}
+import {useEffect,useMemo,useState} from 'react';
+const TX_KEY='josh-financial-os-v3-tx-20260706';
+const ASSET_KEY='josh-financial-os-v3-assets';
+const RATE=32.5;
+const food=['早餐','午餐','晚餐','飲料','咖啡','菸','點心/宵夜'];
+const fixed=['手機月租費','ChatGPT','Google One','保險','房租','水電瓦斯','網路費'];
+const cats=['飲食','服飾','居住','交通','教育','娛樂','醫療','金融','固定支出','生活用品','生活費','薪水','退稅','早餐','午餐','晚餐','飲料','咖啡','菸','點心/宵夜','機車','醫療健康','其他'];
+const expenseCsv=`2026-06-30,芬+蠶豆酥,130
+2026-06-30,眼鏡鏈條,107
+2026-06-29,電信費,1773
+2026-06-29,芬+飲料,115
+2026-06-29,蠶豆酥,45
+2026-06-28,芬+麵包,113
+2026-06-28,黑咖啡,30
+2026-06-28,早餐,70
+2026-06-28,加油,188
+2026-06-27,晚餐,205
+2026-06-27,兩人雨衣,487
+2026-06-27,芬+飲料,115
+2026-06-27,早餐,80
+2026-06-26,芬+飲料,106
+2026-06-26,冰美式,30
+2026-06-26,Google one,65
+2026-06-24,芬+黑咖啡,115
+2026-06-24,早餐,45
+2026-06-24,Chatgpt 月費,660
+2026-06-23,芬+飲料,115
+2026-06-23,Chatgpt 月費,660
+2026-06-23,早餐,85
+2026-06-23,芬,85
+2026-06-22,Badoo,375
+2026-06-22,加油,100
+2026-06-22,芬,85
+2026-06-22,早餐,45
+2026-06-21,咖啡,30
+2026-06-21,芬,85
+2026-06-21,洗鼻器,610
+2026-06-21,北港蠶豆酥,140
+2026-06-21,早餐,45
+2026-06-20,午餐,168
+2026-06-20,芬+中冰拿,130
+2026-06-18,芬+飲料,100
+2026-06-17,芬,85
+2026-06-17,蠶豆酥,45
+2026-06-17,早餐,45
+2026-06-17,芬+打火機,110
+2026-06-16,中餐,53
+2026-06-16,中餐,53
+2026-06-16,芬,85
+2026-06-16,早餐,80
+2026-06-15,午餐,53
+2026-06-15,洗鼻器,610
+2026-06-15,芬,80
+2026-06-15,早餐,80
+2026-06-14,蠶豆酥,37
+2026-06-14,中餐,144
+2026-06-14,芬,85
+2026-06-14,早餐,80
+2026-06-13,足球,1000
+2026-06-13,蠶豆酥,45
+2026-06-13,早餐,80
+2026-06-13,芬,85
+2026-06-12,蠶豆,45
+2026-06-12,芬+黑咖啡,115
+2026-06-12,早餐,50
+2026-06-11,諾音飲料,160
+2026-06-11,中餐,125
+2026-06-11,芬+黑咖啡,130
+2026-06-10,加油,186
+2026-06-10,晚餐,130
+2026-06-10,飲料,20
+2026-06-10,停車費,20
+2026-06-10,耳朵醫藥費,3450
+2026-06-10,看耳朵,400
+2026-06-10,早餐,60
+2026-06-10,芬+飲料,160
+2026-06-09,中熟拿,40
+2026-06-08,菸,85
+2026-06-08,中餐,120
+2026-06-08,晚餐,199
+2026-06-07,中餐,164
+2026-06-07,早餐,45
+2026-06-07,菸+黑咖啡,115
+2026-06-06,晚餐,184
+2026-06-06,看耳朵,220
+2026-06-05,中餐,70
+2026-06-05,菸+飲料,115
+2026-06-04,菸+飲料,105
+2026-06-04,中冰拿,45
+2026-06-04,機車排氣檢驗過期罰單,1515
+2026-06-03,感訓費用,1300
+2026-06-03,菸,85
+2026-06-03,晚餐,190
+2026-06-03,富邦開戶,200
+2026-06-03,咖啡,30
+2026-06-02,飲料+菸,124
+2026-06-02,午餐,184
+2026-06-02,早餐,50
+2026-06-02,菸,85
+2026-06-01,早餐,50
+2026-06-01,菸,85
+2026-07-06,加油,155
+2026-07-06,早餐,60
+2026-07-05,蠶豆酥,45
+2026-07-05,早餐,80
+2026-07-04,晚餐,100
+2026-07-04,咖啡,30
+2026-07-04,早餐,45
+2026-07-04,菸,85
+2026-07-03,挫冰,65
+2026-07-03,雞排,80
+2026-07-03,咖啡+太陽餅,100
+2026-07-03,菸,85
+2026-07-03,中冰拿,45
+2026-07-03,早餐,70
+2026-07-02,菸,85
+2026-07-02,中冰拿,40
+2026-07-01,菸+黑咖啡,115
+2026-07-01,早餐,80`;
+function today(){return new Date().toISOString().slice(0,10)}
+function nt(n){return '$'+Number(n||0).toLocaleString('zh-TW',{maximumFractionDigits:0})}
+function usd(n){return 'USD '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function cat(note){if(/Chat/i.test(note))return'ChatGPT';if(/Google/i.test(note))return'Google One';if(/電信|手機/.test(note))return'手機月租費';if(/加油|停車|機車|罰單/.test(note))return'機車';if(/耳|鼻|醫|看耳朵|洗鼻器/.test(note))return'醫療健康';if(/富邦/.test(note))return'金融';if(/Badoo|足球/.test(note))return'娛樂';if(/雨衣/.test(note))return'服飾';if(/眼鏡|打火機/.test(note))return'生活用品';if(/感訓/.test(note))return'其他';if(/早餐/.test(note))return'早餐';if(/午餐|中餐/.test(note))return'午餐';if(/晚餐/.test(note))return'晚餐';if(/咖啡|冰美式|冰拿|熟拿|黑咖啡/.test(note))return'咖啡';if(/菸|芬/.test(note))return'菸';if(/飲料/.test(note))return'飲料';if(/豆|酥|麵包|挫冰|雞排|冰/.test(note))return'點心/宵夜';return'其他'}
+function group(c){if(food.includes(c))return'飲食';if(c==='機車')return'交通';if(c==='醫療健康')return'醫療';if(fixed.includes(c))return'固定支出';if(['服飾','娛樂','金融','生活用品','交通','醫療'].includes(c))return c;return'其他'}
+function isLiving(c){return food.includes(c)||['生活用品','機車','生活費'].includes(c)}
+const seed=[...expenseCsv.split('\n').map((l,i)=>{const [date,note,amount]=l.split(',');const c=cat(note);return{id:'e'+i+date+note,date,type:'支出',amount:+amount,account:'自用',category:c,note}}),{id:'income-salary-202606',date:'2026-06-30',type:'收入',amount:50350,account:'自用',category:'薪水',note:'薪水'},{id:'income-tax-202606',date:'2026-06-30',type:'收入',amount:1300,account:'自用',category:'退稅',note:'退稅'}];
+function between(t,r){return t.date>=r.start&&t.date<=r.end}
+function stat(txs,r){const tx=txs.filter(t=>between(t,r));const ex=tx.filter(t=>t.type==='支出');const inc=tx.filter(t=>t.type==='收入');const sum=a=>a.reduce((s,x)=>s+Number(x.amount||0),0);const expense=sum(ex),income=sum(inc),living=sum(ex.filter(t=>isLiving(t.category))),fix=sum(ex.filter(t=>fixed.includes(t.category)));const gs=['飲食','服飾','交通','娛樂','醫療','金融','固定支出','生活用品','其他'].map(name=>({name,amount:sum(ex.filter(t=>group(t.category)===name))})).filter(x=>x.amount>0);const foods=food.map(name=>({name,amount:sum(ex.filter(t=>t.category===name))}));return{tx,ex,inc,expense,income,balance:income-expense,living,fix,gs,foods}}
+function Card(p){return <section style={{background:'linear-gradient(160deg,rgba(17,24,39,.96),rgba(15,23,42,.96))',border:'1px solid rgba(34,197,94,.36)',borderRadius:22,padding:16,marginBottom:12,boxShadow:'0 18px 46px rgba(34,197,94,.13),0 12px 34px rgba(0,0,0,.28)',...p.style}}>{p.children}</section>}
+function Title({t,r}){return <div style={{display:'flex',justifyContent:'space-between',gap:10,marginBottom:12}}><h2 style={{margin:0,fontSize:18,fontWeight:950}}>{t}</h2>{r&&<b style={{color:'#86efac',fontSize:12}}>{r}</b>}</div>}
+function Metric({label,value,sub,good,bad}){return <Card style={{marginBottom:0,padding:14,borderColor:bad?'rgba(255,82,82,.55)':good?'rgba(34,197,94,.6)':undefined}}><div style={{color:'#94a3b8',fontSize:12,fontWeight:800}}>{label}</div><div style={{fontSize:24,fontWeight:1000,color:bad?'#ff5252':good?'#86efac':'#fff'}}>{value}</div>{sub&&<div style={{color:bad?'#ff5252':'#94a3b8',fontSize:12,marginTop:6}}>{sub}</div>}</Card>}
+function input(){return{width:'100%',background:'rgba(15,23,42,.88)',border:'1px solid rgba(34,197,94,.28)',color:'#f8fafc',borderRadius:14,padding:12,fontSize:15,outline:'none'}}
+function Btn(p){return <button onClick={p.onClick} style={{border:'1px solid rgba(34,197,94,.42)',borderRadius:12,padding:'9px 8px',background:'rgba(34,197,94,.12)',color:'#bbf7d0',fontWeight:900}}>{p.children}</button>}
+function Bar({amount,max,danger}){const w=max?Math.min(100,Math.max(3,Math.round(amount/max*100))):0;return <div style={{height:12,borderRadius:99,background:'#243044',overflow:'hidden'}}><div style={{height:'100%',width:w+'%',borderRadius:99,background:danger?'linear-gradient(90deg,#f59e0b,#ef4444)':'linear-gradient(90deg,#38bdf8,#22c55e)'}}/></div>}
+function Chart({rows}){const max=Math.max(1,...rows.map(x=>x.amount));return <div style={{display:'grid',gap:12}}>{rows.map(x=><div key={x.name} style={{display:'grid',gridTemplateColumns:'70px 1fr 70px',gap:10,alignItems:'center'}}><b>{x.name}</b><Bar amount={x.amount} max={max} danger={x.name==='菸'}/><b style={{textAlign:'right'}}>{nt(x.amount)}</b></div>)}</div>}
+function Dashboard({txs}){const [r,setR]=useState({start:today().slice(0,7)+'-01',end:today()});const s=stat(txs,r);const remain=8000-s.living;const rows=[...s.tx].sort((a,b)=>b.date.localeCompare(a.date));return <><Card><Title t='日期篩選' r='Date Range'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><input type='date' value={r.start} onChange={e=>setR({...r,start:e.target.value})} style={input()}/><input type='date' value={r.end} onChange={e=>setR({...r,end:e.target.value})} style={input()}/></div><div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginTop:10}}><Btn onClick={()=>setR({start:today().slice(0,7)+'-01',end:today()})}>本月</Btn><Btn onClick={()=>setR({start:'2026-06-01',end:'2026-06-30'})}>六月</Btn><Btn onClick={()=>setR({start:'2026-06-01',end:today()})}>6月起</Btn><Btn onClick={()=>setR({start:'2026-06-06',end:today()})}>發薪後</Btn><Btn onClick={()=>setR({start:'2026-07-01',end:today()})}>七月</Btn></div><p style={{color:'#94a3b8',fontWeight:800}}>統計區間：{r.start.replaceAll('-','/')} - {r.end.replaceAll('-','/')}</p></Card><Card style={{padding:20,borderColor:s.balance>=0?'rgba(34,197,94,.7)':'rgba(255,82,82,.6)'}}><Title t='區間結餘' r={s.balance>=0?'正現金流':'負現金流'}/><div style={{fontSize:42,fontWeight:1000,color:s.balance>=0?'#86efac':'#ff5252'}}>{nt(s.balance)}</div><p style={{color:'#94a3b8'}}>收入 {nt(s.income)} - 支出 {nt(s.expense)}｜收入 {s.inc.length} 筆，支出 {s.ex.length} 筆</p></Card><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}><Metric label='區間收入' value={nt(s.income)} sub={`${s.inc.length} 筆收入`} good={s.income>0}/><Metric label='區間支出' value={nt(s.expense)} sub={`${s.ex.length} 筆支出`}/><Metric label='生活費' value={nt(s.living)} sub={remain<0?'超支 '+nt(Math.abs(remain)):'剩餘 '+nt(remain)} bad={remain<0}/><Metric label='固定支出' value={nt(s.fix)} sub='手機 / 訂閱 / 保險'/></div><Card><Title t='區間大類支出' r='長條圖'/><Chart rows={s.gs}/></Card><Card><Title t='飲食細項' r={nt(s.foods.reduce((a,b)=>a+b.amount,0))}/><Chart rows={s.foods.filter(x=>x.amount>0)}/></Card><Card><details><summary style={{cursor:'pointer',fontWeight:900}}>區間交易紀錄：{rows.length} 筆</summary>{rows.map(t=><div key={t.id} style={{display:'grid',gridTemplateColumns:'1fr auto',padding:'10px 0',borderBottom:'1px solid rgba(148,163,184,.12)'}}><div><b>{t.note}</b><div style={{color:'#94a3b8',fontSize:12}}>{t.date}｜{t.category}｜{t.type}</div></div><b style={{color:t.type==='收入'?'#86efac':'#fca5a5'}}>{nt(t.amount)}</b></div>)}</details></Card></>}
+function Entry({txs,setTxs}){const [f,setF]=useState({date:today(),type:'支出',amount:'',account:'自用',category:'飲食',note:''});function save(){const amount=Number(f.amount||0);if(!amount)return;const c=f.type==='收入'?f.category:(f.category==='飲食'?cat(f.note):f.category);setTxs([{id:'m'+Date.now(),...f,amount,category:c,note:f.note||c},...txs]);setF({...f,amount:'',note:''})}return <><Card><Title t='快速記帳' r='金額 + 備註'/><div style={{display:'grid',gap:10}}><input value={f.amount} onChange={e=>setF({...f,amount:e.target.value})} style={{...input(),fontSize:22,fontWeight:900}} placeholder='金額' inputMode='numeric'/><input value={f.note} onChange={e=>setF({...f,note:e.target.value})} style={input()} placeholder='備註：早餐 / 薪水 / 加油'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><input type='date' value={f.date} onChange={e=>setF({...f,date:e.target.value})} style={input()}/><select value={f.type} onChange={e=>setF({...f,type:e.target.value})} style={input()}>{['支出','收入'].map(x=><option key={x}>{x}</option>)}</select></div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><select value={f.account} onChange={e=>setF({...f,account:e.target.value})} style={input()}>{['家用','自用','投資'].map(x=><option key={x}>{x}</option>)}</select><select value={f.category} onChange={e=>setF({...f,category:e.target.value})} style={input()}>{cats.map(x=><option key={x}>{x}</option>)}</select></div><Btn onClick={save}>儲存這筆</Btn></div></Card><Card><Title t='交易清單' r={`${txs.length} 筆`}/>{txs.map(t=><div key={t.id} style={{display:'grid',gridTemplateColumns:'1fr auto auto',gap:10,padding:'10px 0',borderBottom:'1px solid rgba(148,163,184,.12)'}}><div><b>{t.note}</b><div style={{color:'#94a3b8',fontSize:12}}>{t.date}｜{t.category}｜{t.type}</div></div><b>{nt(t.amount)}</b><button onClick={()=>setTxs(txs.filter(x=>x.id!==t.id))} style={{background:'transparent',color:'#fca5a5',border:'1px solid rgba(248,113,113,.3)',borderRadius:10}}>刪</button></div>)}</Card></>}
+function Budget({txs}){const s=stat(txs,{start:today().slice(0,7)+'-01',end:today()});return <><Card><Title t='生活費預算' r='本月'/><Metric label='生活費' value={nt(s.living)} sub={s.living>8000?'超支 '+nt(s.living-8000):'剩餘 '+nt(8000-s.living)} bad={s.living>8000}/></Card><Card><Title t='固定支出' r='本月'/><Metric label='固定支出' value={nt(s.fix)} sub='手機 / 訂閱 / 保險'/></Card></>}
+function Assets(){const [assets,setAssets]=useState([{id:'a1',name:'合作金庫（自用）',amount:76,note:'自用'},{id:'a2',name:'富邦銀行（投資）',amount:3299,note:'約當台幣'},{id:'a3',name:'郵局存款（家用）',amount:17152,note:'手動輸入'},{id:'a4',name:'現金',amount:0,note:'手動輸入'}]);const [hunter,setHunter]=useState({total:94.37,holdings:10});useEffect(()=>{try{const a=JSON.parse(localStorage.getItem(ASSET_KEY)||'null');if(Array.isArray(a))setAssets(a)}catch{}},[]);useEffect(()=>{try{localStorage.setItem(ASSET_KEY,JSON.stringify(assets))}catch{}},[assets]);const total=assets.reduce((s,a)=>s+Number(a.amount||0),0),grand=total+hunter.total*RATE;return <><Card><Title t='綜合總資產' r='TWD 估算'/><div style={{fontSize:42,fontWeight:1000}}>{nt(grand)}</div><p style={{color:'#94a3b8'}}>手動資產 {nt(total)} + 獵人投資 {usd(hunter.total)} × 匯率 {RATE}</p></Card><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}><Metric label='手動資產' value={nt(total)} sub='銀行約當台幣'/><Metric label='獵人投資市值' value={usd(hunter.total)} sub='BTC + xStocks'/></div><Card><Title t='手動資產清單' r={`${assets.length} 筆`}/>{assets.map(a=><div key={a.id} style={{display:'grid',gridTemplateColumns:'1fr auto',padding:'10px 0',borderBottom:'1px solid rgba(148,163,184,.12)'}}><div><b>{a.name}</b><div style={{color:'#94a3b8',fontSize:12}}>{a.note}</div></div><b style={{color:'#86efac'}}>{nt(a.amount)}</b></div>)}</Card></>}
+export default function FinancialOSPage(){const [tab,setTab]=useState('dashboard');const [txs,setTxs]=useState(seed);useEffect(()=>{try{const s=JSON.parse(localStorage.getItem(TX_KEY)||'null');if(Array.isArray(s)){const ids=new Set(s.map(x=>x.id));setTxs([...seed.filter(x=>!ids.has(x.id)),...s])}}catch{}},[]);useEffect(()=>{try{localStorage.setItem(TX_KEY,JSON.stringify(txs))}catch{}},[txs]);const tabs=[['dashboard','總覽'],['entry','記帳'],['budget','預算'],['assets','資產']];return <main style={{minHeight:'100vh',color:'#f8fafc',background:'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif"}}><div style={{maxWidth:430,margin:'0 auto',padding:'18px 14px 130px'}}><section style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,marginBottom:14}}><div><div style={{fontSize:22,fontWeight:1000}}>Josh Financial OS</div><div style={{color:'#94a3b8',fontSize:12,fontWeight:800,marginTop:5}}>多元記帳本 V3.0｜6月收入｜區間結餘</div></div><a href='/josh-os' style={{color:'#bbf7d0',textDecoration:'none',border:'1px solid rgba(34,197,94,.42)',borderRadius:999,padding:'7px 10px',fontSize:12,fontWeight:950}}>四合一</a></section>{tab==='dashboard'&&<Dashboard txs={txs}/>} {tab==='entry'&&<Entry txs={txs} setTxs={setTxs}/>} {tab==='budget'&&<Budget txs={txs}/>} {tab==='assets'&&<Assets/>}</div><nav style={{position:'fixed',left:0,right:0,bottom:0,background:'rgba(2,6,23,.92)',backdropFilter:'blur(16px)',borderTop:'1px solid rgba(34,197,94,.24)',padding:'8px 10px 10px'}}><div style={{maxWidth:430,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>{tabs.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{border:'none',borderRadius:12,padding:'9px 4px',background:tab===k?'rgba(34,197,94,.16)':'transparent',color:tab===k?'#f8fafc':'#94a3b8',fontSize:11,fontWeight:900}}>{l}</button>)}</div></nav></main>}
