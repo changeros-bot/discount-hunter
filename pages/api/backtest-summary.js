@@ -13,6 +13,13 @@ const FILES = {
     events: 'leveraged_hunter_simulation.csv',
     byTicker: 'leveraged_hunter_simulation_by_ticker.csv',
     bySignal: 'leveraged_hunter_simulation_by_signal.csv',
+    researchSummary: 'leveraged_hunter_research_summary.csv',
+    researchEvents: 'leveraged_hunter_research.csv',
+    researchByTicker: 'leveraged_hunter_research_by_ticker.csv',
+    researchBySignal: 'leveraged_hunter_research_by_signal.csv',
+    researchByRegime: 'leveraged_hunter_research_by_regime.csv',
+    researchByRegimeSignal: 'leveraged_hunter_research_by_regime_signal.csv',
+    researchByRegimeTicker: 'leveraged_hunter_research_by_regime_ticker.csv',
   },
 };
 
@@ -80,6 +87,12 @@ function buildProject(type) {
   const firstSummary = summary.rows[0] || null;
   const byTicker = files.byTicker ? readCsv(files.byTicker, 25) : { exists: false, rows: [], path: null };
   const bySignal = files.bySignal ? readCsv(files.bySignal, 10) : { exists: false, rows: [], path: null };
+  const researchSummary = files.researchSummary ? readCsv(files.researchSummary, 5) : { exists: false, rows: [], path: null };
+  const researchByTicker = files.researchByTicker ? readCsv(files.researchByTicker, 30) : { exists: false, rows: [], path: null };
+  const researchBySignal = files.researchBySignal ? readCsv(files.researchBySignal, 10) : { exists: false, rows: [], path: null };
+  const researchByRegime = files.researchByRegime ? readCsv(files.researchByRegime, 10) : { exists: false, rows: [], path: null };
+  const researchByRegimeSignal = files.researchByRegimeSignal ? readCsv(files.researchByRegimeSignal, 30) : { exists: false, rows: [], path: null };
+  const researchByRegimeTicker = files.researchByRegimeTicker ? readCsv(files.researchByRegimeTicker, 80) : { exists: false, rows: [], path: null };
   return {
     type,
     status: summary.exists ? 'ready' : 'missing',
@@ -87,15 +100,32 @@ function buildProject(type) {
     recentRows: recent.rows,
     byTicker: byTicker.rows,
     bySignal: bySignal.rows,
+    research: {
+      status: researchSummary.exists ? 'ready' : 'missing',
+      summary: researchSummary.rows[0] || null,
+      byTicker: researchByTicker.rows,
+      bySignal: researchBySignal.rows,
+      byRegime: researchByRegime.rows,
+      byRegimeSignal: researchByRegimeSignal.rows,
+      byRegimeTicker: researchByRegimeTicker.rows,
+    },
     files: {
       summary: summary.path,
       events: recent.path,
       byTicker: byTicker.path,
       bySignal: bySignal.path,
+      researchSummary: researchSummary.path,
+      researchByTicker: researchByTicker.path,
+      researchBySignal: researchBySignal.path,
+      researchByRegime: researchByRegime.path,
+      researchByRegimeSignal: researchByRegimeSignal.path,
+      researchByRegimeTicker: researchByRegimeTicker.path,
       summaryExists: summary.exists,
       eventsExists: recent.exists,
       byTickerExists: byTicker.exists,
       bySignalExists: bySignal.exists,
+      researchSummaryExists: researchSummary.exists,
+      researchByRegimeExists: researchByRegime.exists,
     },
   };
 }
@@ -122,6 +152,7 @@ export default function handler(req, res) {
           stopLoss: '8%',
           holdDays: 30,
           riskOffSignals: ['C_過度波動禁止型'],
+          regimes: ['2015-2019', '2020-2021', '2022', '2023-2024', '2025-now'],
         },
       },
     };
