@@ -1,31 +1,29 @@
 const diagnosticRows = [
-  ["TAIEX 訊號", "大盤原型訊號", "待串接"],
-  ["00631L 實際回撤", "市場真實壓力", "待串接"],
-  ["00631L 理論回撤", "與 TAIEX 倍數估算比較", "待串接"],
-  ["Dual Drawdown Diagnostic", "實際 vs 理論偏離", "規劃中"]
+  ["代幣價格來源", "只使用 Binance / xStocks 已支援標的", "待串接"],
+  ["高波動診斷", "觀察回撤、波動與反彈條件", "規劃中"],
+  ["停止加碼規則", "避免把高波動誤判成可無限攤平", "必填"],
+  ["退出規則", "槓桿獵人必須有 Exit，不是長期 DCA", "必填"]
 ];
 
 const candidates = [
-  { symbol: "00631L", name: "台灣50正2", group: "台股槓桿核心", leverage: "2x", priority: "P1", use: "台股槓桿獵人核心", status: "先做回測" },
-  { symbol: "SSO", name: "S&P 500 兩倍", group: "美股大盤槓桿", leverage: "2x", priority: "P1", use: "溫和槓桿核心候選", status: "先做回測" },
-  { symbol: "QLD", name: "Nasdaq-100 兩倍", group: "科技槓桿", leverage: "2x", priority: "P1", use: "科技槓桿核心候選", status: "先做回測" },
-  { symbol: "00647L", name: "S&P 500 正2", group: "台股掛牌美股槓桿", leverage: "2x", priority: "P2", use: "美股大盤槓桿替代", status: "回測後決定" },
-  { symbol: "UPRO", name: "S&P 500 三倍", group: "美股大盤槓桿", leverage: "3x", priority: "P2", use: "高風險戰術候選", status: "回測後決定" },
-  { symbol: "SPXL", name: "S&P 500 三倍", group: "美股大盤槓桿", leverage: "3x", priority: "P2", use: "UPRO 替代比較", status: "回測後決定" },
-  { symbol: "TQQQ", name: "Nasdaq-100 三倍", group: "科技槓桿", leverage: "3x", priority: "P2", use: "高風險戰術候選", status: "回測後決定" },
-  { symbol: "USD", name: "半導體兩倍", group: "半導體槓桿", leverage: "2x", priority: "P2", use: "半導體槓桿候選", status: "回測後決定" },
-  { symbol: "TECL", name: "科技三倍", group: "科技槓桿", leverage: "3x", priority: "P3", use: "文件觀察", status: "不進主畫面" },
-  { symbol: "SOXL", name: "半導體三倍", group: "半導體槓桿", leverage: "3x", priority: "P3", use: "極高風險戰術", status: "不進主畫面" },
-  { symbol: "FNGU", name: "大型科技 ETN", group: "ETN / 集中槓桿", leverage: "3x", priority: "P3", use: "僅研究", status: "不進主畫面" },
-  { symbol: "BULZ", name: "成長股 ETN", group: "ETN / 集中槓桿", leverage: "3x", priority: "P3", use: "僅研究", status: "不進主畫面" },
+  { symbol: "BTC", token: "BTC", name: "比特幣", group: "獨立加密引擎", mode: "高波動核心", priority: "P1", use: "先觀察 Cycle High 回撤與風險上限", status: "先做回測" },
+  { symbol: "QQQon", token: "QQQon", name: "Nasdaq-100 代幣", group: "核心 ETF 代幣", mode: "大盤科技", priority: "P1", use: "科技大盤代理，適合先做槓桿獵人觀察", status: "先做回測" },
+  { symbol: "NVDAon", token: "NVDAon", name: "NVIDIA 代幣", group: "AI 基礎建設", mode: "高波動龍頭", priority: "P1", use: "AI 核心龍頭，高波動但品質高", status: "先做回測" },
+  { symbol: "TSMon", token: "TSMon", name: "台積電 ADR 代幣", group: "AI 基礎建設", mode: "相對穩定核心", priority: "P1", use: "AI 供應鏈核心，波動低於多數高 beta 標的", status: "先做回測" },
+  { symbol: "AVGOon", token: "AVGOon", name: "Broadcom 代幣", group: "AI 基礎建設", mode: "高品質核心", priority: "P1", use: "AI 網通與 ASIC 核心候選", status: "先做回測" },
+  { symbol: "AMDon", token: "AMDon", name: "AMD 代幣", group: "AI 基礎建設", mode: "高 beta", priority: "P2", use: "波動較高，等回測後再決定規則", status: "回測後決定" },
+  { symbol: "MRVLon", token: "MRVLon", name: "Marvell 代幣", group: "AI 基礎建設", mode: "高 beta", priority: "P2", use: "波動較高，需更嚴格停止加碼規則", status: "回測後決定" },
+  { symbol: "GOOGLon", token: "GOOGLon", name: "Alphabet 代幣", group: "平台型公司", mode: "平台核心", priority: "P2", use: "平台型公司候選，波動較低", status: "回測後決定" },
+  { symbol: "RKLBon", token: "RKLBon", name: "Rocket Lab 代幣", group: "高成長深折扣", mode: "高風險小部位", priority: "P3", use: "只能小部位觀察，不進自動交易", status: "文件觀察" },
+  { symbol: "SPCXon", token: "SPCXon", name: "SpaceX 代幣", group: "高成長深折扣", mode: "非公開市場代理", priority: "P3", use: "資料歷史短，先文件觀察", status: "文件觀察" },
 ];
 
 const rules = [
-  ["進場規則", "尚未定義，需回測 00631L / SSO / QLD"],
-  ["停止加碼規則", "趨勢破壞、波動過大或超過部位上限時停止"],
+  ["進場規則", "只從 Binance 代幣名單內回測，不納入台股 ETF / 美股槓桿 ETF"],
+  ["停止加碼規則", "跌幅加深、資料異常、波動失控或超過部位上限時停止"],
   ["退出規則", "槓桿獵人必須有 Exit，不允許無限攤平"],
-  ["最大部位", "必須小於折價獵人正式持倉上限"],
-  ["Kill Switch", "大盤失控、資料錯誤、API 異常時立即停止"]
+  ["最大部位", "高波動 / 高成長代幣必須小部位"],
+  ["Kill Switch", "資料錯誤、API 異常、價格偏離或交易風險升高時立即停止"]
 ];
 
 function Card({ children, accent = "rgba(148,163,184,.18)" }) {
@@ -66,7 +64,7 @@ function CandidateCard({ item }) {
     </div>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
       <Pill tone="blue">{item.group}</Pill>
-      <Pill tone="purple">{item.leverage}</Pill>
+      <Pill tone="purple">{item.mode}</Pill>
       <Pill tone={item.priority === "P3" ? "red" : "yellow"}>{item.status}</Pill>
     </div>
     <div style={{ marginTop: 9, color: "#94a3b8", fontSize: 12, fontWeight: 800, lineHeight: 1.5 }}>{item.use}</div>
@@ -82,7 +80,7 @@ export default function LeveragedHunterPage() {
     <div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 40px" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div>
-          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>Leveraged Hunter｜Candidate Registry</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>Leveraged Hunter｜Binance Token List Only</div>
           <h1 style={{ margin: "5px 0 0", fontSize: 28, lineHeight: 1.1, fontWeight: 1000 }}>槓桿獵人</h1>
         </div>
         <a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>返回四合一</a>
@@ -90,12 +88,12 @@ export default function LeveragedHunterPage() {
 
       <Card accent="rgba(245,158,11,.32)">
         <div style={{ fontSize: 44, marginBottom: 10 }}>⚡</div>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 1000 }}>定位</h2>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 14, fontWeight: 750 }}>槓桿獵人不是折價獵人的加速版，而是槓桿 ETF 專用的獨立戰術模組。可以和折價獵人共存，但不能混用規則。</p>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 1000 }}>定位修正</h2>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 14, fontWeight: 750 }}>槓桿獵人先不納入台股 ETF、美股槓桿 ETF、非代幣化個股。第一階段只從 Binance 股票代幣 / xStocks 名單內挑選高波動候選。</p>
         <div style={{ display: "grid", gap: 7, marginTop: 12 }}>
-          <Pill tone="yellow">短中期戰術部位</Pill>
-          <Pill tone="red">不是長期核心 DCA</Pill>
-          <Pill tone="red">不允許無限攤平</Pill>
+          <Pill tone="yellow">只做 Binance 代幣名單</Pill>
+          <Pill tone="red">不加入 00631L / 00647L</Pill>
+          <Pill tone="red">不加入 SSO / QLD / TQQQ / SOXL</Pill>
         </div>
       </Card>
 
@@ -110,12 +108,12 @@ export default function LeveragedHunterPage() {
       </details>
 
       <details style={{ marginBottom: 12 }}>
-        <summary style={{ padding: 14, borderRadius: 18, background: "rgba(248,113,113,.10)", border: "1px solid rgba(248,113,113,.24)", color: "#fecaca", fontWeight: 1000 }}>Priority 3｜文件觀察，不進主畫面（{p3.length}）</summary>
+        <summary style={{ padding: 14, borderRadius: 18, background: "rgba(248,113,113,.10)", border: "1px solid rgba(248,113,113,.24)", color: "#fecaca", fontWeight: 1000 }}>Priority 3｜文件觀察，不進自動交易（{p3.length}）</summary>
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>{p3.map((item) => <CandidateCard key={item.symbol} item={item} />)}</div>
       </details>
 
       <Card>
-        <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 1000 }}>Dual Drawdown Diagnostic</h2>
+        <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 1000 }}>Tokenized Diagnostic</h2>
         {diagnosticRows.map(([name, desc, status]) => <Row key={name} name={name} desc={desc} status={status} />)}
       </Card>
 
@@ -127,10 +125,10 @@ export default function LeveragedHunterPage() {
       <Card>
         <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 1000 }}>封板原則</h2>
         <div style={{ color: "#cbd5e1", lineHeight: 1.7, fontSize: 14, fontWeight: 800 }}>
-          00631L 不加入 V17.1 折價獵人 Universe。<br />
-          不使用 xStocks 分類器。<br />
-          未完成進場、停止加碼、退出、部位上限與 Kill Switch 前，不開啟買點提示。<br />
-          槓桿自動交易不得早於折價獵人半自動下單流程成熟。
+          第一階段只使用 Binance 股票代幣 / xStocks 名單。<br />
+          不納入台股 ETF、不納入傳統美股槓桿 ETF、不納入非代幣化個股。<br />
+          槓桿獵人與折價獵人共用資料源，但不共用買入規則。<br />
+          未完成進場、停止加碼、退出、部位上限與 Kill Switch 前，不開啟買點提示。
         </div>
       </Card>
     </div>
