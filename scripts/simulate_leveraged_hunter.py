@@ -24,6 +24,7 @@ Example:
 
 Notes:
 - First version uses event forward returns as proxy exits.
+- Signal C is a risk-off / no-trade signal and is skipped by default.
 - It does not yet use real token spread / liquidity / premium-discount.
 """
 
@@ -38,6 +39,9 @@ try:
     import pandas as pd
 except ImportError as exc:  # pragma: no cover
     raise SystemExit("pandas is required. Install with: pip install pandas") from exc
+
+
+RISK_OFF_SIGNALS = {"C_過度波動禁止型"}
 
 
 @dataclass
@@ -56,6 +60,7 @@ class PortfolioState:
     positions: Dict[str, PositionState] = field(default_factory=dict)
     skipped_budget: int = 0
     skipped_limit: int = 0
+    skipped_risk_off: int = 0
     trades: int = 0
     wins: int = 0
     losses: int = 0
@@ -104,6 +109,21 @@ def choose_exit_return(row: pd.Series, take_profit: float, stop_loss: float, hol
     return fwd, "時間出場"
 
 
+def append_skip(rows, row, reason, state):
+    rows.append({
+        "date": row["date"],
+        "ticker": str(row["ticker"]),
+        "signal": row.get("signal", ""),
+        "action": "SKIP",
+        "reason": reason,
+        "trade_size": 0,
+        "exit_return": 0,
+        "pnl": 0,
+        "realized_pnl": state.realized_pnl,
+        "total_invested": state.total_invested,
+    })
+
+
 def run(args: argparse.Namespace) -> None:
     events_path = Path(args.events)
     if not events_path.exists():
@@ -122,24 +142,19 @@ def run(args: argparse.Namespace) -> None:
 
     for _, row in df.iterrows():
         ticker = str(row["ticker"])
+        signal = str(row.get("signal", ""))
+        if args.exclude_risk_off and signal in RISK_OFF_SIGNALS:
+            state.skipped_risk_off += 1
+            append_skip(rows, row, "風險訊號不交易", state)
+            continue
+
         ok, reason = state.can_trade(ticker)
         if not ok:
             if reason == "總資金上限":
                 state.skipped_budget += 1
             else:
                 state.skipped_limit += 1
-            rows.append({
-                "date": row["date"],
-                "ticker": ticker,
-                "signal": row.get("signal", ""),
-                "action": "SKIP",
-                "reason": reason,
-                "trade_size": 0,
-                "exit_return": 0,
-                "pnl": 0,
-                "realized_pnl": state.realized_pnl,
-                "total_invested": state.total_invested,
-            })
+            append_skip(rows, row, reason, state)
             continue
 
         exit_return, exit_reason = choose_exit_return(row, args.take_profit, args.stop_loss, hold_col)
@@ -148,7 +163,7 @@ def run(args: argparse.Namespace) -> None:
         rows.append({
             "date": row["date"],
             "ticker": ticker,
-            "signal": row.get("signal", ""),
+            "signal": signal,
             "action": "TRADE",
             "reason": exit_reason,
             "trade_size": args.trade_size,
@@ -162,6 +177,20 @@ def run(args: argparse.Namespace) -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(output, index=False)
+
+    traded = out[out["action"] == "TRADE"]
+    by_ticker = traded.groupby("ticker", dropna=False).agg(
+        trades=("ticker", "count"),
+        pnl=("pnl", "sum"),
+        avg_return=("exit_return", "mean"),
+    ).reset_index() if not traded.empty else pd.DataFrame(columns=["ticker", "trades", "pnl", "avg_return"])
+    by_signal = traded.groupby("signal", dropna=False).agg(
+        trades=("signal", "count"),
+        pnl=("pnl", "sum"),
+        avg_return=("exit_return", "mean"),
+    ).reset_index() if not traded.empty else pd.DataFrame(columns=["signal", "trades", "pnl", "avg_return"])
+    by_ticker.to_csv(output.with_name(output.stem + "_by_ticker.csv"), index=False)
+    by_signal.to_csv(output.with_name(output.stem + "_by_signal.csv"), index=False)
 
     summary = pd.DataFrame([{
         "total_capital": args.total_capital,
@@ -179,13 +208,17 @@ def run(args: argparse.Namespace) -> None:
         "return_on_used_capital": state.realized_pnl / state.total_invested if state.total_invested else 0,
         "skipped_budget": state.skipped_budget,
         "skipped_limit": state.skipped_limit,
+        "skipped_risk_off": state.skipped_risk_off,
     }])
     summary_path = output.with_name(output.stem + "_summary.csv")
     summary.to_csv(summary_path, index=False)
 
     print(f"Simulation complete. Trades: {state.trades}, PnL: {state.realized_pnl:.2f}U")
+    print(f"Skipped risk-off: {state.skipped_risk_off}")
     print(f"Wrote: {output}")
     print(f"Wrote: {summary_path}")
+    print(f"Wrote: {output.with_name(output.stem + '_by_ticker.csv')}")
+    print(f"Wrote: {output.with_name(output.stem + '_by_signal.csv')}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -198,6 +231,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--hold-days", type=int, choices=(5, 10, 20, 30, 60), default=30)
     parser.add_argument("--take-profit", type=float, default=0.12)
     parser.add_argument("--stop-loss", type=float, default=0.08)
+    parser.add_argument("--exclude-risk-off", action="store_true", default=True)
     return parser.parse_args(argv)
 
 
