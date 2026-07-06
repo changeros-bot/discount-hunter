@@ -187,10 +187,26 @@ function Budget({ transactions, budgets, setBudgets }) {
   </>;
 }
 
-function InvestmentMirror() {
+function AssetSummary({ manualTotal, hunter }) {
+  return <Card>
+    <Title title="綜合資產總覽" right="手動 + 折價獵人" />
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <Metric label="手動資產淨值" value={nt(manualTotal)} sub="現金 / 銀行 / 家用" />
+      <Metric label="獵人投資市值" value={hunter.loading ? "讀取中" : usd(hunter.total)} sub="BTC + xStocks" />
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+      <Metric label="獵人已知成本" value={hunter.cost > 0 ? usd(hunter.cost) : "—"} sub="只採 V17 已知成本" />
+      <Metric label="獵人未實現損益" value={hunter.cost > 0 ? usd(hunter.pnl) : "—"} sub={hunter.cost > 0 ? pct(hunter.returnPct) : "成本未完整"} />
+    </div>
+    <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, marginTop: 12, fontWeight: 800 }}>幣別先分開顯示，不硬把 TWD 與 USD 加總。之後若加入匯率欄位，再做台幣化總資產。</div>
+  </Card>;
+}
+
+function InvestmentMirror({ onSnapshot }) {
   const [state, setState] = useState({ loading: false, error: "", holdings: [], total: 0, cost: 0, pnl: 0, returnPct: null, updatedAt: "" });
   async function refresh() {
     setState((s) => ({ ...s, loading: true, error: "" }));
+    if (onSnapshot) onSnapshot((s) => ({ ...s, loading: true, error: "" }));
     try {
       const [wallet, btc] = await Promise.all([
         fetch(`/api/sync-wallet?t=${Date.now()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then((r) => r.json()).catch(() => null),
@@ -200,30 +216,35 @@ function InvestmentMirror() {
       const total = holdings.reduce((s, h) => s + valueOfHolding(h), 0);
       const cost = holdings.reduce((s, h) => s + costOfHolding(h), 0);
       const pnl = cost > 0 ? total - cost : 0;
-      setState({ loading: false, error: "", holdings, total, cost, pnl, returnPct: cost > 0 ? pnl / cost : null, updatedAt: wallet?.lastSyncTime || btc?.checkedAt || new Date().toISOString() });
+      const nextState = { loading: false, error: "", holdings, total, cost, pnl, returnPct: cost > 0 ? pnl / cost : null, updatedAt: wallet?.lastSyncTime || btc?.checkedAt || new Date().toISOString() };
+      setState(nextState);
+      if (onSnapshot) onSnapshot(nextState);
     } catch (e) {
-      setState((s) => ({ ...s, loading: false, error: e.message || "V17 投資資產讀取失敗" }));
+      const errorState = { loading: false, error: e.message || "V17 投資資產讀取失敗", holdings: [], total: 0, cost: 0, pnl: 0, returnPct: null, updatedAt: "" };
+      setState(errorState);
+      if (onSnapshot) onSnapshot(errorState);
     }
   }
   useEffect(() => { refresh(); }, []);
-  return <Card><Title title="折價獵人投資資產" right={state.loading ? "讀取中" : "V17 read-only"} />
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}><Metric label="投資市值" value={usd(state.total)} sub="BTC + xStocks" /><Metric label="已知成本損益" value={state.cost > 0 ? usd(state.pnl) : "—"} sub={state.cost > 0 ? pct(state.returnPct) : "成本未完整"} /></div>
+  return <Card style={{ padding: 0, overflow: "hidden" }}><details><summary style={{ listStyle: "none", cursor: "pointer", padding: 16 }}><Title title="折價獵人投資資產" right={state.loading ? "讀取中" : "縮合｜點開"} /><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}><Metric label="投資市值" value={usd(state.total)} sub="BTC + xStocks" /><Metric label="已知成本損益" value={state.cost > 0 ? usd(state.pnl) : "—"} sub={state.cost > 0 ? pct(state.returnPct) : "成本未完整"} /></div></summary><div style={{ padding: "0 16px 16px" }}>
     {state.error ? <div style={{ color: "#fca5a5", fontSize: 13 }}>{state.error}</div> : null}
     <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, marginBottom: 8 }}>這裡只鏡像顯示 V17 結果，不重算成本與 PnL。</div>
     {state.holdings.map((h) => <Row key={h.symbol} title={h.symbol} sub={`數量 ${num(h.quantity).toLocaleString("en-US", { maximumFractionDigits: 6 })}｜成本 ${costOfHolding(h) > 0 ? usd(costOfHolding(h)) : "—"}`} value={usd(valueOfHolding(h))} tone={num(h.unrealizedPnL) >= 0 ? "good" : "bad"} />)}
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}><SmallButton onClick={refresh}>{state.loading ? "同步中" : "刷新投資資產"}</SmallButton><a href="/v17" style={{ textAlign: "center", textDecoration: "none", borderRadius: 12, padding: "8px 10px", background: "rgba(56,189,248,.12)", border: "1px solid rgba(56,189,248,.35)", color: "#bae6fd", fontWeight: 950, fontSize: 12 }}>打開 V17</a></div>
-  </Card>;
+  </div></details></Card>;
 }
 
 function Assets({ assets, setAssets, transactions, setTransactions }) {
   const [form, setForm] = useState({ name: "", type: "現金", amount: "", note: "" });
+  const [hunter, setHunter] = useState({ loading: false, error: "", holdings: [], total: 0, cost: 0, pnl: 0, returnPct: null, updatedAt: "" });
   const total = sum(assets.filter((a) => a.type !== "負債")) - sum(assets.filter((a) => a.type === "負債"));
   function addAsset() { const amount = num(form.amount); if (!form.name.trim() && !amount) return; setAssets((prev) => [{ id: `asset-${Date.now()}`, name: form.name.trim() || form.type, type: form.type, amount, note: form.note.trim() || "手動輸入" }, ...prev]); setForm({ name: "", type: "現金", amount: "", note: "" }); }
   function resetSeed() { setTransactions(seedTransactions); }
   function exportJson() { const blob = new Blob([JSON.stringify({ version: "financial-os-v2", exportedAt: new Date().toISOString(), transactions, assets }, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `josh-financial-os-${today()}.json`; a.click(); URL.revokeObjectURL(url); }
   return <>
-    <InvestmentMirror />
-    <Card><Title title="手動資產總覽" right="現金 / 銀行" /><Metric label="手動資產淨值" value={nt(total)} sub="現金 / 銀行 / 其他資產；投資資產看上方 V17 鏡像" /></Card>
+    <AssetSummary manualTotal={total} hunter={hunter} />
+    <InvestmentMirror onSnapshot={setHunter} />
+    <Card><Title title="手動資產總覽" right="現金 / 銀行" /><Metric label="手動資產淨值" value={nt(total)} sub="現金 / 銀行 / 其他資產；投資資產看上方縮合卡" /></Card>
     <Card><Title title="新增手動資產" right="LocalStorage" /><div style={{ display: "grid", gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle()} placeholder="資產名稱；例如 合庫帳戶 / 現金 / 機車" /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inputStyle()}>{ASSET_TYPES.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={inputStyle()} placeholder="金額" inputMode="numeric" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={inputStyle()} placeholder="備註" /><button onClick={addAsset} style={{ border: "none", borderRadius: 16, padding: 14, background: "linear-gradient(90deg,#38bdf8,#22c55e)", color: "#020617", fontWeight: 1000 }}>新增資產</button></div></Card>
     <Card><Title title="資產清單" right={`${assets.length} 筆`} />{assets.map((a) => <Row key={a.id} title={a.name} sub={`${a.type}｜${a.note || "手動輸入"}`} value={nt(a.amount)} tone={a.type === "負債" ? "bad" : "good"} action={<SmallButton tone="bad" onClick={() => setAssets((p) => p.filter((x) => x.id !== a.id))}>移除</SmallButton>} />)}</Card>
     <Card><Title title="備份 / 還原" right="LocalStorage" /><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><SmallButton onClick={exportJson}>匯出 JSON</SmallButton><SmallButton tone="bad" onClick={resetSeed}>重置七月支出</SmallButton></div></Card>
@@ -240,5 +261,5 @@ export default function FinancialOSPage() {
   useEffect(() => { try { localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budgets)); } catch {} }, [budgets]);
   useEffect(() => { try { localStorage.setItem(ASSET_STORAGE_KEY, JSON.stringify(assets)); } catch {} }, [assets]);
   const tabs = useMemo(() => [["dashboard", "總覽"], ["entry", "記帳"], ["budget", "預算"], ["assets", "資產"]], []);
-  return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}><section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V2.2｜日期區間統計｜V17 投資鏡像</div></div><a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a></section>{tab === "dashboard" && <Dashboard transactions={transactions} budgets={budgets} />}{tab === "entry" && <Entry transactions={transactions} setTransactions={setTransactions} onDelete={(id) => setTransactions((p) => p.filter((t) => t.id !== id))} />}{tab === "budget" && <Budget transactions={transactions} budgets={budgets} setBudgets={setBudgets} />}{tab === "assets" && <Assets assets={assets} setAssets={setAssets} transactions={transactions} setTransactions={setTransactions} />}</div><nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}><div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", borderRadius: 12, padding: "9px 4px", background: tab === key ? "rgba(56,189,248,.13)" : "transparent", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900 }}>{label}</button>)}</div></nav></main>;
+  return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#0f172a 55%,#111827 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 94px" }}><section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh Financial OS</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V2.3｜綜合資產｜V17 投資鏡像</div></div><a href="/josh-os" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>四合一</a></section>{tab === "dashboard" && <Dashboard transactions={transactions} budgets={budgets} />}{tab === "entry" && <Entry transactions={transactions} setTransactions={setTransactions} onDelete={(id) => setTransactions((p) => p.filter((t) => t.id !== id))} />}{tab === "budget" && <Budget transactions={transactions} budgets={budgets} setBudgets={setBudgets} />}{tab === "assets" && <Assets assets={assets} setAssets={setAssets} transactions={transactions} setTransactions={setTransactions} />}</div><nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(2,6,23,.92)", backdropFilter: "blur(16px)", borderTop: "1px solid rgba(148,163,184,.18)", padding: "8px 10px 10px" }}><div style={{ maxWidth: 430, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: "none", borderRadius: 12, padding: "9px 4px", background: tab === key ? "rgba(56,189,248,.13)" : "transparent", color: tab === key ? "#f8fafc" : "#94a3b8", fontSize: 11, fontWeight: 900 }}>{label}</button>)}</div></nav></main>;
 }
