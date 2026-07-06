@@ -1,5 +1,5 @@
 const diagnosticRows = [
-  ["代幣價格來源", "只使用 Binance / xStocks 已支援標的", "待串接"],
+  ["代幣價格來源", "只使用 Binance / xStocks / bStocks 已支援標的", "待串接"],
   ["健康篩選", "公司基本面不能明顯破壞", "必填"],
   ["股性 / 波動", "找活潑、有反彈空間的標的", "必填"],
   ["成交量 / 流動性", "原股與代幣都要有量", "必填"],
@@ -8,16 +8,31 @@ const diagnosticRows = [
 ];
 
 const candidates = [
-  { symbol: "BTC", token: "BTC", name: "比特幣", group: "獨立加密引擎", mode: "有量 / 活潑", priority: "P1", use: "有量、波動大、資料充足；先觀察 Cycle High 回撤與風險上限", status: "先做回測" },
-  { symbol: "QQQon", token: "QQQon", name: "Nasdaq-100 代幣", group: "核心 ETF 代幣", mode: "大盤科技 / 有量", priority: "P1", use: "科技大盤代理，活潑但比個股穩", status: "先做回測" },
-  { symbol: "NVDAon", token: "NVDAon", name: "NVIDIA 代幣", group: "AI 基礎建設", mode: "健康 / 高價 / 活潑", priority: "P1", use: "AI 核心龍頭，高股價、高波動、高關注度", status: "先做回測" },
-  { symbol: "TSMon", token: "TSMon", name: "台積電 ADR 代幣", group: "AI 基礎建設", mode: "健康 / 有量", priority: "P1", use: "AI 供應鏈核心，健康、有量，波動較可控", status: "先做回測" },
-  { symbol: "AVGOon", token: "AVGOon", name: "Broadcom 代幣", group: "AI 基礎建設", mode: "健康 / 高價", priority: "P1", use: "AI 網通與 ASIC 核心，高股價、機構參與度高", status: "先做回測" },
-  { symbol: "AMDon", token: "AMDon", name: "AMD 代幣", group: "AI 基礎建設", mode: "活潑 / 高 beta", priority: "P2", use: "股性活潑，但需檢查趨勢與品質", status: "回測後決定" },
-  { symbol: "MRVLon", token: "MRVLon", name: "Marvell 代幣", group: "AI 基礎建設", mode: "活潑 / 高 beta", priority: "P2", use: "活潑但波動較高，需嚴格停止加碼規則", status: "回測後決定" },
-  { symbol: "GOOGLon", token: "GOOGLon", name: "Alphabet 代幣", group: "平台型公司", mode: "健康 / 有量", priority: "P2", use: "健康、有量，但股性相對不夠活潑", status: "回測後決定" },
-  { symbol: "RKLBon", token: "RKLBon", name: "Rocket Lab 代幣", group: "高成長深折扣", mode: "活潑 / 高風險", priority: "P3", use: "股性活潑，但健康與波動風險需更嚴格；不進自動交易", status: "文件觀察" },
-  { symbol: "SPCXon", token: "SPCXon", name: "SpaceX 代幣", group: "高成長深折扣", mode: "題材強 / 資料短", priority: "P3", use: "非公開市場代理，歷史資料短，先文件觀察", status: "文件觀察" },
+  { symbol: "BTC", name: "比特幣", group: "獨立加密引擎", mode: "有量 / 活潑", priority: "P1", use: "有量、波動大、資料充足；先觀察 Cycle High 回撤與風險上限", status: "主觀察" },
+  { symbol: "QQQon / QQQB", name: "Nasdaq-100 代幣", group: "科技大盤", mode: "有量 / 活潑", priority: "P1", use: "科技大盤代理，活潑但比個股穩", status: "主觀察" },
+  { symbol: "NVDAon / NVDAB", name: "輝達", group: "AI 基礎建設", mode: "健康 / 高價 / 活潑", priority: "P1", use: "AI 核心龍頭，高股價、高波動、高關注度", status: "主觀察" },
+  { symbol: "TSMon", name: "台積電 ADR", group: "AI 基礎建設", mode: "健康 / 有量", priority: "P1", use: "AI 供應鏈核心，健康、有量，波動較可控", status: "主觀察" },
+  { symbol: "AVGOon", name: "博通", group: "AI 基礎建設", mode: "健康 / 高價", priority: "P1", use: "AI 網通與 ASIC 核心，高股價、機構參與度高", status: "主觀察" },
+  { symbol: "MUon / MUB", name: "美光科技", group: "AI 記憶體", mode: "高價 / 活潑", priority: "P1", use: "AI 記憶體主線，股性活潑，適合波段觀察", status: "主觀察" },
+  { symbol: "MRVLon", name: "Marvell", group: "AI 基礎建設", mode: "活潑 / 有量", priority: "P1", use: "AI ASIC / 網通題材，適合波段觀察", status: "主觀察" },
+  { symbol: "ARMon", name: "安謀控股", group: "半導體 IP", mode: "高價 / 活潑", priority: "P1", use: "AI / 手機 / 邊緣運算 IP 題材，高關注度", status: "主觀察" },
+  { symbol: "AMDon / AMDB", name: "AMD", group: "AI 基礎建設", mode: "活潑 / 高 beta", priority: "P2", use: "股性活潑，但需確認趨勢與執行力", status: "候選" },
+  { symbol: "GOOGLon", name: "Alphabet", group: "平台型公司", mode: "健康 / 有量", priority: "P2", use: "健康、有量，但股性相對不夠活潑", status: "候選" },
+  { symbol: "METAon / METAB", name: "Meta", group: "平台型公司", mode: "健康 / 有量", priority: "P2", use: "健康、有量，波段性中等", status: "候選" },
+  { symbol: "AMZNon", name: "Amazon", group: "平台型公司", mode: "健康 / 有量", priority: "P2", use: "健康、有量，波段性中等", status: "候選" },
+  { symbol: "MSFTon / MSFTB", name: "微軟", group: "平台型公司", mode: "健康 / 有量", priority: "P2", use: "健康、有量，但股性偏穩", status: "候選" },
+  { symbol: "CRWVon", name: "CoreWeave", group: "AI 算力", mode: "活潑 / 題材強", priority: "P2", use: "AI 算力題材強，但歷史較短", status: "候選" },
+  { symbol: "COINon", name: "Coinbase", group: "加密金融", mode: "活潑 / 有量", priority: "P2", use: "有量、活潑，但受加密週期影響", status: "候選" },
+  { symbol: "HOODon", name: "Robinhood", group: "金融科技", mode: "活潑 / 有量", priority: "P2", use: "股性活潑，有交易題材，但風險較高", status: "候選" },
+  { symbol: "CRCLon / CRCLB", name: "Circle", group: "穩定幣金融", mode: "題材強 / 有量", priority: "P2", use: "穩定幣題材，有量，需觀察估值", status: "候選" },
+  { symbol: "PLTRB", name: "Palantir", group: "AI 軟體", mode: "活潑 / 有量", priority: "P2", use: "活潑、有量，但估值敏感", status: "候選" },
+  { symbol: "TSLAB / TSLAon", name: "Tesla", group: "高波動科技", mode: "高價 / 活潑", priority: "P2", use: "活潑、高價，但品質與週期需確認", status: "候選" },
+  { symbol: "MSTRB", name: "MicroStrategy", group: "BTC 代理", mode: "高 beta", priority: "P2", use: "活潑、有量，但與 BTC 高度綁定", status: "候選" },
+  { symbol: "COHRon / CAMTon / MKSIon", name: "光通訊 / 半導體設備組", group: "AI 供應鏈", mode: "活潑", priority: "P2", use: "從截圖看波動活潑，需分別回測與驗證流動性", status: "候選" },
+  { symbol: "RKLBon", name: "Rocket Lab", group: "高成長深折扣", mode: "活潑 / 高風險", priority: "P3", use: "活潑但風險高，只保留文件觀察", status: "文件觀察" },
+  { symbol: "SPCXon / SPCXB", name: "SpaceX", group: "高成長深折扣", mode: "資料短", priority: "P3", use: "非公開市場代理，歷史資料短，先文件觀察", status: "文件觀察" },
+  { symbol: "SNDKon / LITEon / LWLGon", name: "次級光通訊 / 儲存候選", group: "高波動題材", mode: "待確認", priority: "P3", use: "可觀察，但暫不進自動交易", status: "文件觀察" },
+  { symbol: "OKLO / IONQ / RGTI / QBTS", name: "核能 / 量子題材", group: "題材股", mode: "高風險", priority: "P3", use: "題材活潑但基本面與流動性需嚴格確認", status: "文件觀察" },
 ];
 
 const rules = [
@@ -94,23 +109,23 @@ export default function LeveragedHunterPage() {
       <Card accent="rgba(245,158,11,.32)">
         <div style={{ fontSize: 44, marginBottom: 10 }}>⚡</div>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 1000 }}>選股原則</h2>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 14, fontWeight: 750 }}>做槓桿 / 波段，不是找便宜爛股，而是找健康、股價高、股性活潑、有成交量的標的。第一階段只從 Binance 股票代幣 / xStocks 名單內挑選。</p>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 14, fontWeight: 750 }}>我看過你截圖裡的漲幅榜、AI 發現與 24/7 可交易名單。槓桿 / 波段不是找便宜爛股，而是找健康、股價高、股性活潑、有成交量的標的。</p>
         <div style={{ display: "grid", gap: 7, marginTop: 12 }}>
           <Pill tone="green">健康</Pill>
           <Pill tone="green">股價高</Pill>
           <Pill tone="green">股性活潑</Pill>
           <Pill tone="green">有量</Pill>
-          <Pill tone="red">不加入台股 ETF / 傳統槓桿 ETF</Pill>
+          <Pill tone="red">低價低量題材股不進主名單</Pill>
         </div>
       </Card>
 
       <Card accent="rgba(34,197,94,.28)">
-        <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 1000 }}>Priority 1｜先做回測與 App 觀察</h2>
+        <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 1000 }}>Priority 1｜主觀察名單</h2>
         <div style={{ display: "grid", gap: 10 }}>{p1.map((item) => <CandidateCard key={item.symbol} item={item} />)}</div>
       </Card>
 
       <details open style={{ marginBottom: 12 }}>
-        <summary style={{ padding: 14, borderRadius: 18, background: "rgba(245,158,11,.12)", border: "1px solid rgba(245,158,11,.24)", color: "#fde68a", fontWeight: 1000 }}>Priority 2｜回測後再決定（{p2.length}）</summary>
+        <summary style={{ padding: 14, borderRadius: 18, background: "rgba(245,158,11,.12)", border: "1px solid rgba(245,158,11,.24)", color: "#fde68a", fontWeight: 1000 }}>Priority 2｜候選觀察（{p2.length}）</summary>
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>{p2.map((item) => <CandidateCard key={item.symbol} item={item} />)}</div>
       </details>
 
@@ -132,7 +147,7 @@ export default function LeveragedHunterPage() {
       <Card>
         <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 1000 }}>封板原則</h2>
         <div style={{ color: "#cbd5e1", lineHeight: 1.7, fontSize: 14, fontWeight: 800 }}>
-          第一階段只使用 Binance 股票代幣 / xStocks 名單。<br />
+          第一階段只使用 Binance 股票代幣 / xStocks / bStocks 名單。<br />
           不納入台股 ETF、不納入傳統美股槓桿 ETF、不納入非代幣化個股。<br />
           槓桿獵人與折價獵人共用資料源，但不共用買入規則。<br />
           標的必須健康、股價高、股性活潑、有量。<br />
