@@ -24,44 +24,50 @@
 計算成本、部位、現金、停損、停利、停止加碼、總資金上限
 ```
 
-這樣才能回答：
-
-```text
-這套規則如果真的執行，資金會怎麼變化？
-會不會太早打光現金？
-哪個標的佔比過高？
-最大浮虧是否可承受？
-```
-
 ---
 
-## 2. Discount Hunter Simulation
+## 2. Josh Confirmed Simulation Parameters
 
-### 2.1 Initial Assumptions
+### 2.1 Discount Hunter
 
 | Item | Value |
 |---|---:|
 | 單筆買入 | 5U |
-| 單一標的上限 | 15U / 30U，待測 |
-| 每月預算 | 50U / 100U，待測 |
-| 總策略資金 | 300U / 500U，待測 |
+| 每月預算 | 100U |
+| 總策略資金 | 300U |
+| 單一標的上限 | 40U |
 | 賣出 | 初版不賣，只累積 |
 | 成本 | 初版先不含滑價，第二版加入 |
 
-### 2.2 Simulation Logic
+### 2.2 Leveraged Hunter
+
+| Item | Value |
+|---|---:|
+| 單筆買入 | 5U |
+| 總策略資金 | 50U |
+| 單一標的上限 | 15U |
+| 停利 | +12% |
+| 停損 | -8% |
+| 持有時間 | 30日 |
+| P3 | 不交易 |
+
+---
+
+## 3. Discount Hunter Simulation Logic
 
 ```text
 每日更新價格
 → 計算距離 52週高點 / Cycle High 回撤
 → 觸發層級
 → 檢查該層是否已買過
-→ 檢查單檔上限
-→ 檢查本月預算
+→ 檢查單檔上限 40U
+→ 檢查本月預算 100U
+→ 檢查總策略資金 300U
 → 買入 5U
 → 更新持倉與現金
 ```
 
-### 2.3 Outputs
+### Outputs
 
 ```text
 總投入
@@ -77,33 +83,20 @@
 
 ---
 
-## 3. Leveraged Hunter Simulation
-
-### 3.1 Initial Assumptions
-
-| Item | Value |
-|---|---:|
-| 單筆買入 | 5U |
-| 單一 P1 標的上限 | 15U |
-| 單一 P2 標的上限 | 5U |
-| P3 | 不交易 |
-| 槓桿獵人總資金 | 50U |
-| 最大持有天數 | 20 / 60 日，待測 |
-| 停利 | +8% / +12% / +20%，待測 |
-| 停損 | -6% / -10% / -15%，待測 |
-
-### 3.2 Simulation Logic
+## 4. Leveraged Hunter Simulation Logic
 
 ```text
 每日更新價格
 → 判斷戰術訊號 A/B/C
 → Gate 通過才允許建立小部位
 → 買入 5U
-→ 每日檢查停利 / 停損 / 最大持有天數 / Kill Switch
+→ 每日檢查停利 +12%
+→ 每日檢查停損 -8%
+→ 最多持有 30 日
 → 出場後記錄交易結果
 ```
 
-### 3.3 Outputs
+### Outputs
 
 ```text
 交易次數
@@ -119,20 +112,28 @@
 
 ---
 
-## 4. Required Files
+## 5. Required Files
 
-新增或升級：
+已建立 / 已升級：
 
 ```text
 scripts/simulate_discount_hunter.py
 scripts/simulate_leveraged_hunter.py
+scripts/backtest_leveraged_hunter.py
+```
+
+輸出目標：
+
+```text
 reports/backtests/discount_hunter_simulation.csv
+reports/backtests/discount_hunter_simulation_summary.csv
 reports/backtests/leveraged_hunter_simulation.csv
+reports/backtests/leveraged_hunter_simulation_summary.csv
 ```
 
 ---
 
-## 5. Guardrails
+## 6. Guardrails
 
 模擬結果不能直接變成自動交易。
 
@@ -149,13 +150,13 @@ Kill Switch 完成
 
 ---
 
-## 6. Project Owner Decision
+## 7. Project Owner Decision
 
-下一步先做兩支模擬腳本：
+Josh 已確認模擬參數。
 
-1. `scripts/simulate_discount_hunter.py`
-2. `scripts/simulate_leveraged_hunter.py`
+下一步：
 
-先用 CSV / yfinance 原股資料跑模型。
-
-正式接自動交易前，必須再加入 Binance 代幣價格、流動性、價差與 API 風險檢查。
+1. 讓 backtest output 產生 30 日欄位，配合槓桿獵人持有 30 日。
+2. 建立 JSON summary API，讓 App 可以讀取模擬結果。
+3. Vercel / GitHub Actions 後續可接定期產生報告。
+4. 正式接自動交易前，必須再加入 Binance 代幣價格、流動性、價差與 API 風險檢查。
