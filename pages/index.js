@@ -29,8 +29,8 @@ const projects = [
   {
     id: 4,
     eyebrow: "PROTOTYPE",
-    title: "Josh Financial OS",
-    description: "收入、支出、三帳戶、生活費、預算、資產與 AI 月報。",
+    title: "Josh 2026多元記帳本",
+    description: "收入、支出、三帳戶、生活費、預算、資產與投資扣款。",
     href: "/josh-os",
     status: "Prototype",
     accent: "#a78bfa",
@@ -59,7 +59,7 @@ export default function ProjectPager() {
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 430, margin: "0 auto", padding: "24px 16px 34px" }}>
       <header style={{ marginBottom: 24 }}>
-        <div style={{ color: "#38bdf8", fontSize: 18, letterSpacing: 4, fontWeight: 1000 }}>Josh Investment OS</div>
+        <div style={{ color: "#38bdf8", fontSize: 18, letterSpacing: 4, fontWeight: 1000 }}>Josh 2026 OS</div>
         <h1 style={{ margin: "8px 0 14px", fontSize: 46, lineHeight: 1.02, fontWeight: 1000 }}>Project Pager</h1>
         <div style={{ display: "flex", gap: 10 }}>
           {projects.map((p) => <a key={p.id} href={p.href} style={{ width: 46, height: 46, borderRadius: 999, display: "grid", placeItems: "center", color: "#dbeafe", textDecoration: "none", fontSize: 18, fontWeight: 1000, border: `1px solid ${p.accent}55`, background: "rgba(15,23,42,.78)" }}>{p.id}</a>)}
@@ -71,7 +71,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        四合一入口：富邦 DCA、折價獵人、槓桿獵人、Josh Financial OS。診斷工具保留在文件與系統頁，不放主卡。
+        四合一入口：富邦 DCA、折價獵人、槓桿獵人、Josh 2026多元記帳本。診斷工具保留在文件與系統頁，不放主卡。
       </footer>
     </div>
   </main>;
