@@ -10,9 +10,9 @@ const projects = [
   },
   {
     id: 2,
-    eyebrow: "LIVE",
-    title: "美股 DCA 折價追蹤",
-    description: "BTC + Binance xStocks。今日決策、持倉、折價層級與真實成本。",
+    eyebrow: "LIVE V18",
+    title: "DCA 折價獵人",
+    description: "App V17.1｜Playbook V18.0。品質優先，買點只是允許買入，V18.1 回測前不固定最終門檻。",
     href: "/v17",
     status: "Ready",
     accent: "#22c55e",
