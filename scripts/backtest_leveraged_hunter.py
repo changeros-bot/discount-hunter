@@ -72,23 +72,49 @@ def load_from_csv(ticker: str, data_dir: Path) -> pd.DataFrame:
     return clean_price_df(pd.read_csv(path), ticker)
 
 
+def flatten_yfinance(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """Return a simple DataFrame with date and close from possible yfinance shapes."""
+    if raw.empty:
+        raise ValueError(f"No yfinance data for {ticker}")
+
+    df = raw.copy()
+    if isinstance(df.columns, pd.MultiIndex):
+        # yfinance may return either (Price, Ticker) or (Ticker, Price).
+        close_candidates = []
+        for col in df.columns:
+            labels = [str(x).lower() for x in col]
+            if "close" in labels or "adj close" in labels:
+                close_candidates.append(col)
+        if not close_candidates:
+            raise ValueError(f"{ticker}: yfinance MultiIndex has no close column: {list(df.columns)[:5]}")
+        df = pd.DataFrame({"date": df.index, "close": df[close_candidates[0]]})
+    else:
+        df = df.reset_index()
+        rename = {c: str(c).lower().strip().replace(" ", "_") for c in df.columns}
+        df = df.rename(columns=rename)
+        date_col = "date" if "date" in df.columns else "datetime" if "datetime" in df.columns else None
+        close_col = None
+        for c in ("adj_close", "close", "price"):
+            if c in df.columns:
+                close_col = c
+                break
+        if date_col is None or close_col is None:
+            raise ValueError(f"{ticker}: yfinance columns unsupported: {list(df.columns)}")
+        df = pd.DataFrame({"date": df[date_col], "close": df[close_col]})
+    return clean_price_df(df, ticker)
+
+
 def load_from_yfinance(ticker: str, start: str) -> pd.DataFrame:
     try:
         import yfinance as yf  # type: ignore
     except ImportError as exc:
         raise SystemExit("yfinance is not installed. Install with: pip install yfinance") from exc
-    raw = yf.download(ticker, start=start, auto_adjust=True, progress=False)
-    if raw.empty:
-        raise ValueError(f"No yfinance data for {ticker}")
-    raw = raw.reset_index()
-    raw.columns = [str(c).lower().replace(" ", "_") for c in raw.columns]
-    if "date" not in raw.columns and "datetime" in raw.columns:
-        raw = raw.rename(columns={"datetime": "date"})
-    return clean_price_df(raw, ticker)
+    raw = yf.download(ticker, start=start, auto_adjust=True, progress=False, threads=False)
+    return flatten_yfinance(raw, ticker)
 
 
 def clean_price_df(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
-    columns = {c.lower().strip().replace(" ", "_"): c for c in df.columns}
+    columns = {c.lower().strip().replace(" ", "_"): c for c in map(str, df.columns)}
     if "date" not in columns:
         raise ValueError(f"{ticker}: missing date column")
     price_col = None
@@ -97,7 +123,7 @@ def clean_price_df(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
             price_col = columns[candidate]
             break
     if price_col is None:
-        raise ValueError(f"{ticker}: missing close / adj_close / price column")
+        raise ValueError(f"{ticker}: missing close / adj_close / price column. Columns: {list(df.columns)}")
     out = pd.DataFrame({
         "date": pd.to_datetime(df[columns["date"]]),
         "close": pd.to_numeric(df[price_col], errors="coerce"),
@@ -175,17 +201,10 @@ def scan_events(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 def summarize(events: pd.DataFrame) -> pd.DataFrame:
     if events.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["ticker", "signal", "events"])
     rows = []
     for (ticker, signal), group in events.groupby(["ticker", "signal"]):
-        row = {
-            "ticker": ticker,
-            "signal": signal,
-            "events": len(group),
-            "avg_drawdown_60": group["drawdown_60"].mean(),
-            "avg_max_adverse_60d": group["max_adverse_60d"].mean(),
-            "avg_vol_20": group["vol_20"].mean(),
-        }
+        row = {"ticker": ticker, "signal": signal, "events": len(group), "avg_drawdown_60": group["drawdown_60"].mean(), "avg_max_adverse_60d": group["max_adverse_60d"].mean(), "avg_vol_20": group["vol_20"].mean()}
         for window in FORWARD_WINDOWS:
             col = f"ret_{window}d"
             row[f"avg_{col}"] = group[col].mean()
@@ -226,20 +245,31 @@ def resolve_tickers(args: argparse.Namespace) -> List[str]:
 def run(args: argparse.Namespace) -> None:
     tickers = resolve_tickers(args)
     all_events = []
+    failures = []
     for ticker in tickers:
-        if args.source == "csv":
-            prices = load_from_csv(ticker, Path(args.data_dir))
-        else:
-            prices = load_from_yfinance(ticker, args.start)
-        enriched = add_indicators(prices)
-        all_events.append(scan_events(enriched, ticker))
+        try:
+            prices = load_from_csv(ticker, Path(args.data_dir)) if args.source == "csv" else load_from_yfinance(ticker, args.start)
+            enriched = add_indicators(prices)
+            events = scan_events(enriched, ticker)
+            if not events.empty:
+                all_events.append(events)
+            print(f"OK {ticker}: rows={len(prices)} events={len(events)}")
+        except Exception as exc:  # keep batch alive; record failure for logs
+            failures.append((ticker, str(exc)))
+            print(f"WARN {ticker}: {exc}")
     events = pd.concat(all_events, ignore_index=True) if all_events else pd.DataFrame()
     summary = summarize(events)
     save_outputs(events, summary, Path(args.output_dir))
     print(f"Leveraged Hunter backtest complete. Tickers: {', '.join(tickers)}")
     print(f"Events: {len(events)}")
+    if failures:
+        print("Skipped tickers:")
+        for ticker, reason in failures:
+            print(f"- {ticker}: {reason}")
     print(f"Wrote: {Path(args.output_dir) / 'leveraged_hunter_events.csv'}")
     print(f"Wrote: {Path(args.output_dir) / 'leveraged_hunter_summary.csv'}")
+    if events.empty:
+        raise SystemExit("No events generated; cannot run simulation")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
