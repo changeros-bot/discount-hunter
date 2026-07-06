@@ -4,8 +4,8 @@ const modules = [
     name: "DCA 折價獵人",
     route: "/v17",
     status: "LIVE",
-    health: "V19_READY_FOR_REVIEW",
-    note: "V17.1 app live. Josh Portfolio V19.0 Discount Hunter Playbook recorded in docs/V19_DISCOUNT_HUNTER_PLAYBOOK.md. V19.1 backtests pending."
+    health: "V18_READY_FOR_REVIEW",
+    note: "App V17.1 live. Active Playbook is Josh Portfolio V18.0 at docs/V18_DISCOUNT_HUNTER_PLAYBOOK.md. V18.1 backtests pending. V19 is future draft only."
   },
   {
     key: "leveraged-hunter",
@@ -13,7 +13,7 @@ const modules = [
     route: "/leveraged-hunter",
     status: "DRAFT",
     health: "PLANNING",
-    note: "Independent 00631L diagnostic module. Not part of Discount Hunter V19 engine."
+    note: "Independent 00631L diagnostic module. Not part of Discount Hunter V18 engine."
   },
   {
     key: "financial-os",
@@ -41,8 +41,10 @@ export default function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
-    registryVersion: "Josh Portfolio V19.0",
-    playbook: "docs/V19_DISCOUNT_HUNTER_PLAYBOOK.md",
+    registryVersion: "Josh Portfolio V18.0",
+    appVersion: "Discount Hunter V17.1",
+    playbook: "docs/V18_DISCOUNT_HUNTER_PLAYBOOK.md",
+    futureDraft: "docs/V19_DISCOUNT_HUNTER_PLAYBOOK.md",
     updatedAt: new Date().toISOString(),
     summary: {
       total: modules.length,
