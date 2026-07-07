@@ -34,11 +34,14 @@ def clean(df, ticker):
     cols = {str(c).lower().strip().replace(" ", "_"): c for c in df.columns}
     date_col = cols.get("date") or cols.get("datetime")
     close_col = cols.get("adj_close") or cols.get("close") or cols.get("price")
+    open_col = cols.get("open")
     if date_col is None or close_col is None or cols.get("volume") is None:
         raise ValueError(f"{ticker}: missing date/close/volume")
     close = pd.to_numeric(df[close_col], errors="coerce")
+    open_price = pd.to_numeric(df[open_col], errors="coerce") if open_col else close
     out = pd.DataFrame({
         "date": pd.to_datetime(df[date_col]),
+        "open": open_price,
         "close": close,
         "high": pd.to_numeric(df[cols.get("high")], errors="coerce") if cols.get("high") else close,
         "low": pd.to_numeric(df[cols.get("low")], errors="coerce") if cols.get("low") else close,
@@ -71,15 +74,25 @@ def load_price(ticker, args, cache: Dict[str, pd.DataFrame]):
     return data
 
 
-def simulate(prices, date, entry, rule, cost):
-    idxs = prices.index[prices["date"] >= date].tolist()
+def entry_from_next_open(prices, signal_date, slippage):
+    idxs = prices.index[prices["date"] > signal_date].tolist()
     if not idxs: return None
-    start = idxs[0]; top = entry; max_days = WINDOWS[rule]
+    entry_idx = idxs[0]
+    row = prices.iloc[entry_idx]
+    entry_price = float(row["open"]) * (1.0 + slippage)
+    return entry_idx, row["date"], entry_price
+
+
+def simulate(prices, signal_date, rule, cost, slippage):
+    entry = entry_from_next_open(prices, signal_date, slippage)
+    if entry is None: return None
+    start, entry_date, entry_price = entry
+    top = entry_price; max_days = WINDOWS[rule]
     for d in range(1, max_days + 1):
         i = start + d
         if i >= len(prices): break
         r = prices.iloc[i]; close = float(r["close"]); top = max(top, close)
-        gross = close / entry - 1.0; reason = None
+        gross = close / entry_price - 1.0; reason = None
         if rule == "base_60d":
             if close < float(r["ma25"]): reason = "close_below_ma25"
             elif float(r["vol5"]) < float(r["vol60"]): reason = "volume_weak"
@@ -90,10 +103,10 @@ def simulate(prices, date, entry, rule, cost):
             if close < float(r["ma25"]): reason = "close_below_ma25"
             elif close <= top - 2.0 * float(r["atr14"]): reason = "atr_trail"
         if reason:
-            return {"exit_date": r["date"], "exit_price": close, "hold_days": d, "exit_reason": reason, "gross_return": gross, "net_return": gross - cost}
+            return {"entry_date": entry_date, "entry_price": entry_price, "exit_date": r["date"], "exit_price": close, "hold_days": d, "exit_reason": reason, "gross_return": gross, "net_return": gross - cost}
     i = min(start + max_days, len(prices) - 1); r = prices.iloc[i]
-    gross = float(r["close"]) / entry - 1.0
-    return {"exit_date": r["date"], "exit_price": float(r["close"]), "hold_days": i - start, "exit_reason": f"max_{max_days}d", "gross_return": gross, "net_return": gross - cost}
+    gross = float(r["close"]) / entry_price - 1.0
+    return {"entry_date": entry_date, "entry_price": entry_price, "exit_date": r["date"], "exit_price": float(r["close"]), "hold_days": i - start, "exit_reason": f"max_{max_days}d", "gross_return": gross, "net_return": gross - cost}
 
 
 def summary(df, cols):
@@ -112,7 +125,7 @@ def summary(df, cols):
 def fmt(df):
     out = df.copy()
     for c in out.columns:
-        if c in {"gross_return", "net_return", "win_rate", "avg_net_return", "median_net_return", "worst", "best"}:
+        if c in {"gross_return", "net_return", "win_rate", "avg_net_return", "median_net_return", "worst", "best", "cost", "slippage"}:
             out[c] = out[c].map(lambda x: "" if pd.isna(x) else f"{x:.2%}")
         if c in {"avg_hold_days", "profit_factor"}:
             out[c] = out[c].map(lambda x: "" if pd.isna(x) else f"{x:.2f}")
@@ -128,9 +141,9 @@ def run(args):
         try:
             p = load_price(norm(e.ticker), args, cache)
             for rule in args.rules:
-                result = simulate(p, e.date, float(e.close), rule, args.cost)
+                result = simulate(p, e.date, rule, args.cost, args.slippage)
                 if result:
-                    rows.append({"ticker": norm(e.ticker), "industry": e.industry, "pattern": e.pattern, "entry_date": e.date, "entry_price": float(e.close), "rule": rule, "cost": args.cost, **result})
+                    rows.append({"ticker": norm(e.ticker), "industry": e.industry, "pattern": e.pattern, "signal_date": e.date, "rule": rule, "cost": args.cost, "slippage": args.slippage, **result})
         except Exception as exc:
             print(f"SKIP {e.ticker}: {exc}")
     trades = pd.DataFrame(rows); out = Path(args.output_dir); out.mkdir(parents=True, exist_ok=True)
@@ -139,7 +152,7 @@ def run(args):
     fmt(summary(trades, ("industry", "rule"))).to_csv(out / "2560_sim_by_industry.csv", index=False)
     fmt(summary(trades, ("pattern", "rule"))).to_csv(out / "2560_sim_by_pattern.csv", index=False)
     fmt(summary(trades, ("rule", "exit_reason"))).to_csv(out / "2560_sim_by_exit.csv", index=False)
-    print(f"2560 lab simulation complete. Rows: {len(trades)}")
+    print(f"2560 lab simulation complete. Rows: {len(trades)}. Next-open entry, slippage={args.slippage:.2%}, cost={args.cost:.2%}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
@@ -150,6 +163,7 @@ def parse_args(argv: Optional[Sequence[str]] = None):
     ap.add_argument("--output-dir", default="reports/backtests")
     ap.add_argument("--start", default="2010-01-01")
     ap.add_argument("--cost", type=float, default=0.002)
+    ap.add_argument("--slippage", type=float, default=0.002)
     ap.add_argument("--rules", nargs="+", default=["base_60d", "risk_30d", "trend_60d"])
     return ap.parse_args(argv)
 
