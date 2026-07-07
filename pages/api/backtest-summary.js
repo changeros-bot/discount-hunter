@@ -7,6 +7,8 @@ const FILES = {
   discount: {
     summary: 'discount_hunter_simulation_summary.csv',
     events: 'discount_hunter_simulation.csv',
+    filter2560Summary: 'discount_hunter_2560_summary.csv',
+    filter2560Events: 'discount_hunter_2560_events.csv',
   },
 };
 
@@ -43,7 +45,7 @@ function readCsv(fileName, limit = 50) {
   const fullPath = path.join(BACKTEST_DIR, fileName);
   if (!fileName || !fs.existsSync(fullPath)) return { exists: false, rows: [], path: fileName };
   const raw = fs.readFileSync(fullPath, 'utf8').trim();
-  if (!raw) return { exists: true, rows: [], path: fileName };
+  if (!raw || raw === 'removed') return { exists: true, rows: [], path: fileName };
   const lines = raw.split(/\r?\n/).filter(Boolean);
   const headers = parseCsvLine(lines[0]);
   const rows = lines.slice(1, limit + 1).map((line) => {
@@ -57,7 +59,7 @@ function latestRows(fileName, limit = 10) {
   const fullPath = path.join(BACKTEST_DIR, fileName);
   if (!fileName || !fs.existsSync(fullPath)) return { exists: false, rows: [], path: fileName };
   const raw = fs.readFileSync(fullPath, 'utf8').trim();
-  if (!raw) return { exists: true, rows: [], path: fileName };
+  if (!raw || raw === 'removed') return { exists: true, rows: [], path: fileName };
   const lines = raw.split(/\r?\n/).filter(Boolean);
   const headers = parseCsvLine(lines[0]);
   const rows = lines.slice(1).slice(-limit).map((line) => {
@@ -71,17 +73,28 @@ function buildProject(type) {
   const files = FILES[type];
   const summary = readCsv(files.summary, 5);
   const recent = latestRows(files.events, 10);
+  const filter2560Summary = readCsv(files.filter2560Summary, 50);
+  const filter2560Events = latestRows(files.filter2560Events, 10);
   const firstSummary = summary.rows[0] || null;
   return {
     type,
     status: summary.exists ? 'ready' : 'missing',
     summary: firstSummary,
     recentRows: recent.rows,
+    filter2560: {
+      status: filter2560Summary.exists ? 'ready' : 'missing',
+      summaryRows: filter2560Summary.rows,
+      recentRows: filter2560Events.rows,
+    },
     files: {
       summary: summary.path,
       events: recent.path,
+      filter2560Summary: filter2560Summary.path,
+      filter2560Events: filter2560Events.path,
       summaryExists: summary.exists,
       eventsExists: recent.exists,
+      filter2560SummaryExists: filter2560Summary.exists,
+      filter2560EventsExists: filter2560Events.exists,
     },
   };
 }
@@ -103,6 +116,7 @@ export default function handler(req, res) {
           monthlyBudget: '100U',
           totalCapital: '300U',
           singleAssetLimit: '40U',
+          filter2560: 'Research only: compare D_ONLY, D_MA25, D_VOLUME, D_2560.',
         },
       },
     };
