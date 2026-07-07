@@ -82,6 +82,7 @@ export default function Paper2560() {
   const activeRows = data ? [...data.open, ...data.pending] : [];
   const profiles = s?.universeProfiles || [];
   const activeTickers = useMemo(() => new Set(activeRows.map((r) => pick(r, ["ticker", "股票"], ""))), [activeRows]);
+  const activeProfiles = profiles.filter((x) => activeTickers.has(x.ticker));
   const observationRaw = profiles.filter((x) => x.group?.includes("高波動") || x.strategy?.includes("只開"));
   const observation = observationRaw.filter((x) => !activeTickers.has(x.ticker));
   const waiting = profiles.filter((x) => !activeTickers.has(x.ticker) && !observationRaw.some((o) => o.ticker === x.ticker));
@@ -112,6 +113,7 @@ export default function Paper2560() {
 
         <Zone title="紙上交易運行中" sub="已觸發訊號，等待隔日開盤或 30 天內追蹤" count={activeRows.length} color="#22c55e">
           {activeRows.length ? <div style={{ display: "grid", gap: 10 }}>{activeRows.map((r, i) => <TradeCard key={pick(r, ["trade_id"], i)} row={r} />)}</div> : <div style={{ color: "#64748b", fontWeight: 900 }}>目前沒有運行中的紙上交易。</div>}
+          {activeProfiles.length > 0 && <div style={{ display: "grid", gap: 10, marginTop: 10 }}>{activeProfiles.map((x) => <SymbolCard key={x.ticker} item={x} active />)}</div>}
         </Zone>
 
         <Zone title="等待訊號區" sub="已通過名單，但尚未出現 2560 訊號" count={waiting.length} color="#f59e0b">
