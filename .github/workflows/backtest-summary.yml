@@ -46,7 +46,7 @@ jobs:
       - name: Run core Discount Hunter backtest
         if: ${{ github.event.inputs.target == 'discount' || github.event.inputs.target == 'all' }}
         run: |
-          python scripts/backtest_discount_hunter.py --source yfinance --tickers BTC-USD NVDA TSM AMD AVGO MRVL RKLB GOOGL QQQ
+          python scripts/backtest_core_discount_hunter.py
           if [ -f reports/backtests/discount_hunter_events.csv ]; then
             python scripts/simulate_discount_hunter.py
           fi
