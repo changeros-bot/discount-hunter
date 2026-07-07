@@ -82,9 +82,9 @@ export default function Paper2560() {
   const activeRows = data ? [...data.open, ...data.pending] : [];
   const profiles = s?.universeProfiles || [];
   const activeTickers = useMemo(() => new Set(activeRows.map((r) => pick(r, ["ticker", "股票"], ""))), [activeRows]);
-  const observation = profiles.filter((x) => x.group?.includes("高波動") || x.strategy?.includes("只開"));
-  const waiting = profiles.filter((x) => !activeTickers.has(x.ticker) && !observation.some((o) => o.ticker === x.ticker));
-  const activeProfiles = profiles.filter((x) => activeTickers.has(x.ticker));
+  const observationRaw = profiles.filter((x) => x.group?.includes("高波動") || x.strategy?.includes("只開"));
+  const observation = observationRaw.filter((x) => !activeTickers.has(x.ticker));
+  const waiting = profiles.filter((x) => !activeTickers.has(x.ticker) && !observationRaw.some((o) => o.ticker === x.ticker));
   const openExposure = s?.openExposure ?? ((s?.open || 0) + (s?.pending || 0)) * 100;
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "radial-gradient(circle at top,#0f2a44 0%,#020617 42%,#020617 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
@@ -106,21 +106,20 @@ export default function Paper2560() {
         <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Stat label="紙上交易運行中" value={s.open + s.pending} sub={`OPEN ${s.open}｜PENDING ${s.pending}`} color="#38bdf8" />
           <Stat label="等待訊號" value={waiting.length} sub="合格但今日無訊號" color="#f59e0b" />
-          <Stat label="觀察區" value={observation.length} sub="限制型態 / 高波動" color="#a78bfa" />
+          <Stat label="觀察區" value={observation.length} sub="限制型態 / 高波動，且未觸發" color="#a78bfa" />
           <Stat label="模擬曝險" value={money(openExposure)} sub="未平倉模擬本金" color="#22c55e" />
         </section>
 
         <Zone title="紙上交易運行中" sub="已觸發訊號，等待隔日開盤或 30 天內追蹤" count={activeRows.length} color="#22c55e">
           {activeRows.length ? <div style={{ display: "grid", gap: 10 }}>{activeRows.map((r, i) => <TradeCard key={pick(r, ["trade_id"], i)} row={r} />)}</div> : <div style={{ color: "#64748b", fontWeight: 900 }}>目前沒有運行中的紙上交易。</div>}
-          {activeProfiles.length > 0 && <div style={{ display: "grid", gap: 10, marginTop: 10 }}>{activeProfiles.map((x) => <SymbolCard key={x.ticker} item={x} active />)}</div>}
         </Zone>
 
         <Zone title="等待訊號區" sub="已通過名單，但尚未出現 2560 訊號" count={waiting.length} color="#f59e0b">
           <div style={{ display: "grid", gap: 10 }}>{waiting.map((x) => <SymbolCard key={x.ticker} item={x} />)}</div>
         </Zone>
 
-        <Zone title="觀察區" sub="高波動或限制型態標的；只等最強訊號" count={observation.length} color="#a78bfa">
-          <div style={{ display: "grid", gap: 10 }}>{observation.map((x) => <SymbolCard key={x.ticker} item={x} />)}</div>
+        <Zone title="觀察區" sub="高波動或限制型態標的；目前尚未觸發訊號" count={observation.length} color="#a78bfa">
+          {observation.length ? <div style={{ display: "grid", gap: 10 }}>{observation.map((x) => <SymbolCard key={x.ticker} item={x} />)}</div> : <div style={{ color: "#64748b", fontWeight: 900 }}>目前沒有未觸發的觀察組標的。</div>}
         </Zone>
       </>}
     </div>
