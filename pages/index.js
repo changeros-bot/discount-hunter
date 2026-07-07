@@ -26,6 +26,15 @@ const projects = [
     status: "Prototype",
     accent: "#a78bfa",
   },
+  {
+    id: 4,
+    eyebrow: "RESEARCH",
+    title: "2560 Lab",
+    description: "Technical Lab V0.5。EOD signal, next-open paper log, no order execution.",
+    href: "/2560-paper",
+    status: "Paper",
+    accent: "#f59e0b",
+  },
 ];
 
 function ProjectCard({ project }) {
@@ -62,7 +71,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        三合一入口：富邦 DCA、折價獵人、Josh 2026多元記帳本。已停用專案不放主卡。
+        入口：富邦 DCA、折價獵人、Josh 2026多元記帳本、2560 Lab。已停用專案不放主卡。
       </footer>
     </div>
   </main>;
