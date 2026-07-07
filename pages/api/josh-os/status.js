@@ -8,14 +8,6 @@ const modules = [
     note: "App V17.1 live. Active Playbook is Josh Portfolio V18.0 at docs/V18_DISCOUNT_HUNTER_PLAYBOOK.md. V18.1 backtests pending. V19 is future draft only."
   },
   {
-    key: "leveraged-hunter",
-    name: "槓桿獵人",
-    route: "/leveraged-hunter",
-    status: "DRAFT",
-    health: "PLANNING",
-    note: "Independent 00631L diagnostic module. Not part of Discount Hunter V18 engine."
-  },
-  {
     key: "financial-os",
     name: "Josh 2026多元記帳本",
     route: "/financial-os",
