@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""2560 Paper Bot V0.6. Paper ledger only. No broker, no orders."""
+"""2560 Paper Bot V0.7. Paper ledger only. No broker, no orders."""
 from __future__ import annotations
 
 import argparse, math
@@ -15,11 +15,13 @@ except ImportError as exc:
 UNIVERSE = {
     "AAPL": "大型科技平台", "MSFT": "大型科技平台", "GOOGL": "大型科技平台",
     "META": "大型科技平台", "AMZN": "大型科技平台", "NFLX": "大型科技平台",
-    "MU": "AI半導體",
+    "MU": "AI半導體", "DELL": "AI基礎建設", "PLTR": "AI應用/國防軟體",
+    "NBIS": "高波動AI雲端",
 }
 
 ALLOWED_PATTERNS = {
     "MU": {"沖量", "縮量黑馬"},
+    "NBIS": {"沖量", "縮量黑馬"},
 }
 
 
