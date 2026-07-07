@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""2560 Paper Bot V0.5. Paper ledger only. No broker, no orders."""
+"""2560 Paper Bot V0.6. Paper ledger only. No broker, no orders."""
 from __future__ import annotations
 
 import argparse, math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Sequence
+from typing import Optional, Sequence
 
 try:
     import pandas as pd
@@ -15,8 +15,12 @@ except ImportError as exc:
 UNIVERSE = {
     "AAPL": "大型科技平台", "MSFT": "大型科技平台", "GOOGL": "大型科技平台",
     "META": "大型科技平台", "AMZN": "大型科技平台", "NFLX": "大型科技平台",
+    "MU": "AI半導體",
 }
-PATTERN_LABEL = {"誘多": "弱量續攻", "沖量": "沖量", "波段": "波段", "縮量黑馬": "縮量黑馬"}
+
+ALLOWED_PATTERNS = {
+    "MU": {"沖量", "縮量黑馬"},
+}
 
 
 def flat(raw):
@@ -39,7 +43,7 @@ def clean(df):
     close = pd.to_numeric(df[close_col], errors="coerce")
     open_col = cols.get("open")
     out = pd.DataFrame({
-        "date": pd.to_datetime(df[date_col]).dt.tz_localize(None),
+        "date": pd.to_datetime(df[date_col], utc=True).dt.tz_convert(None),
         "open": pd.to_numeric(df[open_col], errors="coerce") if open_col else close,
         "close": close,
         "high": pd.to_numeric(df[cols.get("high")], errors="coerce") if cols.get("high") else close,
@@ -91,9 +95,14 @@ def classify(row):
     rising = float(row.ret_3d) > 0 or float(row.ret_5d) > 0
     if not vol_above and not vol_cross and rising: return "弱量續攻"
     if bool(row.above_ma25) and vol_cross: return "沖量"
-    if near and vol_above: return "波段"
     if near and bool(row.shrink) and bool(row.low_volume_20d) and bool(row.above_ma200): return "縮量黑馬"
+    if near and vol_above: return "波段"
     return None
+
+
+def allowed_for_ticker(ticker, pattern):
+    allowed = ALLOWED_PATTERNS.get(str(ticker).upper())
+    return True if allowed is None else pattern in allowed
 
 
 def new_empty_ledger():
@@ -120,7 +129,7 @@ def run(args):
             p = load_price(ticker, args); price_cache[ticker] = p
             last = p.iloc[-1]
             pattern = classify(last)
-            if pattern:
+            if pattern and allowed_for_ticker(ticker, pattern):
                 tid = trade_id(ticker, last.date, pattern)
                 exists = (ledger.trade_id == tid).any() if not ledger.empty else False
                 has_open = ((ledger.ticker == ticker) & (ledger.status == "OPEN")).any() if not ledger.empty else False
@@ -146,7 +155,9 @@ def run(args):
     for i, tr in ledger.iterrows():
         try:
             ticker = tr.ticker
-            p = price_cache.get(ticker) or load_price(ticker, args)
+            p = price_cache.get(ticker)
+            if p is None:
+                p = load_price(ticker, args)
             last = p.iloc[-1]
             status = str(tr.status)
             if status == "PENDING":
