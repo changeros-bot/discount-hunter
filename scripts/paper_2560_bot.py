@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""2560 Paper Bot V0.7. Paper ledger only. No broker, no orders."""
+"""2560 Paper Bot V0.8. Paper ledger only. No broker, no orders."""
 from __future__ import annotations
 
-import argparse, math
+import argparse, json, math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
@@ -119,19 +119,35 @@ def trade_id(ticker, signal_date, pattern):
     return f"2560-{ticker}-{signal_date:%Y%m%d}-{pattern}"
 
 
+def iso_date(v):
+    return pd.to_datetime(v).strftime("%Y-%m-%d")
+
+
 def run(args):
     out_dir = Path(args.output_dir); out_dir.mkdir(parents=True, exist_ok=True)
     ledger_path = out_dir / "2560_paper_trades.csv"
     ledger = load_ledger(ledger_path)
     now = datetime.now(timezone.utc).isoformat()
     price_cache = {}
+    scan_rows = []
+    scan_errors = []
+    new_signals = []
 
     for ticker, industry in UNIVERSE.items():
         try:
             p = load_price(ticker, args); price_cache[ticker] = p
             last = p.iloc[-1]
             pattern = classify(last)
-            if pattern and allowed_for_ticker(ticker, pattern):
+            allowed = bool(pattern and allowed_for_ticker(ticker, pattern))
+            scan_rows.append({
+                "ticker": ticker,
+                "industry": industry,
+                "latest_market_date": iso_date(last.date),
+                "close": round(float(last.close), 4),
+                "pattern": pattern or "",
+                "allowed_signal": allowed,
+            })
+            if allowed:
                 tid = trade_id(ticker, last.date, pattern)
                 exists = (ledger.trade_id == tid).any() if not ledger.empty else False
                 has_open = ((ledger.ticker == ticker) & (ledger.status == "OPEN")).any() if not ledger.empty else False
@@ -151,8 +167,11 @@ def run(args):
                         "created_at": now, "updated_at": now,
                     }
                     ledger = pd.concat([ledger, pd.DataFrame([row])], ignore_index=True)
+                    new_signals.append({"ticker": ticker, "pattern": pattern, "signal_date": iso_date(last.date), "trade_id": tid})
         except Exception as exc:
-            print(f"SCAN SKIP {ticker}: {exc}")
+            msg = f"SCAN SKIP {ticker}: {exc}"
+            scan_errors.append({"ticker": ticker, "error": str(exc)})
+            print(msg)
 
     for i, tr in ledger.iterrows():
         try:
@@ -182,6 +201,7 @@ def run(args):
                 if reason:
                     ledger.loc[i, ["status","exit_date","exit_price","exit_reason","updated_at"]] = ["CLOSED", last.date, close, reason, now]
         except Exception as exc:
+            scan_errors.append({"ticker": getattr(tr, "ticker", ""), "error": f"UPDATE: {exc}"})
             print(f"UPDATE SKIP {getattr(tr, 'ticker', '')}: {exc}")
 
     ledger.to_csv(ledger_path, index=False)
@@ -198,7 +218,21 @@ def run(args):
         pf = wins.sum() / abs(losses.sum()) if abs(losses.sum()) > 0 else math.nan
         summary = pd.DataFrame([{"closed_trades":len(closed),"win_rate":f"{(returns>0).mean():.2%}","avg_return":f"{returns.mean():.2%}","median_return":f"{returns.median():.2%}","profit_factor":"" if pd.isna(pf) else f"{pf:.2f}"}])
     summary.to_csv(out_dir / "2560_paper_summary.csv", index=False)
-    print(f"2560 paper bot done. Open/Pending: {len(open_pos)} Closed: {len(closed)}")
+
+    audit = {
+        "ok": len(scan_errors) == 0,
+        "run_at_utc": now,
+        "source": args.source,
+        "universe_count": len(UNIVERSE),
+        "scanned_count": len(scan_rows),
+        "error_count": len(scan_errors),
+        "new_signal_count": len(new_signals),
+        "new_signals": new_signals,
+        "errors": scan_errors,
+        "scans": scan_rows,
+    }
+    (out_dir / "2560_last_scan.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf8")
+    print(f"2560 paper bot done. Scanned: {len(scan_rows)}/{len(UNIVERSE)} New signals: {len(new_signals)} Errors: {len(scan_errors)} Open/Pending: {len(open_pos)} Closed: {len(closed)}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
