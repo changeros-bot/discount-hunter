@@ -1,2 +1,1 @@
-mode,total_capital,trade_size,single_limit,hold_days,take_profit,stop_loss,commission_bps,spread_bps,slippage_bps,round_trip_cost_bps,trades,sample_level,wins,losses,win_rate,total_invested,gross_pnl,total_cost,realized_pnl,expectancy_per_trade,profit_factor,max_drawdown_pnl,return_on_used_capital,skipped_budget,skipped_limit,skipped_risk_off,research_status
-sandbox_50u,50.0,5.0,15.0,30,0.12,0.08,10.0,15.0,10.0,70.0,10,樣本不足,5,5,0.5,50.0,0.6729999999999999,0.3500000000000001,0.3229999999999995,0.032299999999999954,1.1485057471264366,-2.1750000000000003,0.00645999999999999,1659,0,176,不可判定
+removed
