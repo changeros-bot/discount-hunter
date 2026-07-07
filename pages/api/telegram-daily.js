@@ -10,6 +10,10 @@ function parsePercentValue(value) {
   return Number.isFinite(number) ? number : NaN;
 }
 
+function symbolKey(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function holdingValue(holding) {
   return num(holding?.currentValue ?? holding?.marketValue ?? holding?.positionValue ?? holding?.rawCurrentValue ?? holding?.value);
 }
@@ -30,9 +34,9 @@ function mergeHoldingsBySymbol(...groups) {
   const map = new Map();
   for (const group of groups || []) {
     for (const holding of group || []) {
-      const symbol = String(holding?.symbol || "").trim().toUpperCase();
+      const symbol = symbolKey(holding?.symbol);
       if (!symbol || num(holding?.quantity) <= 0) continue;
-      map.set(symbol, holding);
+      map.set(symbol, { ...holding, symbol });
     }
   }
   return [...map.values()];
@@ -50,9 +54,10 @@ function walletTotals({ wallet, exchange }) {
   const pnlPct = costReady && totalCost > 0 ? pnl / totalCost : null;
   return {
     holdings: live,
+    holdingCount: live.length,
     knownCount: known.length,
     missingCount: missing.length,
-    missingSymbols: missing.map((h) => String(h.symbol || "").toUpperCase()).filter(Boolean),
+    missingSymbols: missing.map((h) => h.symbol).filter(Boolean),
     totalCost: costReady ? totalCost : null,
     currentValue,
     pnl,
@@ -62,21 +67,18 @@ function walletTotals({ wallet, exchange }) {
 }
 
 function isCryptoAsset(asset) {
-  return asset?.assetType === "crypto" || String(asset?.symbol || "").toUpperCase() === "BTC";
+  return asset?.assetType === "crypto" || symbolKey(asset?.symbol) === "BTC";
 }
 
-function monitorSummary({ wallet, prices, totals }) {
-  const data = prices?.data || [];
-  const monitorCount = Number(prices?.count) || data.length;
-  const cryptoCount = data.filter(isCryptoAsset).length;
-  const xstockMonitorCount = Math.max(0, monitorCount - cryptoCount);
-  const walletHoldingsCount = totals?.holdings?.length || wallet?.debugCounts?.holdingsCount || 0;
-  return {
-    monitorCount,
-    cryptoCount,
-    xstockMonitorCount,
-    walletHoldingsCount,
-  };
+function monitorCount(prices) {
+  return Number(prices?.count) || (prices?.data || []).length;
+}
+
+function assetModel(asset) {
+  const key = symbolKey(asset?.symbol);
+  if (key === "BTC") return "Cycle High 回撤";
+  if (key.includes("SPCX")) return "上市以來高點回撤";
+  return "52週高點回撤";
 }
 
 function getNextBuyPoint(asset) {
@@ -95,9 +97,6 @@ function getNextBuyPoint(asset) {
   const reached = currentDepth >= targetDepth;
   const progress = reached ? 100 : Math.min(100, Math.max(0, ((currentDepth - previousDepth) / range) * 100));
   const remaining = Math.max(0, targetDepth - currentDepth);
-  const model = asset.assetType === "crypto" || String(asset.symbol || "").toUpperCase() === "BTC"
-    ? "BTC Cycle High"
-    : "52W High";
 
   return {
     currentDepth,
@@ -106,8 +105,7 @@ function getNextBuyPoint(asset) {
     progress,
     reached,
     targetAmount: amounts[targetIndex] || 0,
-    assetType: model === "BTC Cycle High" ? "BTC" : "xStock",
-    model,
+    model: assetModel(asset),
   };
 }
 
@@ -147,57 +145,64 @@ function formatSignedPct(value) {
 
 function buildMessage({ wallet, exchange, prices }) {
   const totals = walletTotals({ wallet, exchange });
-  const monitor = monitorSummary({ wallet, prices, totals });
   const signals = buildSignalRows(prices?.data || []);
   const checkedAt = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+  const dataStatus = totals.costReady ? "正常" : `缺成本：${totals.missingSymbols.join("、") || "unknown"}`;
+  const count = monitorCount(prices);
 
   const lines = [
     "📊 DCA折價獵人日報",
     "",
     `時間：${checkedAt}`,
     "",
-    `監控清單：${monitor.monitorCount} 檔（BTC + xStocks）｜Wallet：${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks`,
+    `監控清單：${count} 檔`,
+    `持倉數：${totals.holdingCount} 檔`,
+    `資料狀態：${dataStatus}`,
     "",
-    `xStocks 總成本：${formatMoney(totals.totalCost)}`,
-    `xStocks 目前市值：${formatMoney(totals.currentValue)}`,
-    `xStocks 未實現損益：${formatSignedMoney(totals.pnl)}`,
-    `xStocks 報酬率：${formatSignedPct(totals.pnlPct)}`,
-    `成本狀態：已取得 ${totals.knownCount}｜缺成本 ${totals.missingCount}`,
+    `總投入：${formatMoney(totals.totalCost)}`,
+    `目前市值：${formatMoney(totals.currentValue)}`,
+    `未實現損益：${formatSignedMoney(totals.pnl)}`,
+    `報酬率：${formatSignedPct(totals.pnlPct)}`,
     "",
   ];
 
   if (signals.reached.length > 0) {
     lines.push(`🟢 已達買點：${signals.reached.length} 檔`);
-    signals.reached.forEach((row) => {
-      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜${row.model}｜D${row.targetDepth}%｜進度 ${row.progress.toFixed(0)}%`);
-      lines.push(`訊號金額：${row.targetAmount}U｜需 Josh 確認`);
-    });
     lines.push("");
+    signals.reached.forEach((row) => {
+      lines.push(`${row.symbol}｜${row.model}｜D${row.targetDepth}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`訊號金額：${row.targetAmount}U｜需 Josh 確認`);
+      lines.push("");
+    });
   }
 
   if (signals.near.length > 0) {
     lines.push(`🟡 接近買點，僅觀察：${signals.near.length} 檔`);
+    lines.push("");
     signals.near.forEach((row) => {
-      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
       lines.push(`觸發後訊號金額：${row.targetAmount}U｜目前暫不買`);
+      lines.push("");
     });
   } else if (signals.reached.length === 0) {
     lines.push("🔔 今日無達標買點，也無接近買點");
+    lines.push("");
   }
 
-  lines.push("");
-  lines.push("⚠️ 執行提醒：以上為買點訊號，不是強制買入。請確認現金、本月預算與單檔上限。");
-  if (totals.costReady) {
-    lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks，資料正常`);
-  } else {
-    lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks；缺成本：${totals.missingSymbols.join("、") || "unknown"}`);
-  }
+  lines.push("⚠️ 執行提醒：");
+  lines.push("以上為買點訊號，不是強制買入。");
+  lines.push("請確認現金、本月預算與單檔上限。");
 
-  return { message: lines.join("\n"), alertCount: signals.reached.length, nearCount: signals.near.length, totals, signals, monitor };
+  return { message: lines.join("\n").trim(), alertCount: signals.reached.length, nearCount: signals.near.length, totals, signals, monitorCount: count };
 }
 
 async function readJsonSafe(response) {
   return response.json().catch(() => ({}));
+}
+
+function btcPriceFromPrices(prices) {
+  const btc = (prices?.data || []).find((row) => symbolKey(row?.symbol) === "BTC");
+  return num(btc?.price);
 }
 
 async function handler(req, res) {
@@ -210,20 +215,21 @@ async function handler(req, res) {
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const base = `${protocol}://${host}`;
 
-    const [walletRes, exchangeRes, pricesRes] = await Promise.all([
+    const [walletRes, pricesRes] = await Promise.all([
       fetch(`${base}/api/sync-wallet?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
         cache: "no-store",
       }),
-      fetch(`${base}/api/binance-exchange-position?t=${Date.now()}`, { cache: "no-store" }),
       fetch(`${base}/api/prices?t=${Date.now()}`, { cache: "no-store" }),
     ]);
 
     const wallet = await readJsonSafe(walletRes);
-    const exchange = await readJsonSafe(exchangeRes);
     const prices = await readJsonSafe(pricesRes);
+    const btcPrice = btcPriceFromPrices(prices);
+    const exchangeRes = await fetch(`${base}/api/binance-exchange-position?btcPrice=${encodeURIComponent(btcPrice)}&t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
+    const exchange = exchangeRes ? await readJsonSafe(exchangeRes) : {};
 
     if (!walletRes.ok || !pricesRes.ok || wallet?.ok === false || prices?.ok === false) {
       const message = [
@@ -254,7 +260,7 @@ async function handler(req, res) {
       nearCount: daily.nearCount,
       totals: daily.totals,
       signals: daily.signals,
-      monitor: daily.monitor,
+      monitorCount: daily.monitorCount,
       exchangeConfigured: Boolean(exchange?.configured),
       telegram,
       message: daily.message,
