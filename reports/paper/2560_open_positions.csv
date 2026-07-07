@@ -1,0 +1,1 @@
+trade_id,status,ticker,industry,pattern,signal_date,entry_date,entry_price,stop_price,target_price,last_date,last_price,exit_date,exit_price,exit_reason,hold_days,return_pct,created_at,updated_at
