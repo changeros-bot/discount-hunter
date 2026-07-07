@@ -55,6 +55,7 @@ function walletTotals({ wallet, exchange }) {
   return {
     holdings: live,
     holdingCount: live.length,
+    heldSymbols: new Set(live.map((h) => symbolKey(h.symbol))),
     knownCount: known.length,
     missingCount: missing.length,
     missingSymbols: missing.map((h) => h.symbol).filter(Boolean),
@@ -105,9 +106,12 @@ function getNextBuyPoint(asset) {
   };
 }
 
-function buildSignalRows(assets) {
+function buildSignalRows(assets, heldSymbols = new Set()) {
   const rows = (assets || [])
     .map((asset) => {
+      const symbol = symbolKey(asset.symbol);
+      if (!heldSymbols.has(symbol)) return null;
+
       const next = getNextBuyPoint(asset);
       if (!next) return null;
       return { symbol: asset.symbol, name: asset.name, ...next };
@@ -116,7 +120,7 @@ function buildSignalRows(assets) {
 
   return {
     reached: rows.filter((row) => row.reached).sort((a, b) => b.targetDepth - a.targetDepth),
-    near: rows.filter((row) => !row.reached && row.remaining <= 5).sort((a, b) => a.remaining - b.remaining),
+    near: rows.filter((row) => !row.reached && row.progress >= 95).sort((a, b) => b.progress - a.progress),
   };
 }
 
@@ -141,7 +145,7 @@ function formatSignedPct(value) {
 
 function buildMessage({ wallet, exchange, prices }) {
   const totals = walletTotals({ wallet, exchange });
-  const signals = buildSignalRows(prices?.data || []);
+  const signals = buildSignalRows(prices?.data || [], totals.heldSymbols);
   const checkedAt = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
   const dataStatus = totals.costReady ? "正常" : `缺成本：${totals.missingSymbols.join("、") || "unknown"}`;
   const count = monitorCount(prices);
@@ -181,7 +185,7 @@ function buildMessage({ wallet, exchange, prices }) {
       lines.push("");
     });
   } else if (signals.reached.length === 0) {
-    lines.push("🔔 買點警報：今日無達標買點，也無接近下一個 D 層");
+    lines.push("🔔 買點警報：今日無持倉達標，也無持倉接近下一個 D 層");
     lines.push("");
   }
 
