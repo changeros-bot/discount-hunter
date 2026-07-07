@@ -16,8 +16,16 @@ function money(value) {
   return `${sign}$${Math.abs(n).toFixed(2)}`;
 }
 
-function getBuyRows(prices) {
-  return (prices?.data || [])
+function isCryptoAsset(asset) {
+  return asset?.assetType === "crypto" || String(asset?.symbol || "").toUpperCase() === "BTC";
+}
+
+function assetModel(asset) {
+  return isCryptoAsset(asset) ? "BTC Cycle High" : "52W High";
+}
+
+function getSignalRows(prices) {
+  const rows = (prices?.data || [])
     .map((asset) => {
       const depth = Math.abs(pct(asset.discount));
       const rules = asset.rules || [];
@@ -31,23 +39,28 @@ function getBuyRows(prices) {
       const previous = index === 0 ? 0 : levels[index - 1];
       const target = levels[index];
       const range = Math.max(1, target - previous);
+      const reached = depth >= target;
       const remaining = Math.max(0, target - depth);
-      const progress = depth >= target ? 100 : Math.min(100, Math.max(0, ((depth - previous) / range) * 100));
-      const label = remaining <= 1 ? "🟢" : remaining <= 5 ? "🟡" : "⚪";
+      const progress = reached ? 100 : Math.min(100, Math.max(0, ((depth - previous) / range) * 100));
 
       return {
         symbol: asset.symbol,
+        assetType: isCryptoAsset(asset) ? "BTC" : "xStock",
+        model: assetModel(asset),
         depth,
         target,
         remaining,
         progress,
+        reached,
         amount: amounts[index] || 0,
-        label,
       };
     })
-    .filter(Boolean)
-    .filter((row) => row.remaining <= 5)
-    .sort((a, b) => a.remaining - b.remaining);
+    .filter(Boolean);
+
+  return {
+    reached: rows.filter((row) => row.reached).sort((a, b) => b.target - a.target),
+    near: rows.filter((row) => !row.reached && row.remaining <= 5).sort((a, b) => a.remaining - b.remaining),
+  };
 }
 
 function getWalletTotals(wallet) {
@@ -59,10 +72,22 @@ function getWalletTotals(wallet) {
   return { holdings, totalCost, currentValue, pnl, pnlPct };
 }
 
+function getMonitorSummary(wallet, prices) {
+  const data = prices?.data || [];
+  const monitorCount = Number(prices?.count) || data.length;
+  const cryptoCount = data.filter(isCryptoAsset).length;
+  const xstockMonitorCount = Math.max(0, monitorCount - cryptoCount);
+  const walletHoldingsCount = wallet?.debugCounts?.holdingsCount ?? wallet?.holdings?.length ?? 0;
+  const btcIndependent = cryptoCount > 0;
+  const costMissingCount = wallet?.debugCounts?.costBasisMissingCount ?? 0;
+  const costMissingSymbols = wallet?.debugCounts?.costBasisMissingSymbols || [];
+  return { monitorCount, cryptoCount, xstockMonitorCount, walletHoldingsCount, btcIndependent, costMissingCount, costMissingSymbols };
+}
+
 function buildDailyMessage(wallet, prices) {
   const totals = getWalletTotals(wallet);
-  const buys = getBuyRows(prices);
-  const holdingsCount = wallet?.debugCounts?.holdingsCount ?? totals.holdings.length;
+  const signals = getSignalRows(prices);
+  const summary = getMonitorSummary(wallet, prices);
   const time = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
 
   const lines = [
@@ -70,26 +95,50 @@ function buildDailyMessage(wallet, prices) {
     "",
     `時間：${time}`,
     "",
-    `總投入：${money(totals.totalCost)}`,
-    `目前市值：${money(totals.currentValue)}`,
-    `未實現損益：${money(totals.pnl)}`,
-    `報酬率：${totals.pnlPct.toFixed(2)}%`,
-    `持倉數：${holdingsCount}`,
+    `監控清單：${summary.monitorCount} 檔｜Wallet 持倉：${summary.walletHoldingsCount} 檔 xStocks`,
+    summary.btcIndependent ? "BTC：獨立價格監控，不列入 Wallet 持倉數" : "BTC：未納入本次監控資料",
+    "",
+    `xStocks 總投入：${money(totals.totalCost)}`,
+    `xStocks 目前市值：${money(totals.currentValue)}`,
+    `xStocks 未實現損益：${money(totals.pnl)}`,
+    `xStocks 報酬率：${totals.pnlPct.toFixed(2)}%`,
     "",
   ];
 
-  if (buys.length) {
-    lines.push(`🔔 買點警報：${buys.length} 檔`);
-    buys.forEach((row) => {
-      lines.push(`${row.label} ${row.symbol}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%｜建議 ${row.amount}U`);
+  if (signals.reached.length) {
+    lines.push(`🟢 已達買點：${signals.reached.length} 檔`);
+    signals.reached.forEach((row) => {
+      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜${row.model}｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`訊號金額：${row.amount}U｜需 Josh 確認`);
     });
-  } else {
-    lines.push("🔔 買點警報：目前無即將觸發買點");
+    lines.push("");
+  }
+
+  if (signals.near.length) {
+    lines.push(`🟡 接近買點，僅觀察：${signals.near.length} 檔`);
+    signals.near.forEach((row) => {
+      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`觸發後訊號金額：${row.amount}U｜目前暫不買`);
+    });
+  } else if (!signals.reached.length) {
+    lines.push("🔔 今日無達標買點，也無接近買點");
   }
 
   lines.push("");
-  lines.push(`Wallet：${holdingsCount} 檔持倉資料正常`);
-  return { message: lines.join("\n"), buyCount: buys.length, totals, holdingsCount };
+  lines.push("⚠️ 執行提醒：以上為買點訊號，不是強制買入。請確認現金、本月預算與單檔上限。");
+  if (summary.costMissingCount > 0) {
+    lines.push(`Wallet：讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks；缺成本 ${summary.costMissingCount} 檔：${summary.costMissingSymbols.join("、") || "unknown"}`);
+  } else {
+    lines.push(`Wallet：已讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks 持倉資料，資料正常`);
+  }
+
+  return {
+    message: lines.join("\n"),
+    buyCount: signals.reached.length,
+    nearCount: signals.near.length,
+    totals,
+    monitorSummary: summary,
+  };
 }
 
 async function readJsonSafe(response) {
@@ -145,7 +194,8 @@ async function handler(req, res) {
       deduped: Boolean(telegram?.deduped),
       previewOnly: !shouldSend,
       buyCount: daily.buyCount,
-      holdingsCount: daily.holdingsCount,
+      nearCount: daily.nearCount,
+      monitorSummary: daily.monitorSummary,
       totals: daily.totals,
       telegram,
       message: daily.message,
