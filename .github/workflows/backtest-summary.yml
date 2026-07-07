@@ -11,7 +11,7 @@ on:
         options:
           - discount
           - discount_2560
-          - mu_2560
+          - watch_2560
           - 2560_sector
           - 2560_sim
           - all
@@ -31,59 +31,37 @@ jobs:
   backtest:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install pandas yfinance
-
-      - name: Run core Discount Hunter backtest
-        if: ${{ github.event.inputs.target == 'discount' || github.event.inputs.target == 'all' }}
+      - name: Run selected backtest
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+          SOURCE: ${{ github.event.inputs.source }}
         run: |
-          python scripts/backtest_core_discount_hunter.py
-          if [ -f reports/backtests/discount_hunter_events.csv ]; then
-            python scripts/simulate_discount_hunter.py
+          if [ "$TARGET" = "discount" ] || [ "$TARGET" = "all" ]; then
+            python scripts/backtest_core_discount_hunter.py
+            if [ -f reports/backtests/discount_hunter_events.csv ]; then python scripts/simulate_discount_hunter.py; fi
           fi
-
-      - name: Run Discount Hunter 2560 filter backtest
-        if: ${{ github.event.inputs.target == 'discount_2560' || github.event.inputs.target == 'all' }}
-        run: |
-          python scripts/backtest_discount_hunter_2560.py --source ${{ github.event.inputs.source }}
-
-      - name: Run MU 2560 standalone backtest
-        if: ${{ github.event.inputs.target == 'mu_2560' || github.event.inputs.target == 'all' }}
-        run: |
-          python scripts/backtest_2560_mu.py --source ${{ github.event.inputs.source }}
-
-      - name: Run 2560 sector lab backtest
-        if: ${{ github.event.inputs.target == '2560_sector' || github.event.inputs.target == 'all' }}
-        run: |
-          python scripts/backtest_2560_sector_lab.py --source ${{ github.event.inputs.source }}
-
-      - name: Run 2560 lab simulation
-        if: ${{ github.event.inputs.target == '2560_sim' || github.event.inputs.target == 'all' }}
-        run: |
-          if [ -f reports/backtests/2560_sector_events.csv ]; then
-            python scripts/simulate_2560_lab.py --source ${{ github.event.inputs.source }}
-          else
-            echo "reports/backtests/2560_sector_events.csv not found. Run target 2560_sector first."
+          if [ "$TARGET" = "discount_2560" ] || [ "$TARGET" = "all" ]; then
+            python scripts/backtest_discount_hunter_2560.py --source "$SOURCE"
           fi
-
+          if [ "$TARGET" = "watch_2560" ] || [ "$TARGET" = "all" ]; then
+            python scripts/backtest_2560_watch_batch.py --source "$SOURCE"
+          fi
+          if [ "$TARGET" = "2560_sector" ] || [ "$TARGET" = "all" ]; then
+            python scripts/backtest_2560_sector_lab.py --source "$SOURCE"
+          fi
+          if [ "$TARGET" = "2560_sim" ] || [ "$TARGET" = "all" ]; then
+            if [ -f reports/backtests/2560_sector_events.csv ]; then python scripts/simulate_2560_lab.py --source "$SOURCE"; else echo "Run 2560_sector first."; fi
+          fi
       - name: Commit generated reports
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add reports/backtests || true
-          if git diff --cached --quiet; then
-            echo "No report changes to commit."
-          else
-            git commit -m "Update backtest reports"
-            git push
-          fi
+          if git diff --cached --quiet; then echo "No report changes to commit."; else git commit -m "Update backtest reports" && git push; fi
