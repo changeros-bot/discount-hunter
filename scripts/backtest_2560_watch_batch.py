@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
-DEFAULT_TICKERS = ["DELL", "INTC", "ORCL", "CRWV", "NBIS"]
+DEFAULT_TICKERS = ["DELL", "MU", "PLTR", "INTC", "ORCL", "CRWV", "NBIS"]
 
 
 def run(args):
