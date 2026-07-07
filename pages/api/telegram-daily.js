@@ -61,6 +61,25 @@ function walletTotals({ wallet, exchange }) {
   };
 }
 
+function isCryptoAsset(asset) {
+  return asset?.assetType === "crypto" || String(asset?.symbol || "").toUpperCase() === "BTC";
+}
+
+function monitorSummary({ wallet, prices, totals }) {
+  const data = prices?.data || [];
+  const monitorCount = Number(prices?.count) || data.length;
+  const cryptoCount = data.filter(isCryptoAsset).length;
+  const xstockMonitorCount = Math.max(0, monitorCount - cryptoCount);
+  const walletHoldingsCount = totals?.holdings?.length || wallet?.debugCounts?.holdingsCount || 0;
+  return {
+    monitorCount,
+    cryptoCount,
+    xstockMonitorCount,
+    walletHoldingsCount,
+    btcIndependent: cryptoCount > 0,
+  };
+}
+
 function getNextBuyPoint(asset) {
   const currentDepth = Math.abs(parsePercentValue(asset.discount));
   const rules = asset.rules || [];
@@ -78,7 +97,7 @@ function getNextBuyPoint(asset) {
   const progress = reached ? 100 : Math.min(100, Math.max(0, ((currentDepth - previousDepth) / range) * 100));
   const remaining = Math.max(0, targetDepth - currentDepth);
   const model = asset.assetType === "crypto" || String(asset.symbol || "").toUpperCase() === "BTC"
-    ? "Cycle High"
+    ? "BTC Cycle High"
     : "52W High";
 
   return {
@@ -88,6 +107,7 @@ function getNextBuyPoint(asset) {
     progress,
     reached,
     targetAmount: amounts[targetIndex] || 0,
+    assetType: model === "BTC Cycle High" ? "BTC" : "xStock",
     model,
   };
 }
@@ -128,6 +148,7 @@ function formatSignedPct(value) {
 
 function buildMessage({ wallet, exchange, prices }) {
   const totals = walletTotals({ wallet, exchange });
+  const monitor = monitorSummary({ wallet, prices, totals });
   const signals = buildSignalRows(prices?.data || []);
   const checkedAt = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
 
@@ -136,11 +157,13 @@ function buildMessage({ wallet, exchange, prices }) {
     "",
     `時間：${checkedAt}`,
     "",
-    `總成本：${formatMoney(totals.totalCost)}`,
-    `目前市值：${formatMoney(totals.currentValue)}`,
-    `未實現損益：${formatSignedMoney(totals.pnl)}`,
-    `報酬率：${formatSignedPct(totals.pnlPct)}`,
-    `持倉數：${totals.holdings.length}`,
+    `監控清單：${monitor.monitorCount} 檔｜Wallet 持倉：${monitor.walletHoldingsCount} 檔 xStocks`,
+    monitor.btcIndependent ? "BTC：獨立價格監控，不列入 Wallet 持倉數" : "BTC：未納入本次監控資料",
+    "",
+    `xStocks 總成本：${formatMoney(totals.totalCost)}`,
+    `xStocks 目前市值：${formatMoney(totals.currentValue)}`,
+    `xStocks 未實現損益：${formatSignedMoney(totals.pnl)}`,
+    `xStocks 報酬率：${formatSignedPct(totals.pnlPct)}`,
     `成本狀態：已取得 ${totals.knownCount}｜缺成本 ${totals.missingCount}`,
     "",
   ];
@@ -148,28 +171,31 @@ function buildMessage({ wallet, exchange, prices }) {
   if (signals.reached.length > 0) {
     lines.push(`🟢 已達買點：${signals.reached.length} 檔`);
     signals.reached.forEach((row) => {
-      lines.push(`${row.symbol}｜${row.model}｜D${row.targetDepth}%｜進度 ${row.progress.toFixed(0)}%｜建議 ${row.targetAmount}U`);
+      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜${row.model}｜D${row.targetDepth}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`訊號金額：${row.targetAmount}U｜需 Josh 確認`);
     });
     lines.push("");
   }
 
   if (signals.near.length > 0) {
-    lines.push(`🟡 接近買點：${signals.near.length} 檔`);
+    lines.push(`🟡 接近買點，僅觀察：${signals.near.length} 檔`);
     signals.near.forEach((row) => {
-      lines.push(`${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%｜暫不買`);
+      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`觸發後訊號金額：${row.targetAmount}U｜目前暫不買`);
     });
   } else if (signals.reached.length === 0) {
     lines.push("🔔 今日無達標買點，也無接近買點");
   }
 
   lines.push("");
+  lines.push("⚠️ 執行提醒：以上為買點訊號，不是強制買入。請確認現金、本月預算與單檔上限。");
   if (totals.costReady) {
-    lines.push(`Wallet：${totals.holdings.length} 檔持倉資料正常`);
+    lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks 持倉資料，資料正常`);
   } else {
-    lines.push(`Wallet：${totals.holdings.length} 檔持倉；缺成本：${totals.missingSymbols.join("、") || "unknown"}`);
+    lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks；缺成本：${totals.missingSymbols.join("、") || "unknown"}`);
   }
 
-  return { message: lines.join("\n"), alertCount: signals.reached.length, nearCount: signals.near.length, totals, signals };
+  return { message: lines.join("\n"), alertCount: signals.reached.length, nearCount: signals.near.length, totals, signals, monitor };
 }
 
 async function readJsonSafe(response) {
@@ -230,6 +256,7 @@ async function handler(req, res) {
       nearCount: daily.nearCount,
       totals: daily.totals,
       signals: daily.signals,
+      monitor: daily.monitor,
       exchangeConfigured: Boolean(exchange?.configured),
       telegram,
       message: daily.message,
