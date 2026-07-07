@@ -76,7 +76,6 @@ function monitorSummary({ wallet, prices, totals }) {
     cryptoCount,
     xstockMonitorCount,
     walletHoldingsCount,
-    btcIndependent: cryptoCount > 0,
   };
 }
 
@@ -157,8 +156,7 @@ function buildMessage({ wallet, exchange, prices }) {
     "",
     `時間：${checkedAt}`,
     "",
-    `監控清單：${monitor.monitorCount} 檔｜Wallet 持倉：${monitor.walletHoldingsCount} 檔 xStocks`,
-    monitor.btcIndependent ? "BTC：獨立價格監控，不列入 Wallet 持倉數" : "BTC：未納入本次監控資料",
+    `監控清單：${monitor.monitorCount} 檔（BTC + xStocks）｜Wallet：${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks`,
     "",
     `xStocks 總成本：${formatMoney(totals.totalCost)}`,
     `xStocks 目前市值：${formatMoney(totals.currentValue)}`,
@@ -190,7 +188,7 @@ function buildMessage({ wallet, exchange, prices }) {
   lines.push("");
   lines.push("⚠️ 執行提醒：以上為買點訊號，不是強制買入。請確認現金、本月預算與單檔上限。");
   if (totals.costReady) {
-    lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks 持倉資料，資料正常`);
+    lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks，資料正常`);
   } else {
     lines.push(`Wallet：已讀取 ${monitor.walletHoldingsCount}/${monitor.xstockMonitorCount} 檔 xStocks；缺成本：${totals.missingSymbols.join("、") || "unknown"}`);
   }
