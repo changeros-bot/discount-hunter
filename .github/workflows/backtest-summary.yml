@@ -11,6 +11,7 @@ on:
         options:
           - discount
           - discount_2560
+          - 2560_sector
           - all
       source:
         description: "Price source"
@@ -55,6 +56,11 @@ jobs:
         run: |
           python scripts/backtest_discount_hunter_2560.py --source ${{ github.event.inputs.source }}
 
+      - name: Run 2560 sector lab backtest
+        if: ${{ github.event.inputs.target == '2560_sector' || github.event.inputs.target == 'all' }}
+        run: |
+          python scripts/backtest_2560_sector_lab.py --source ${{ github.event.inputs.source }}
+
       - name: Commit generated reports
         run: |
           git config user.name "github-actions[bot]"
@@ -63,6 +69,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No report changes to commit."
           else
-            git commit -m "Update discount hunter backtest reports"
+            git commit -m "Update backtest reports"
             git push
           fi
