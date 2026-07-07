@@ -10,6 +10,8 @@ on:
         type: choice
         options:
           - discount
+          - discount_2560
+          - all
       source:
         description: "Price source"
         required: true
@@ -40,12 +42,18 @@ jobs:
           pip install pandas yfinance
 
       - name: Run Discount Hunter simulation if events exist
+        if: ${{ github.event.inputs.target == 'discount' || github.event.inputs.target == 'all' }}
         run: |
           if [ -f reports/backtests/discount_hunter_events.csv ]; then
             python scripts/simulate_discount_hunter.py
           else
             echo "reports/backtests/discount_hunter_events.csv not found. Run discount backtest first or commit event CSV."
           fi
+
+      - name: Run Discount Hunter 2560 filter backtest
+        if: ${{ github.event.inputs.target == 'discount_2560' || github.event.inputs.target == 'all' }}
+        run: |
+          python scripts/backtest_discount_hunter_2560.py --source ${{ github.event.inputs.source }}
 
       - name: Commit generated reports
         run: |
@@ -55,6 +63,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No report changes to commit."
           else
-            git commit -m "Update discount hunter simulation reports"
+            git commit -m "Update discount hunter backtest reports"
             git push
           fi
