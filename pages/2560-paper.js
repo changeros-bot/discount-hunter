@@ -71,6 +71,24 @@ function TradeCard({ row }) {
   </div>;
 }
 
+function ScanProof({ scan }) {
+  const runAt = scan?.run_at_utc ? new Date(scan.run_at_utc).toLocaleString("zh-TW", { hour12: false }) : "尚無巡查紀錄";
+  const ok = scan?.ok;
+  return <section style={{ marginTop: 14, border: `1px solid ${ok ? "#22c55e55" : "#f59e0b55"}`, background: ok ? "rgba(20,83,45,.16)" : "rgba(120,53,15,.16)", borderRadius: 22, padding: 14 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+      <div style={{ color: "#f8fafc", fontWeight: 1000 }}>後台巡查證據</div>
+      <Pill color={ok ? "#22c55e" : "#f59e0b"}>{ok ? "PASS" : "待確認"}</Pill>
+    </div>
+    <div style={{ marginTop: 8, color: "#cbd5e1", fontSize: 13, lineHeight: 1.55, fontWeight: 850 }}>
+      最後巡查：{runAt}<br />
+      資料源：{scan?.source || "—"}｜已掃描：{scan?.scanned_count ?? "—"}/{scan?.universe_count ?? "—"}｜新訊號：{scan?.new_signal_count ?? "—"}｜錯誤：{scan?.error_count ?? "—"}
+    </div>
+    {scan?.scans?.length > 0 && <div style={{ marginTop: 9, color: "#94a3b8", fontSize: 12, lineHeight: 1.5, fontWeight: 800 }}>
+      最新市場日：{scan.scans.slice(0, 10).map((x) => `${x.ticker} ${x.latest_market_date}`).join("｜")}
+    </div>}
+  </section>;
+}
+
 export default function Paper2560() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -94,7 +112,7 @@ export default function Paper2560() {
       <header style={{ marginTop: 18, marginBottom: 16, border: "1px solid rgba(56,189,248,.22)", background: "linear-gradient(180deg,rgba(8,47,73,.42),rgba(2,6,23,.52))", borderRadius: 28, padding: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div style={{ color: "#38bdf8", letterSpacing: 2, fontWeight: 1000, fontSize: 13 }}>2560 TECHNICAL LAB</div>
-          <Pill color="#f59e0b">Paper V0.7</Pill>
+          <Pill color="#f59e0b">Paper V0.8</Pill>
         </div>
         <h1 style={{ fontSize: 35, lineHeight: 1.05, margin: "12px 0 8px", fontWeight: 1000 }}>2560 紙上交易作戰板</h1>
         <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>類折扣獵人版面｜紙上交易運行中 / 等待訊號區 / 觀察區｜只記錄，不下單。</p>
@@ -110,6 +128,7 @@ export default function Paper2560() {
           <Stat label="觀察區" value={observation.length} sub="限制型態 / 高波動，且未觸發" color="#a78bfa" />
           <Stat label="模擬曝險" value={money(openExposure)} sub="未平倉模擬本金" color="#22c55e" />
         </section>
+        <ScanProof scan={s.lastScan} />
 
         <Zone title="紙上交易運行中" sub="已觸發訊號，等待隔日開盤或 30 天內追蹤" count={activeRows.length} color="#22c55e">
           {activeRows.length ? <div style={{ display: "grid", gap: 10 }}>{activeRows.map((r, i) => <TradeCard key={pick(r, ["trade_id"], i)} row={r} />)}</div> : <div style={{ color: "#64748b", fontWeight: 900 }}>目前沒有運行中的紙上交易。</div>}
