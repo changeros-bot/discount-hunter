@@ -78,10 +78,9 @@ function getMonitorSummary(wallet, prices) {
   const cryptoCount = data.filter(isCryptoAsset).length;
   const xstockMonitorCount = Math.max(0, monitorCount - cryptoCount);
   const walletHoldingsCount = wallet?.debugCounts?.holdingsCount ?? wallet?.holdings?.length ?? 0;
-  const btcIndependent = cryptoCount > 0;
   const costMissingCount = wallet?.debugCounts?.costBasisMissingCount ?? 0;
   const costMissingSymbols = wallet?.debugCounts?.costBasisMissingSymbols || [];
-  return { monitorCount, cryptoCount, xstockMonitorCount, walletHoldingsCount, btcIndependent, costMissingCount, costMissingSymbols };
+  return { monitorCount, cryptoCount, xstockMonitorCount, walletHoldingsCount, costMissingCount, costMissingSymbols };
 }
 
 function buildDailyMessage(wallet, prices) {
@@ -95,8 +94,7 @@ function buildDailyMessage(wallet, prices) {
     "",
     `時間：${time}`,
     "",
-    `監控清單：${summary.monitorCount} 檔｜Wallet 持倉：${summary.walletHoldingsCount} 檔 xStocks`,
-    summary.btcIndependent ? "BTC：獨立價格監控，不列入 Wallet 持倉數" : "BTC：未納入本次監控資料",
+    `監控清單：${summary.monitorCount} 檔（BTC + xStocks）｜Wallet：${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks`,
     "",
     `xStocks 總投入：${money(totals.totalCost)}`,
     `xStocks 目前市值：${money(totals.currentValue)}`,
@@ -129,7 +127,7 @@ function buildDailyMessage(wallet, prices) {
   if (summary.costMissingCount > 0) {
     lines.push(`Wallet：讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks；缺成本 ${summary.costMissingCount} 檔：${summary.costMissingSymbols.join("、") || "unknown"}`);
   } else {
-    lines.push(`Wallet：已讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks 持倉資料，資料正常`);
+    lines.push(`Wallet：已讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks，資料正常`);
   }
 
   return {
