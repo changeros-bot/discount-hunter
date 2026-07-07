@@ -1,6 +1,19 @@
 import fs from "fs";
 import path from "path";
 
+const universeProfiles = [
+  { ticker: "AAPL", group: "大型科技平台", trait: "高品質平台股，波動相對可控", strategy: "risk_30d 紙上追蹤；適合平台對照組" },
+  { ticker: "MSFT", group: "大型科技平台", trait: "AI雲端與企業軟體核心，趨勢穩定", strategy: "risk_30d 紙上追蹤；適合平台對照組" },
+  { ticker: "GOOGL", group: "大型科技平台", trait: "搜尋/雲端/AI平台，估值彈性較大", strategy: "risk_30d 紙上追蹤；訊號出現才做" },
+  { ticker: "META", group: "大型科技平台", trait: "廣告現金流強，AI與算力投入大", strategy: "risk_30d 紙上追蹤；平台動能組" },
+  { ticker: "AMZN", group: "大型科技平台", trait: "電商加AWS雲端，長週期趨勢股", strategy: "risk_30d 紙上追蹤；平台對照組" },
+  { ticker: "NFLX", group: "大型科技平台", trait: "內容平台與訂閱制，受財報與成長預期影響大", strategy: "risk_30d 紙上追蹤；平台波動組" },
+  { ticker: "MU", group: "AI半導體", trait: "HBM/記憶體AI基礎建設，波動較大", strategy: "只開沖量/縮量黑馬；不做弱量續攻與波段" },
+  { ticker: "DELL", group: "AI基礎建設", trait: "AI伺服器與企業硬體供應鏈，回測穩定", strategy: "risk_30d 正式紙上交易；可全型態觀察" },
+  { ticker: "PLTR", group: "AI應用/國防軟體", trait: "高成長高估值，政策與國防AI題材強", strategy: "risk_30d 正式紙上交易；訊號品質優先" },
+  { ticker: "NBIS", group: "高波動AI雲端", trait: "高波動AI雲端/算力題材，樣本較少但PF通過", strategy: "高波動觀察組；只開沖量/縮量黑馬" },
+];
+
 function parseCsv(text) {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
@@ -50,7 +63,8 @@ export default function handler(req, res) {
       source: "reports/paper",
       mode: "EOD / next-day open paper trading",
       rule: "risk_30d：停損 -8%｜停利 +15%｜最多 30 個交易日",
-      universe: "AAPL, MSFT, GOOGL, META, AMZN, NFLX",
+      universe: universeProfiles.map((x) => x.ticker).join(", "),
+      universeProfiles,
       updatedAt: new Date().toISOString(),
       rawSummary: summaryRows[0] || null,
     };
