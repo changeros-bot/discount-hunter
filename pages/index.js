@@ -10,15 +10,24 @@ const projects = [
   },
   {
     id: 2,
-    eyebrow: "LIVE V18",
+    eyebrow: "LIVE V18.1",
     title: "DCA 折價獵人",
-    description: "App V17.1｜Playbook V18.0。品質優先，買點只是允許買入，V18.1 回測前不固定最終門檻。",
+    description: "App V17.1｜買點已依 V18.1 回測更新：ETF淺買、AI中深買、高波動深買、BTC週期買。",
     href: "/v17",
-    status: "Ready",
+    status: "Updated",
     accent: "#22c55e",
   },
   {
     id: 3,
+    eyebrow: "BACKTEST",
+    title: "折價獵人回測總覽",
+    description: "V18.1 資產類型分層表：最佳買點、勝率、252日報酬、最大不利跌幅與 Project Owner 判定。",
+    href: "/discount-backtest",
+    status: "Review",
+    accent: "#f59e0b",
+  },
+  {
+    id: 4,
     eyebrow: "PROTOTYPE",
     title: "Josh 2026多元記帳本",
     description: "收入、支出、三帳戶、生活費、預算、資產與投資扣款。",
@@ -27,7 +36,7 @@ const projects = [
     accent: "#a78bfa",
   },
   {
-    id: 4,
+    id: 5,
     eyebrow: "RESEARCH",
     title: "2560 Lab",
     description: "Technical Lab V0.5。EOD signal, next-open paper log, no order execution.",
@@ -71,7 +80,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        入口：富邦 DCA、折價獵人、Josh 2026多元記帳本、2560 Lab。已停用專案不放主卡。
+        入口：富邦 DCA、折價獵人、折價獵人回測總覽、Josh 2026多元記帳本、2560 Lab。已停用專案不放主卡。
       </footer>
     </div>
   </main>;
