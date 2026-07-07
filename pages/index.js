@@ -1,1 +1,3 @@
-export { default } from "./index.clean";
+import CleanHome from "./index.clean";
+
+export default CleanHome;
