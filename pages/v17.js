@@ -24,7 +24,6 @@ const CATEGORY_BY_SYMBOL = {
   GOOGLON: "平台型公司",
   RKLB: "高成長深折扣",
   RKLBon: "高成長深折扣",
-  RKLBon: "高成長深折扣",
   RKLBON: "高成長深折扣",
   SPCX: "高成長深折扣",
   SPCXON: "高成長深折扣",
@@ -242,24 +241,24 @@ function PortfolioSummaryCard({ summary, updatedAt }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 1000, color: healthy ? "#4ade80" : "#fde68a", margin: 0 }}>真實持倉</h2>
-        <div style={{ marginTop: 4, color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總成本 = BTC + 全部 xStocks</div>
+        <div style={{ marginTop: 4, color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>折價獵人全部持倉，不分 BTC / xStocks 顯示</div>
       </div>
       <div style={{ color: healthy ? "#bbf7d0" : "#fde68a", fontSize: 12, fontWeight: 1000, padding: "6px 9px", borderRadius: 999, background: healthy ? "rgba(34,197,94,.12)" : "rgba(245,158,11,.12)", border: `1px solid ${healthy ? "rgba(34,197,94,.24)" : "rgba(245,158,11,.24)"}` }}>{healthy ? "PASS" : "CHECK"}</div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總成本</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalCost)}</div></div>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總市值</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalValue)}</div></div>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總損益</div><div style={{ color: signedColor(summary.totalPnl), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{signedUsd(summary.totalPnl)}</div></div>
-      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總報酬</div><div style={{ color: signedColor(summary.totalPnlPct), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{signedPct(summary.totalPnlPct)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>總投入</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalCost)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>目前市值</div><div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{usd(summary.totalValue)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>未實現損益</div><div style={{ color: signedColor(summary.totalPnl), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{signedUsd(summary.totalPnl)}</div></div>
+      <div><div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850 }}>報酬率</div><div style={{ color: signedColor(summary.totalPnlPct), fontSize: 18, fontWeight: 1000, marginTop: 3 }}>{signedPct(summary.totalPnlPct)}</div></div>
     </div>
     {summary.costMissingCount > 0 ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.25)", color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.5 }}>
-      總成本需要 BTC + 全部 xStocks 成本。目前有 {summary.costMissingCount} 筆缺成本，缺成本市值 {usd(summary.missingValue)}，所以總成本 / 總損益 / 總報酬暫不可計算。總市值仍可顯示。
+      目前有 {summary.costMissingCount} 筆缺成本，缺成本市值 {usd(summary.missingValue)}，所以總投入 / 未實現損益 / 報酬率暫不可計算。市值仍可顯示。
     </div> : null}
     <details style={{ marginTop: 8, color: "#94a3b8", fontSize: 11, fontWeight: 800 }}>
       <summary>資料來源 / 成本細節</summary>
       <div style={{ marginTop: 6, lineHeight: 1.55 }}>
         持倉數：{summary.count}｜已取得成本：{summary.knownCount}｜缺成本：{summary.costMissingCount}<br />
-        成本公式：總成本 = BTC 成本 + 全部 xStocks 成本。xStocks 成本須由同一 tx hash 內 stablecoin OUT + xStock IN 推導；BTC 使用 Binance myTrades。<br />
+        成本公式：折價獵人全部持倉成本加總。成本來源需可驗證，不用人工猜值。<br />
         缺成本：{summary.missingSymbols?.join("、") || "none"}<br />
         Last Sync：{updatedAt || "background refresh"}
       </div>
@@ -416,9 +415,7 @@ export default function V17Dashboard() {
         <div>Universe：BTC + QQQon + NVDAon + TSMon + AVGOon + SPCXon + GOOGLon + AMDon + MRVLon + RKLBon</div>
         <div>Wallet Source：{wallet?.source || "cached / loading"}</div>
         <div>Wallet Sync：{wallet?.walletSyncSource || "background refresh"}</div>
-        <div>BTC Source：{wallet?.btcPositionSource || "background refresh"}</div>
-        <div>BTC 引擎：同頁顯示，但使用 Cycle High 回撤，不使用股票 52週高點邏輯</div>
-        <div>Strict Mode：總成本必須包含 BTC + 全部 xStocks；缺任何一檔成本就不顯示總績效</div>
+        <div>成本政策：全部持倉合併計算，不在畫面上拆成 BTC / xStocks 兩套資產。</div>
         <div>Auto Trading：Phase 1 訊號只讀；後續版本逐步加入確認、草稿、限額與 Kill Switch</div>
         <div>Last Sync：{wallet?.lastSyncTime || updatedAt}</div>
       </div>
