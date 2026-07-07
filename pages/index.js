@@ -19,15 +19,6 @@ const projects = [
   },
   {
     id: 3,
-    eyebrow: "PLANNING",
-    title: "槓桿獵人",
-    description: "00631L 與槓桿 ETF 診斷模組。等待 Exit Rule 完成後啟用。",
-    href: "/leveraged-hunter",
-    status: "Soon",
-    accent: "#f59e0b",
-  },
-  {
-    id: 4,
     eyebrow: "PROTOTYPE",
     title: "Josh 2026多元記帳本",
     description: "收入、支出、三帳戶、生活費、預算、資產與投資扣款。",
@@ -71,7 +62,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        四合一入口：富邦 DCA、折價獵人、槓桿獵人、Josh 2026多元記帳本。診斷工具保留在文件與系統頁，不放主卡。
+        三合一入口：富邦 DCA、折價獵人、Josh 2026多元記帳本。已停用專案不放主卡。
       </footer>
     </div>
   </main>;
