@@ -66,10 +66,6 @@ function walletTotals({ wallet, exchange }) {
   };
 }
 
-function isCryptoAsset(asset) {
-  return asset?.assetType === "crypto" || symbolKey(asset?.symbol) === "BTC";
-}
-
 function monitorCount(prices) {
   return Number(prices?.count) || (prices?.data || []).length;
 }
@@ -156,7 +152,7 @@ function buildMessage({ wallet, exchange, prices }) {
     `時間：${checkedAt}`,
     "",
     `監控清單：${count} 檔`,
-    `持倉數：${totals.holdingCount} 檔`,
+    `買點中持倉數：${totals.holdingCount} 檔`,
     `資料狀態：${dataStatus}`,
     "",
     `總投入：${formatMoney(totals.totalCost)}`,
@@ -167,7 +163,7 @@ function buildMessage({ wallet, exchange, prices }) {
   ];
 
   if (signals.reached.length > 0) {
-    lines.push(`🟢 已達買點：${signals.reached.length} 檔`);
+    lines.push(`🔔 買點警報：已達 D 層 ${signals.reached.length} 檔`);
     lines.push("");
     signals.reached.forEach((row) => {
       lines.push(`${row.symbol}｜${row.model}｜D${row.targetDepth}%｜進度 ${row.progress.toFixed(0)}%`);
@@ -177,7 +173,7 @@ function buildMessage({ wallet, exchange, prices }) {
   }
 
   if (signals.near.length > 0) {
-    lines.push(`🟡 接近買點，僅觀察：${signals.near.length} 檔`);
+    lines.push(`🔔 買點警報：接近下一個 D 層 ${signals.near.length} 檔`);
     lines.push("");
     signals.near.forEach((row) => {
       lines.push(`${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
@@ -185,7 +181,7 @@ function buildMessage({ wallet, exchange, prices }) {
       lines.push("");
     });
   } else if (signals.reached.length === 0) {
-    lines.push("🔔 今日無達標買點，也無接近買點");
+    lines.push("🔔 買點警報：今日無達標買點，也無接近下一個 D 層");
     lines.push("");
   }
 
