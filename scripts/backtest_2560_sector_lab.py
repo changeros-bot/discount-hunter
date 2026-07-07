@@ -3,6 +3,7 @@
 2560 Sector Lab Backtest
 
 Research only. Not a trading system.
+Adds benchmark-adjusted excess returns to reduce bull-market illusion.
 Outputs:
 - reports/backtests/2560_sector_events.csv
 - reports/backtests/2560_sector_summary.csv
@@ -128,7 +129,24 @@ def classify_pattern(row: pd.Series) -> Optional[str]:
     return None
 
 
-def find_events(df: pd.DataFrame, ticker: str, industry: str) -> pd.DataFrame:
+def benchmark_return(benchmark: pd.DataFrame, event_date: pd.Timestamp, window: int) -> float:
+    if benchmark.empty:
+        return math.nan
+    idx_list = benchmark.index[benchmark["date"] >= event_date].tolist()
+    if not idx_list:
+        return math.nan
+    start_idx = idx_list[0]
+    end_idx = start_idx + window
+    if end_idx >= len(benchmark):
+        return math.nan
+    start_close = float(benchmark.iloc[start_idx]["close"])
+    end_close = float(benchmark.iloc[end_idx]["close"])
+    if start_close <= 0:
+        return math.nan
+    return end_close / start_close - 1.0
+
+
+def find_events(df: pd.DataFrame, ticker: str, industry: str, benchmark: pd.DataFrame, benchmark_name: str) -> pd.DataFrame:
     rows = []
     cooldown = {"誘多": -9999, "沖量": -9999, "波段": -9999, "縮量黑馬": -9999}
     for i, row in df.iterrows():
@@ -140,12 +158,17 @@ def find_events(df: pd.DataFrame, ticker: str, industry: str) -> pd.DataFrame:
         cooldown[pattern] = i
         event = {
             "date": row["date"], "ticker": ticker, "industry": industry, "pattern": pattern,
-            "close": row["close"], "ma25_slope_5d": row["ma25_slope_5d"],
+            "close": row["close"], "benchmark": benchmark_name,
+            "ma25_slope_5d": row["ma25_slope_5d"],
             "vol5_over_vol60": row["vol5"] / row["vol60"] if row["vol60"] else math.nan,
         }
         for window in FORWARD_WINDOWS:
             idx = i + window
-            event[f"ret_{window}d"] = (float(df.iloc[idx]["close"]) / float(row["close"]) - 1.0) if idx < len(df) else math.nan
+            raw_ret = (float(df.iloc[idx]["close"]) / float(row["close"]) - 1.0) if idx < len(df) else math.nan
+            bench_ret = benchmark_return(benchmark, row["date"], window)
+            event[f"ret_{window}d"] = raw_ret
+            event[f"bench_ret_{window}d"] = bench_ret
+            event[f"excess_ret_{window}d"] = raw_ret - bench_ret if not pd.isna(raw_ret) and not pd.isna(bench_ret) else math.nan
         trough = df.iloc[i:min(i + 60, len(df))]["close"].min()
         event["max_adverse_60d"] = trough / float(row["close"]) - 1.0
         rows.append(event)
@@ -163,9 +186,12 @@ def summarize(events: pd.DataFrame, group_cols: Sequence[str]) -> pd.DataFrame:
         row["events"] = len(group)
         row["avg_max_adverse_60d"] = group["max_adverse_60d"].mean()
         for window in FORWARD_WINDOWS:
-            col = f"ret_{window}d"
-            row[f"avg_{col}"] = group[col].mean()
-            row[f"win_rate_{col}"] = (group[col] > 0).mean()
+            ret_col = f"ret_{window}d"
+            excess_col = f"excess_ret_{window}d"
+            row[f"avg_{ret_col}"] = group[ret_col].mean()
+            row[f"win_rate_{ret_col}"] = (group[ret_col] > 0).mean()
+            row[f"avg_{excess_col}"] = group[excess_col].mean()
+            row[f"excess_win_rate_{window}d"] = (group[excess_col] > 0).mean()
         rows.append(row)
     return pd.DataFrame(rows).sort_values(list(group_cols))
 
@@ -184,7 +210,7 @@ def save_outputs(events: pd.DataFrame, output_dir: Path) -> None:
     frames = [events.copy(), summary.copy(), by_industry.copy(), by_pattern.copy()]
     for frame in frames:
         for col in frame.columns:
-            if col.startswith("ret_") or col.startswith("avg_ret_") or col.startswith("win_rate_") or col in {"max_adverse_60d", "avg_max_adverse_60d", "ma25_slope_5d"}:
+            if col.startswith("ret_") or col.startswith("bench_ret_") or col.startswith("excess_ret_") or col.startswith("avg_ret_") or col.startswith("avg_excess_ret_") or col.startswith("win_rate_") or col.startswith("excess_win_rate_") or col in {"max_adverse_60d", "avg_max_adverse_60d", "ma25_slope_5d"}:
                 frame[col] = frame[col].map(pct_format)
             if col == "vol5_over_vol60":
                 frame[col] = frame[col].map(lambda x: "" if pd.isna(x) else f"{x:.2f}")
@@ -197,11 +223,14 @@ def save_outputs(events: pd.DataFrame, output_dir: Path) -> None:
 def run(args: argparse.Namespace) -> None:
     tickers = [normalize_ticker(t) for t in (args.tickers or list(UNIVERSE.keys()))]
     all_events = []
+    benchmark_name = normalize_ticker(args.benchmark)
+    benchmark = load_csv(benchmark_name, Path(args.data_dir)) if args.source == "csv" else load_yfinance(benchmark_name, args.start)
+    benchmark = benchmark.sort_values("date").reset_index(drop=True)
     for ticker in tickers:
         industry = UNIVERSE.get(ticker, args.default_industry)
         try:
             prices = load_csv(ticker, Path(args.data_dir)) if args.source == "csv" else load_yfinance(ticker, args.start)
-            events = find_events(add_indicators(prices), ticker, industry)
+            events = find_events(add_indicators(prices), ticker, industry, benchmark, benchmark_name)
             if not events.empty:
                 all_events.append(events)
             print(f"OK {ticker}: events={len(events)}")
@@ -209,7 +238,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"SKIP {ticker}: {exc}")
     events = pd.concat(all_events, ignore_index=True) if all_events else pd.DataFrame()
     save_outputs(events, Path(args.output_dir))
-    print(f"2560 sector lab complete. Events: {len(events)}")
+    print(f"2560 sector lab complete. Events: {len(events)}. Benchmark: {benchmark_name}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -219,6 +248,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--data-dir", default="data/prices")
     parser.add_argument("--output-dir", default="reports/backtests")
     parser.add_argument("--start", default="2010-01-01")
+    parser.add_argument("--benchmark", default="SPY")
     parser.add_argument("--default-industry", default="未分類")
     return parser.parse_args(argv)
 
