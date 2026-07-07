@@ -3,7 +3,7 @@
 **Registry Version:** Josh Portfolio V18.0  
 **Project Owner:** ChatGPT / Josh OS Project Owner  
 **Owner:** Josh  
-**Updated:** 2026-07-06  
+**Updated:** 2026-07-07  
 **Repository:** `changeros-bot/discount-hunter`
 
 ---
@@ -13,9 +13,16 @@
 | Module | App Version | Registry / Playbook | Status | Route | Owner Action |
 |---|---:|---|---|---|---|
 | DCA 折價獵人 | V17.1 | Josh Portfolio V18.0 | LIVE / Ready for Review | `/v17` | Build V17.2: Chinese labels, decision status, Quality shell, backtest pipeline |
-| 槓桿獵人 | Draft | Separate Engine | DRAFT / PLANNING | `/leveraged-hunter` | Define 00631L buy / stop / exit rules before UI expansion |
 | Josh 2026多元記帳本 | V4.4 | Local DB Ledger | LIVE | `/financial-os` | Stabilize CRUD, date filters, budget and asset editing |
 | 富邦長期 DCA | Sealed | Core DCA | SEALED | `/fubon-dca` | Monthly execution check only |
+
+---
+
+## Removed Modules
+
+```text
+槓桿獵人：2026-07-07 停止，不再列入 GitHub 專案入口、Josh OS 狀態、回測 workflow 或 backtest-summary API。
+```
 
 ---
 
@@ -40,7 +47,7 @@ pending_backtest_version: V18.1
 - 品質優先
 - 價格只是觸發器
 - 買點只是允許買入，不是必須買
-- BTC 版面可同頁，但引擎獨立
+- BTC 與其他標的同屬折價獵人監控清單，但使用 Cycle High 回撤模型
 - ETF 以 Pure DCA 為主，折扣加碼為輔
 - Exit 看 Investment Thesis Broken，不看價格
 
