@@ -33,6 +33,16 @@ function readCsv(name) {
   return parseCsv(fs.readFileSync(file, "utf8"));
 }
 
+function readJson(name) {
+  const file = path.join(process.cwd(), "reports", "paper", name);
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    return null;
+  }
+}
+
 function toNum(v) {
   const n = Number(String(v ?? "").replace("%", ""));
   if (!Number.isFinite(n)) return 0;
@@ -45,6 +55,7 @@ export default function handler(req, res) {
     const open = readCsv("2560_open_positions.csv");
     const closed = readCsv("2560_closed_trades.csv");
     const summaryRows = readCsv("2560_paper_summary.csv");
+    const lastScan = readJson("2560_last_scan.json");
     const pending = open.filter((t) => t.status === "PENDING");
     const active = open.filter((t) => t.status === "OPEN");
     const closedReturns = closed.map((t) => toNum(t.return_pct)).filter((n) => Number.isFinite(n));
@@ -65,6 +76,7 @@ export default function handler(req, res) {
       rule: "risk_30d：停損 -8%｜停利 +15%｜最多 30 個交易日",
       universe: universeProfiles.map((x) => x.ticker).join(", "),
       universeProfiles,
+      lastScan,
       updatedAt: new Date().toISOString(),
       rawSummary: summaryRows[0] || null,
     };
