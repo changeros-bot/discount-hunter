@@ -100,6 +100,46 @@ above_ma200
 還是單純搭上大盤順風車
 ```
 
+### D. 即時性與研究邊界
+
+2560 V0.5 僅允許使用日線收盤資料生成正式訊號。
+
+```text
+盤中資料僅供觀察
+不得作為正式訊號依據
+不得用盤中價格回頭改寫日線訊號
+```
+
+正式流程固定為：
+
+```text
+收盤後生成訊號
+隔日開盤紙上進場
+持有期間每日收盤更新停損 / 停利 / 到期狀態
+```
+
+原因：
+
+```text
+2560 是 EOD / next-day open 框架
+不是分時或盤中策略
+盤中成交量會失真
+日均線盤中會漂移
+yfinance 與 GitHub Actions 不適合低延遲監控
+目前目標是驗證 edge，不是搶點
+```
+
+未來若要升級盤中架構，必須另開 V1.0+：
+
+```text
+即時行情 API
+雲端服務
+Telegram / LINE 推播
+錯誤重試
+資料品質檢查
+API 金鑰管理
+```
+
 ---
 
 ## 3. 研究問題
@@ -200,12 +240,14 @@ VOL5 > 1.5 × VOL60
 
 ```text
 scripts/backtest_2560_sector_lab.py
+scripts/simulate_2560_lab.py
 ```
 
 手動執行：
 
 ```bash
 python scripts/backtest_2560_sector_lab.py --source yfinance --benchmark SPY --atr-multiplier 1.5
+python scripts/simulate_2560_lab.py --source yfinance --cost 0.002 --slippage 0.002
 ```
 
 輸出：
@@ -216,6 +258,11 @@ reports/backtests/2560_sector_summary.csv
 reports/backtests/2560_sector_by_industry.csv
 reports/backtests/2560_sector_by_pattern.csv
 reports/backtests/2560_sector_by_market.csv
+reports/backtests/2560_sim_events.csv
+reports/backtests/2560_sim_summary.csv
+reports/backtests/2560_sim_by_industry.csv
+reports/backtests/2560_sim_by_pattern.csv
+reports/backtests/2560_sim_by_exit.csv
 ```
 
 ---
@@ -261,7 +308,36 @@ MA25 連續 3 天上揚
 
 ---
 
-## 8. 評估指標
+## 8. V0.4 交易模擬規則
+
+V0.4 使用更接近實務的 next-day open 模擬：
+
+```text
+Day 0：收盤後確認 2560 訊號
+Day 1：隔日開盤價 × 1.002 紙上進場
+交易成本：0.2%
+```
+
+目前最佳規則：
+
+```text
+risk_30d
+停損：-8%
+停利：+15%
+最多持有：30 個交易日
+```
+
+V0.4 初步判定：
+
+```text
+大型科技平台：第一紙上交易組
+AI半導體：第二觀察組
+高波動成長股：暫不進正式紙上交易
+```
+
+---
+
+## 9. 評估指標
 
 ```text
 5日報酬
@@ -278,6 +354,13 @@ MA25 連續 3 天上揚
 SPY 是否站上 MA200
 個股是否站上 MA200
 ATR 距離 MA25
+交易數
+平均淨報酬
+中位數淨報酬
+平均持有天數
+Profit Factor
+最大單筆虧損
+最大單筆獲利
 ```
 
 2560 是短線 / 波段系統，所以重點看：
@@ -286,9 +369,17 @@ ATR 距離 MA25
 20日 / 30日 / 60日
 ```
 
+交易模擬階段重點看：
+
+```text
+risk_30d 是否在隔日開盤 + 滑價 + 成本後仍維持正中位數
+Profit Factor 是否 > 1.3
+最大單筆虧損是否可接受
+```
+
 ---
 
-## 9. 升級規則
+## 10. 升級規則
 
 2560 技術研究室若要進入正式頁面，至少要符合：
 
@@ -296,8 +387,9 @@ ATR 距離 MA25
 某一產業樣本數 >= 100
 某一型態在 20 / 30 / 60 日有穩定正期望
 同時具備穩定超額報酬
+交易模擬扣除成本與滑價後仍為正中位數
+Profit Factor > 1.3
 最大不利跌幅可接受
-誘多型態經修正後確實可作為排除條件
 ```
 
 未通過前：
@@ -311,7 +403,7 @@ ATR 距離 MA25
 
 ---
 
-## 10. 交易系統升級路線
+## 11. 交易系統升級路線
 
 如果 2560 通過研究門檻，升級順序如下：
 
@@ -319,7 +411,7 @@ ATR 距離 MA25
 V0.1 訊號研究：固定 5/10/20/30/60 日報酬
 V0.2 超額報酬：扣 SPY / QQQ 同期報酬
 V0.3 ATR 與市場狀態標記：ATR 正規化、SPY MA200 狀態欄
-V0.4 交易模擬：加入出場規則、成本、滑價
+V0.4 交易模擬：next-day open、出場規則、成本、滑價
 V0.5 Paper Trading：只記錄不下單
 V1.0 小額人工確認交易系統
 ```
@@ -333,4 +425,27 @@ VOL5 跌回 VOL60 下方出場
 固定風險上限
 手續費與滑價
 單筆 / 單日 / 單月風控
+```
+
+---
+
+## 12. 即時化升級順序
+
+即時盤中不是 V0.5 目標。
+
+正確順序：
+
+```text
+日線回測穩定
+收盤後自動產報表
+隔日開盤紙上交易
+加入提醒與通知
+最後才考慮盤中監控
+```
+
+核心原則：
+
+```text
+先證明日線訊號有 edge
+再決定是否值得付出即時 API、雲端服務與推播架構成本
 ```
