@@ -1,1 +1,2 @@
 trade_id,status,ticker,industry,pattern,signal_date,entry_date,entry_price,stop_price,target_price,last_date,last_price,exit_date,exit_price,exit_reason,hold_days,return_pct,created_at,updated_at
+2560-MU-20260706-縮量黑馬,PENDING,MU,AI半導體,縮量黑馬,2026-07-06 00:00:00,,,,,2026-07-06 00:00:00,984.75,,,,,,2026-07-07T09:28:58.217702+00:00,2026-07-07T09:28:58.217702+00:00
