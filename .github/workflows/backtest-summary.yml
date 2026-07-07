@@ -11,6 +11,7 @@ on:
         options:
           - discount
           - discount_2560
+          - mu_2560
           - 2560_sector
           - 2560_sim
           - all
@@ -55,6 +56,11 @@ jobs:
         if: ${{ github.event.inputs.target == 'discount_2560' || github.event.inputs.target == 'all' }}
         run: |
           python scripts/backtest_discount_hunter_2560.py --source ${{ github.event.inputs.source }}
+
+      - name: Run MU 2560 standalone backtest
+        if: ${{ github.event.inputs.target == 'mu_2560' || github.event.inputs.target == 'all' }}
+        run: |
+          python scripts/backtest_2560_mu.py --source ${{ github.event.inputs.source }}
 
       - name: Run 2560 sector lab backtest
         if: ${{ github.event.inputs.target == '2560_sector' || github.event.inputs.target == 'all' }}
