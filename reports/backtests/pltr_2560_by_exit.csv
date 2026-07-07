@@ -1,0 +1,8 @@
+rule,exit_reason,trades,win_rate,avg_net_return,median_net_return,avg_hold_days,profit_factor,worst,best
+base_60d,close_below_ma25,66,22.73%,-4.67%,-3.50%,1.61,0.07,-27.13%,5.95%
+base_60d,volume_weak,163,66.26%,2.37%,1.40%,2.22,3.83,-7.69%,48.22%
+risk_30d,max_30d,16,81.25%,3.65%,4.65%,30.00,3.56,-8.18%,13.77%
+risk_30d,risk_stop,87,0.00%,-10.25%,-9.69%,6.93,0.00,-16.16%,-8.20%
+risk_30d,target_reached,126,100.00%,18.23%,16.17%,12.87,,14.81%,39.70%
+trend_60d,atr_trail,47,57.45%,7.58%,2.60%,9.91,3.59,-16.57%,42.99%
+trend_60d,close_below_ma25,182,34.62%,-0.71%,-2.48%,9.84,0.80,-16.16%,38.06%

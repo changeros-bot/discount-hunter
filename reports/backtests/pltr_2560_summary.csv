@@ -1,0 +1,4 @@
+rule,trades,win_rate,avg_net_return,median_net_return,avg_hold_days,profit_factor,worst,best
+base_60d,229,53.71%,0.34%,0.35%,2.04,1.17,-27.13%,48.22%
+risk_30d,229,60.70%,6.39%,14.91%,11.81,2.60,-16.16%,39.70%
+trend_60d,229,39.30%,0.99%,-1.90%,9.86,1.30,-16.57%,42.99%
