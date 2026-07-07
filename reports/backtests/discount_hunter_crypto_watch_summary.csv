@@ -1,0 +1,4 @@
+ticker,layer,events,avg_drawdown_at_trigger,avg_max_adverse_90d,avg_ret_7d,win_rate_ret_7d,avg_ret_14d,win_rate_ret_14d,avg_ret_30d,win_rate_ret_30d,avg_ret_60d,win_rate_ret_60d,avg_ret_90d,win_rate_ret_90d
+MUSDT,L1,3,-62.37%,-17.92%,24.05%,100.00%,14.50%,66.67%,15.97%,66.67%,313.49%,66.67%,233.05%,66.67%
+MUSDT,L2,1,-77.98%,-40.89%,61.61%,100.00%,,,,,,,
+MUSDT,L3,1,-83.00%,-23.41%,99.87%,100.00%,,,,,,,
