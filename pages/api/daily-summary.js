@@ -11,17 +11,89 @@ function pct(value) {
 }
 
 function money(value) {
+  if (value === null || value === undefined) return "N/A";
   const n = num(value);
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.abs(n).toFixed(2)}`;
 }
 
+function signedMoney(value) {
+  if (value === null || value === undefined) return "N/A";
+  const n = num(value);
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
+}
+
+function signedPct(value) {
+  if (value === null || value === undefined) return "N/A";
+  const n = Number(value || 0) * 100;
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+function symbolKey(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function isCryptoAsset(asset) {
-  return asset?.assetType === "crypto" || String(asset?.symbol || "").toUpperCase() === "BTC";
+  return asset?.assetType === "crypto" || symbolKey(asset?.symbol) === "BTC";
 }
 
 function assetModel(asset) {
-  return isCryptoAsset(asset) ? "BTC Cycle High" : "52W High";
+  const key = symbolKey(asset?.symbol);
+  if (key === "BTC") return "Cycle High 回撤";
+  if (key.includes("SPCX")) return "上市以來高點回撤";
+  return "52週高點回撤";
+}
+
+function holdingValue(holding) {
+  return num(holding?.currentValue ?? holding?.marketValue ?? holding?.positionValue ?? holding?.rawCurrentValue ?? holding?.value);
+}
+
+function hasRealCost(holding) {
+  const cost = num(holding?.totalCost ?? holding?.cost ?? holding?.costBasis);
+  if (!(cost > 0)) return false;
+  if (holding?.costBasisMissing) return false;
+  const source = String(holding?.costBasisSource || "");
+  return source.includes("transfer_history")
+    || source.includes("binance_myTrades")
+    || source.includes("verified_tx_hash_receipt")
+    || source.includes("raw_buy_ledger")
+    || source === "";
+}
+
+function mergeHoldingsBySymbol(...groups) {
+  const map = new Map();
+  for (const group of groups || []) {
+    for (const holding of group || []) {
+      const symbol = symbolKey(holding?.symbol);
+      if (!symbol || num(holding?.quantity) <= 0) continue;
+      map.set(symbol, { ...holding, symbol });
+    }
+  }
+  return [...map.values()];
+}
+
+function getPortfolioTotals({ wallet, exchange }) {
+  const holdings = mergeHoldingsBySymbol(wallet?.holdings || [], exchange?.holdings || []);
+  const live = holdings.filter((h) => num(h.quantity) > 0);
+  const known = live.filter(hasRealCost);
+  const missing = live.filter((h) => !hasRealCost(h));
+  const totalCost = known.reduce((sum, item) => sum + num(item.totalCost ?? item.cost ?? item.costBasis), 0);
+  const currentValue = live.reduce((sum, item) => sum + holdingValue(item), 0);
+  const costReady = live.length > 0 && missing.length === 0;
+  const pnl = costReady ? currentValue - totalCost : null;
+  const pnlPct = costReady && totalCost > 0 ? pnl / totalCost : null;
+  return {
+    holdings: live,
+    holdingCount: live.length,
+    knownCount: known.length,
+    missingCount: missing.length,
+    missingSymbols: missing.map((h) => h.symbol).filter(Boolean),
+    totalCost: costReady ? totalCost : null,
+    currentValue,
+    pnl,
+    pnlPct,
+    costReady,
+  };
 }
 
 function getSignalRows(prices) {
@@ -45,7 +117,6 @@ function getSignalRows(prices) {
 
       return {
         symbol: asset.symbol,
-        assetType: isCryptoAsset(asset) ? "BTC" : "xStock",
         model: assetModel(asset),
         depth,
         target,
@@ -63,84 +134,76 @@ function getSignalRows(prices) {
   };
 }
 
-function getWalletTotals(wallet) {
-  const holdings = wallet?.holdings || [];
-  const totalCost = holdings.reduce((sum, item) => sum + num(item.totalCost ?? item.cost ?? item.costBasis), 0);
-  const currentValue = holdings.reduce((sum, item) => sum + num(item.currentValue ?? item.value ?? item.marketValue), 0);
-  const pnl = currentValue - totalCost;
-  const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
-  return { holdings, totalCost, currentValue, pnl, pnlPct };
+function getMonitorCount(prices) {
+  return Number(prices?.count) || (prices?.data || []).length;
 }
 
-function getMonitorSummary(wallet, prices) {
-  const data = prices?.data || [];
-  const monitorCount = Number(prices?.count) || data.length;
-  const cryptoCount = data.filter(isCryptoAsset).length;
-  const xstockMonitorCount = Math.max(0, monitorCount - cryptoCount);
-  const walletHoldingsCount = wallet?.debugCounts?.holdingsCount ?? wallet?.holdings?.length ?? 0;
-  const costMissingCount = wallet?.debugCounts?.costBasisMissingCount ?? 0;
-  const costMissingSymbols = wallet?.debugCounts?.costBasisMissingSymbols || [];
-  return { monitorCount, cryptoCount, xstockMonitorCount, walletHoldingsCount, costMissingCount, costMissingSymbols };
-}
-
-function buildDailyMessage(wallet, prices) {
-  const totals = getWalletTotals(wallet);
+function buildDailyMessage({ wallet, exchange, prices }) {
+  const totals = getPortfolioTotals({ wallet, exchange });
   const signals = getSignalRows(prices);
-  const summary = getMonitorSummary(wallet, prices);
+  const monitorCount = getMonitorCount(prices);
   const time = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+  const dataStatus = totals.costReady ? "正常" : `缺成本：${totals.missingSymbols.join("、") || "unknown"}`;
 
   const lines = [
     "📊 DCA折價獵人日報",
     "",
     `時間：${time}`,
     "",
-    `監控清單：${summary.monitorCount} 檔（BTC + xStocks）｜Wallet：${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks`,
+    `監控清單：${monitorCount} 檔`,
+    `持倉數：${totals.holdingCount} 檔`,
+    `資料狀態：${dataStatus}`,
     "",
-    `xStocks 總投入：${money(totals.totalCost)}`,
-    `xStocks 目前市值：${money(totals.currentValue)}`,
-    `xStocks 未實現損益：${money(totals.pnl)}`,
-    `xStocks 報酬率：${totals.pnlPct.toFixed(2)}%`,
+    `總投入：${money(totals.totalCost)}`,
+    `目前市值：${money(totals.currentValue)}`,
+    `未實現損益：${signedMoney(totals.pnl)}`,
+    `報酬率：${signedPct(totals.pnlPct)}`,
     "",
   ];
 
   if (signals.reached.length) {
     lines.push(`🟢 已達買點：${signals.reached.length} 檔`);
-    signals.reached.forEach((row) => {
-      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜${row.model}｜進度 ${row.progress.toFixed(0)}%`);
-      lines.push(`訊號金額：${row.amount}U｜需 Josh 確認`);
-    });
     lines.push("");
+    signals.reached.forEach((row) => {
+      lines.push(`${row.symbol}｜${row.model}｜D${row.target}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`訊號金額：${row.amount}U｜需 Josh 確認`);
+      lines.push("");
+    });
   }
 
   if (signals.near.length) {
     lines.push(`🟡 接近買點，僅觀察：${signals.near.length} 檔`);
+    lines.push("");
     signals.near.forEach((row) => {
-      lines.push(`${row.assetType === "BTC" ? "🟠" : "🟢"} ${row.symbol}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
+      lines.push(`${row.symbol}｜${row.model}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%`);
       lines.push(`觸發後訊號金額：${row.amount}U｜目前暫不買`);
+      lines.push("");
     });
   } else if (!signals.reached.length) {
     lines.push("🔔 今日無達標買點，也無接近買點");
+    lines.push("");
   }
 
-  lines.push("");
-  lines.push("⚠️ 執行提醒：以上為買點訊號，不是強制買入。請確認現金、本月預算與單檔上限。");
-  if (summary.costMissingCount > 0) {
-    lines.push(`Wallet：讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks；缺成本 ${summary.costMissingCount} 檔：${summary.costMissingSymbols.join("、") || "unknown"}`);
-  } else {
-    lines.push(`Wallet：已讀取 ${summary.walletHoldingsCount}/${summary.xstockMonitorCount} 檔 xStocks，資料正常`);
-  }
+  lines.push("⚠️ 執行提醒：");
+  lines.push("以上為買點訊號，不是強制買入。");
+  lines.push("請確認現金、本月預算與單檔上限。");
 
   return {
-    message: lines.join("\n"),
+    message: lines.join("\n").trim(),
     buyCount: signals.reached.length,
     nearCount: signals.near.length,
     totals,
-    monitorSummary: summary,
+    monitorCount,
   };
 }
 
 async function readJsonSafe(response) {
   return response.json().catch(() => ({}));
+}
+
+function btcPriceFromPrices(prices) {
+  const btc = (prices?.data || []).find((row) => symbolKey(row?.symbol) === "BTC");
+  return num(btc?.price);
 }
 
 async function handler(req, res) {
@@ -165,6 +228,9 @@ async function handler(req, res) {
 
     const wallet = await readJsonSafe(walletRes);
     const prices = await readJsonSafe(pricesRes);
+    const btcPrice = btcPriceFromPrices(prices);
+    const exchangeRes = await fetch(`${base}/api/binance-exchange-position?btcPrice=${encodeURIComponent(btcPrice)}&t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
+    const exchange = exchangeRes ? await readJsonSafe(exchangeRes) : {};
 
     if (!walletRes.ok || !pricesRes.ok || wallet?.ok === false || prices?.ok === false) {
       const message = [
@@ -178,7 +244,7 @@ async function handler(req, res) {
       return res.status(500).json({ ok: false, sent: Boolean(telegram && !telegram.skipped), previewOnly: !shouldSendError, telegram, message });
     }
 
-    const daily = buildDailyMessage(wallet, prices);
+    const daily = buildDailyMessage({ wallet, exchange, prices });
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const telegram = shouldSend ? await sendTelegramMessage(daily.message, { cooldownKey: "daily-summary:daily-report", cooldownHours: 20 }) : null;
 
@@ -193,7 +259,7 @@ async function handler(req, res) {
       previewOnly: !shouldSend,
       buyCount: daily.buyCount,
       nearCount: daily.nearCount,
-      monitorSummary: daily.monitorSummary,
+      monitorCount: daily.monitorCount,
       totals: daily.totals,
       telegram,
       message: daily.message,
