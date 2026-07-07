@@ -75,6 +75,31 @@
 --benchmark SPY
 ```
 
+### C. 市場狀態先標記，不先過濾
+
+Research Only 階段不直接用 `SPY > MA200` 過濾訊號。
+
+先在事件檔中記錄：
+
+```text
+benchmark_above_ma200
+above_ma200
+```
+
+再用報表比較：
+
+```text
+大盤多頭時的 2560 表現
+大盤空頭時的 2560 表現
+```
+
+這樣可以分辨：
+
+```text
+是 2560 訊號本身有效
+還是單純搭上大盤順風車
+```
+
 ---
 
 ## 3. 研究問題
@@ -93,6 +118,7 @@
 哪種型態是假訊號？
 20 / 30 / 60 日是否有統計優勢？
 是否有超額報酬？
+大盤多空狀態下表現是否不同？
 ```
 
 ---
@@ -107,8 +133,10 @@ AI半導體：NVDA, AVGO, AMD, TSM, MU, MRVL, SMCI
 能源原物料：XOM, CVX, OXY, COP, FCX
 工業基建：CAT, GE, DE, ETN, PWR
 防禦消費：KO, PEP, WMT, COST, PG, MCD
-ETF對照：QQQ, SPY, SMH, SOXX, ARKK
+ETF對照：QQQ, SPY, SMH, SOXX
 ```
+
+ARKK 已暫時移出第一版 ETF 對照組，避免主動型主題 ETF 受到單一持股與基金經理人配置影響，干擾 2560 統計。
 
 注意：高波動成長股含多檔近年上市標的，不應與 2010 年已有完整資料的成熟股票直接等權比較。
 
@@ -137,6 +165,13 @@ MA25 走平或向上
 
 用途：短線機會。
 
+後續可測試：
+
+```text
+VOL5 > 1.2 × VOL60
+VOL5 > 1.5 × VOL60
+```
+
 ### 波段
 
 ```text
@@ -152,9 +187,12 @@ MA25 走平或向上
 股價接近 MA25
 成交量縮到 60日均量以下
 且接近 20日低量
+且股價仍在 MA200 之上
 ```
 
 用途：研究潛在低量蓄勢。
+
+新增 MA200 前提是為了降低把冷門殭屍股誤判成蓄勢股的風險。
 
 ---
 
@@ -167,7 +205,7 @@ scripts/backtest_2560_sector_lab.py
 手動執行：
 
 ```bash
-python scripts/backtest_2560_sector_lab.py --source yfinance --benchmark SPY
+python scripts/backtest_2560_sector_lab.py --source yfinance --benchmark SPY --atr-multiplier 1.5
 ```
 
 輸出：
@@ -177,11 +215,53 @@ reports/backtests/2560_sector_events.csv
 reports/backtests/2560_sector_summary.csv
 reports/backtests/2560_sector_by_industry.csv
 reports/backtests/2560_sector_by_pattern.csv
+reports/backtests/2560_sector_by_market.csv
 ```
 
 ---
 
-## 7. 評估指標
+## 7. V0.3 指標修正
+
+### ATR 正規化 MA25 距離
+
+舊版：
+
+```text
+abs(close / MA25 - 1) <= 3.5%
+```
+
+新版：
+
+```text
+abs(close - MA25) <= 1.5 × ATR14
+```
+
+目的：
+
+```text
+讓高波動股與低波動股使用同一把「波動度尺」
+避免固定百分比對不同股性不公平
+```
+
+### MA25 趨勢判斷
+
+新版同時使用：
+
+```text
+MA25 連續 3 天上揚
+或 MA25 5日斜率 >= -0.3%
+```
+
+目的：
+
+```text
+降低 -0.5% 魔術數字的依賴
+避免 5日斜率太短造成過多雜訊
+```
+
+---
+
+## 8. 評估指標
 
 ```text
 5日報酬
@@ -195,6 +275,9 @@ reports/backtests/2560_sector_by_pattern.csv
 勝率
 最大不利跌幅
 訊號次數
+SPY 是否站上 MA200
+個股是否站上 MA200
+ATR 距離 MA25
 ```
 
 2560 是短線 / 波段系統，所以重點看：
@@ -205,7 +288,7 @@ reports/backtests/2560_sector_by_pattern.csv
 
 ---
 
-## 8. 升級規則
+## 9. 升級規則
 
 2560 技術研究室若要進入正式頁面，至少要符合：
 
@@ -228,14 +311,14 @@ reports/backtests/2560_sector_by_pattern.csv
 
 ---
 
-## 9. 交易系統升級路線
+## 10. 交易系統升級路線
 
 如果 2560 通過研究門檻，升級順序如下：
 
 ```text
 V0.1 訊號研究：固定 5/10/20/30/60 日報酬
 V0.2 超額報酬：扣 SPY / QQQ 同期報酬
-V0.3 市場濾網：SPY / QQQ > MA200
+V0.3 ATR 與市場狀態標記：ATR 正規化、SPY MA200 狀態欄
 V0.4 交易模擬：加入出場規則、成本、滑價
 V0.5 Paper Trading：只記錄不下單
 V1.0 小額人工確認交易系統
