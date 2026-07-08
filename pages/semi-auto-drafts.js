@@ -96,18 +96,18 @@ export default function SemiAutoDrafts() {
     <div style={{ maxWidth: 460, margin: "0 auto", padding: "22px 14px 40px" }}>
       <a href="/v17" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回折價獵人</a>
       <header style={{ marginTop: 18, marginBottom: 18 }}>
-        <div style={{ color: "#f59e0b", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17.3 QUALITY ROUTER</div>
-        <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>半自動下單草稿</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>Quality Gate 先擋，再產生可複製草稿。完成後回來按「已完成」或「略過」，系統才會進入下一層。</p>
-        <LinkButton href="/semi-auto-flow-log">查看半自動流程紀錄</LinkButton>
+        <div style={{ color: "#f59e0b", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17.4 AUTOMATION DOORSTEP</div>
+        <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>半自動草稿</h1>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>只保留必要流程：草稿、現金檢查、手動確認、記錄完成或略過。下一站才是自動化門口。</p>
         <LinkButton href="/trade-readiness">查看現金與預算檢查</LinkButton>
+        <LinkButton href="/auto-whitelist">前往自動化門口</LinkButton>
         <LinkButton href="/v17-quality">查看 Quality Audit Center</LinkButton>
       </header>
       {error && <Box title="讀取 / 記錄失敗"><div style={{ color: "#fecaca" }}>{error}</div></Box>}
       {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>產生半自動草稿中…</div></Box>}
       {data && <>
-        <Box title="安全邊界"><div style={{ color: "#cbd5e1", lineHeight: 1.7, fontWeight: 850 }}>草稿數：{data.draftCount}｜被擋下：{data.blockedCount}｜總金額：{Number(data.totalDraftAmountUsd || 0).toFixed(2)} USDT<br />Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON<br />流程：草稿 → 複製 → Binance手動確認 → 回來記錄完成/略過</div></Box>
-        {drafts.length === 0 ? <Box title="目前沒有草稿"><div style={{ color: "#94a3b8", lineHeight: 1.6, fontWeight: 850 }}>這是正常狀態：目前沒有新的 D 層買點需要執行，或買點已被你略過 / 完成。Quality Gate 只在「今日決策出現」時才會產生草稿或擋下原因。</div><LinkButton href="/semi-auto-flow-log">看半自動流程紀錄</LinkButton><LinkButton href="/trade-readiness">看現金與預算檢查</LinkButton><LinkButton href="/v17">回主頁看持倉區 / 觀察區</LinkButton><LinkButton href="/v17-quality">看 10 檔 Quality 稽核表</LinkButton></Box> : drafts.map((draft) => <DraftCard key={`${draft.symbol}-${draft.tier}`} draft={draft} onRecord={record} busy={busy} />)}
+        <Box title="安全邊界"><div style={{ color: "#cbd5e1", lineHeight: 1.7, fontWeight: 850 }}>草稿數：{data.draftCount}｜被擋下：{data.blockedCount}｜總金額：{Number(data.totalDraftAmountUsd || 0).toFixed(2)} USDT<br />Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON<br />最短路徑：草稿 → Binance 手動確認 → 記錄完成 / 略過 → 自動化門口</div></Box>
+        {drafts.length === 0 ? <Box title="目前沒有草稿"><div style={{ color: "#94a3b8", lineHeight: 1.6, fontWeight: 850 }}>這是正常狀態：目前沒有新的 D 層買點需要執行，或買點已被你略過 / 完成。Quality Gate 只在「今日決策出現」時才會產生草稿或擋下原因。</div><LinkButton href="/trade-readiness">看現金與預算檢查</LinkButton><LinkButton href="/auto-whitelist">前往自動化門口</LinkButton><LinkButton href="/v17">回主頁看持倉區 / 觀察區</LinkButton></Box> : drafts.map((draft) => <DraftCard key={`${draft.symbol}-${draft.tier}`} draft={draft} onRecord={record} busy={busy} />)}
         {blocked.length > 0 ? <Box title="Quality Gate 擋下"><div>{blocked.map((item) => <BlockedCard key={`${item.symbol}-${item.tier}`} item={item} />)}</div></Box> : null}
       </>}
     </div>
