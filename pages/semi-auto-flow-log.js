@@ -56,6 +56,7 @@ export default function SemiAutoFlowLog() {
           {events.length ? events.map((event) => <EventCard key={event.id} event={event} />) : <div style={{ color: "#94a3b8", fontWeight: 850, lineHeight: 1.6 }}>目前還沒有流程紀錄。等有草稿後，你按「已手動完成」或「略過本層」，這裡就會出現。</div>}
         </Box>
         <Box title="入口">
+          <a href="/auto-whitelist" style={{ color: "#fca5a5", fontWeight: 1000, textDecoration: "none" }}>有限自動白名單前置檢查</a><br />
           <a href="/semi-auto-drafts" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>半自動草稿</a><br />
           <a href="/trade-readiness" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>現金與預算檢查</a><br />
           <a href="/v17" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a>
