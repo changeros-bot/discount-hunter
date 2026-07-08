@@ -1,0 +1,106 @@
+{
+  "ok": true,
+  "run_at_utc": "2026-07-08T23:37:51.709574+00:00",
+  "source": "yfinance",
+  "universe_count": 10,
+  "scanned_count": 10,
+  "error_count": 0,
+  "new_signal_count": 2,
+  "new_signals": [
+    {
+      "ticker": "AAPL",
+      "pattern": "弱量續攻",
+      "signal_date": "2026-07-08",
+      "trade_id": "2560-AAPL-20260708-弱量續攻"
+    },
+    {
+      "ticker": "DELL",
+      "pattern": "弱量續攻",
+      "signal_date": "2026-07-08",
+      "trade_id": "2560-DELL-20260708-弱量續攻"
+    }
+  ],
+  "errors": [],
+  "scans": [
+    {
+      "ticker": "AAPL",
+      "industry": "大型科技平台",
+      "latest_market_date": "2026-07-08",
+      "close": 313.39,
+      "pattern": "弱量續攻",
+      "allowed_signal": true
+    },
+    {
+      "ticker": "MSFT",
+      "industry": "大型科技平台",
+      "latest_market_date": "2026-07-08",
+      "close": 383.34,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "GOOGL",
+      "industry": "大型科技平台",
+      "latest_market_date": "2026-07-08",
+      "close": 361.92,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "META",
+      "industry": "大型科技平台",
+      "latest_market_date": "2026-07-08",
+      "close": 603.12,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "AMZN",
+      "industry": "大型科技平台",
+      "latest_market_date": "2026-07-08",
+      "close": 243.62,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "NFLX",
+      "industry": "大型科技平台",
+      "latest_market_date": "2026-07-08",
+      "close": 75.59,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "MU",
+      "industry": "AI半導體",
+      "latest_market_date": "2026-07-08",
+      "close": 948.8,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "DELL",
+      "industry": "AI基礎建設",
+      "latest_market_date": "2026-07-08",
+      "close": 431.97,
+      "pattern": "弱量續攻",
+      "allowed_signal": true
+    },
+    {
+      "ticker": "PLTR",
+      "industry": "AI應用/國防軟體",
+      "latest_market_date": "2026-07-08",
+      "close": 132.22,
+      "pattern": "",
+      "allowed_signal": false
+    },
+    {
+      "ticker": "NBIS",
+      "industry": "高波動AI雲端",
+      "latest_market_date": "2026-07-08",
+      "close": 216.48,
+      "pattern": "",
+      "allowed_signal": false
+    }
+  ]
+}
