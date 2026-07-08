@@ -31,20 +31,10 @@ function baseUrlFromReq(req) {
 async function readJsonSafe(response) {
   return response ? response.json().catch(() => ({})) : {};
 }
-function marketMapFromRows(rows = []) {
-  return Object.fromEntries((rows || []).map((row) => [row.symbol, {
-    symbol: row.symbol,
-    price: row.price,
-    high: row.high,
-    high52w: row.high52w,
-    cycleHigh: row.high || row.cycleHigh || row.high52w,
-    discount: row.discount,
-  }]));
-}
-function decisionAmountText(row) {
+function rowAmountText(row) {
   return row?.decision?.amountText || (row?.decision?.amount ? `${row.decision.amount}U` : row?.amountText || "--");
 }
-function decisionLine(row) {
+function zoneLine(row) {
   const symbol = row?.symbol || "—";
   const tier = row?.decision?.tier || row?.tier || row?.signalTier || "D?";
   const progress = Number(row?.progressPct ?? row?.progress ?? row?.decision?.progress);
@@ -52,20 +42,21 @@ function decisionLine(row) {
   const parts = [`${symbol}`, `${tier}`];
   if (discount !== undefined && discount !== null && discount !== "") parts.push(`回撤 ${discount}`);
   if (Number.isFinite(progress)) parts.push(`進度 ${progress.toFixed(0)}%`);
-  parts.push(`建議 ${decisionAmountText(row)}`);
+  parts.push(`建議 ${rowAmountText(row)}`);
   return parts.join("｜");
 }
-function buildMessage(truth, todayDecision) {
+function buildMessage(truth, sectionSummary) {
   const s = truth.summary || {};
   const cash = truth.cash || {};
-  const decisionRows = Array.isArray(todayDecision?.cards) ? todayDecision.cards : [];
+  const holdingRows = Array.isArray(sectionSummary?.holdingRows) ? sectionSummary.holdingRows : [];
+  const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
   const lines = [
     "📊 DCA折價獵人日報",
     "",
     `時間：${twTime()}`,
     "",
     `掃描清單：${truth.monitorCount || 0} 檔`,
-    `買點區持倉：${decisionRows.length} 檔`,
+    `買點區持倉：${holdingRows.length} 檔`,
     `資料狀態：${s.costReady ? "正常" : `缺成本：${(s.missingSymbols || []).join("、") || "unknown"}`}`,
     "",
     `總投入：${money(s.totalCost)}`,
@@ -79,59 +70,49 @@ function buildMessage(truth, todayDecision) {
     "",
   ];
 
-  if (decisionRows.length > 0) {
-    lines.push(`🧭 今日決策：買點區 ${decisionRows.length} 檔`);
-    decisionRows.forEach((row) => lines.push(decisionLine(row)));
+  if (holdingRows.length > 0) {
+    lines.push(`✅ 買點區持倉：${holdingRows.length} 檔`);
+    holdingRows.forEach((row) => lines.push(zoneLine(row)));
     lines.push("");
   } else {
-    lines.push("🧭 今日決策：目前無持倉進入買點區");
+    lines.push("✅ 買點區持倉：0 檔");
     lines.push("");
   }
 
-  lines.push("資料來源：Portfolio Truth + App 今日決策鏡像");
+  if (decisionRows.length > 0) {
+    lines.push(`🧭 今日決策：${decisionRows.length} 檔待確認`);
+    decisionRows.forEach((row) => lines.push(zoneLine(row)));
+    lines.push("");
+  } else {
+    lines.push("🧭 今日決策：目前無可執行買點");
+    lines.push("");
+  }
+
+  lines.push("資料來源：Portfolio Truth + App 分區鏡像");
   lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。");
   return lines.join("\n").trim();
 }
-
-async function fetchTodayDecision(base) {
-  const pricesRes = await fetch(`${base}/api/prices?t=${Date.now()}`, { cache: "no-store" });
-  const prices = await readJsonSafe(pricesRes);
-  if (!pricesRes.ok || prices?.ok === false) throw new Error(prices?.error || `prices ${pricesRes.status}`);
-  const rows = Array.isArray(prices.data) ? prices.data : [];
-  const decisionRes = await fetch(`${base}/api/v17/ui-decisions?t=${Date.now()}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: false }),
-    cache: "no-store",
-  });
-  const decision = await readJsonSafe(decisionRes);
-  if (!decisionRes.ok || decision?.ok === false) throw new Error(decision?.error || `ui-decisions ${decisionRes.status}`);
-  return decision;
-}
-
 async function handler(req, res) {
   if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
   try {
     const base = baseUrlFromReq(req);
-    const [truthRes, todayDecision] = await Promise.all([
+    const [truthRes, sectionRes] = await Promise.all([
       fetch(`${base}/api/v17/portfolio-truth?t=${Date.now()}`, { cache: "no-store" }),
-      fetchTodayDecision(base),
+      fetch(`${base}/api/v17/section-summary?t=${Date.now()}`, { cache: "no-store" }),
     ]);
     const truth = await readJsonSafe(truthRes);
+    const sectionSummary = await readJsonSafe(sectionRes);
     if (!truthRes.ok || truth?.ok === false) {
-      const message = [
-        "🔴 DCA折價獵人日報失敗",
-        "",
-        `Portfolio Truth：${truth.message || truth.error || truthRes.status}`,
-      ].join("\n");
+      const message = ["🔴 DCA折價獵人日報失敗", "", `Portfolio Truth：${truth.message || truth.error || truthRes.status}`].join("\n");
       const shouldSendError = req.method === "POST" || String(req.query.send || "") === "1";
       const telegram = shouldSendError ? await sendTelegramMessage(message, { cooldownKey: "telegram-daily:error", cooldownHours: 12 }) : null;
       return res.status(500).json({ ok: false, sent: Boolean(telegram && !telegram.skipped), previewOnly: !shouldSendError, telegram, message });
     }
+    if (!sectionRes.ok || sectionSummary?.ok === false) throw new Error(sectionSummary?.error || `section-summary ${sectionRes.status}`);
 
-    const message = buildMessage(truth, todayDecision);
+    const message = buildMessage(truth, sectionSummary);
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const force = String(req.query.force || "") === "1";
     const telegramOptions = force ? {} : { cooldownKey: "telegram-daily:daily-report", cooldownHours: 20 };
@@ -141,16 +122,17 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "telegram-daily-app-decision-mirror-v2",
-      sourcePolicy: "portfolio-truth-plus-app-today-decision-mirror",
+      version: "telegram-daily-app-section-mirror-v3",
+      sourcePolicy: "portfolio-truth-plus-app-section-mirror",
       sent: Boolean(telegram && !telegram.skipped),
       deduped: Boolean(telegram?.deduped),
       previewOnly: !shouldSend,
       force,
-      decisionCount: Array.isArray(todayDecision?.cards) ? todayDecision.cards.length : 0,
+      holdingZoneCount: sectionSummary.holdingRows?.length || 0,
+      decisionCount: sectionSummary.decisionRows?.length || 0,
       totals: truth.summary,
       cash: truth.cash,
-      todayDecision,
+      sectionSummary,
       monitorCount: truth.monitorCount,
       telegram,
       message,
