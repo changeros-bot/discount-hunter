@@ -31,23 +31,41 @@ function baseUrlFromReq(req) {
 async function readJsonSafe(response) {
   return response ? response.json().catch(() => ({})) : {};
 }
-function signalLine(row) {
-  if (row.reached) {
-    return `${row.symbol}｜${row.tier}｜已達 ${row.targetDepth.toFixed(0)}%｜進度 ${row.progress.toFixed(0)}%｜建議 ${row.amount}U`;
-  }
-  return `${row.symbol}｜${row.tier}｜還差 ${row.remaining.toFixed(1)}%｜進度 ${row.progress.toFixed(0)}%｜建議 ${row.amount}U`;
+function marketMapFromRows(rows = []) {
+  return Object.fromEntries((rows || []).map((row) => [row.symbol, {
+    symbol: row.symbol,
+    price: row.price,
+    high: row.high,
+    high52w: row.high52w,
+    cycleHigh: row.high || row.cycleHigh || row.high52w,
+    discount: row.discount,
+  }]));
 }
-function buildMessage(truth) {
+function decisionAmountText(row) {
+  return row?.decision?.amountText || (row?.decision?.amount ? `${row.decision.amount}U` : row?.amountText || "--");
+}
+function decisionLine(row) {
+  const symbol = row?.symbol || "—";
+  const tier = row?.decision?.tier || row?.tier || row?.signalTier || "D?";
+  const progress = Number(row?.progressPct ?? row?.progress ?? row?.decision?.progress);
+  const discount = row?.discountText || row?.discount || row?.decision?.discount;
+  const parts = [`${symbol}`, `${tier}`];
+  if (discount !== undefined && discount !== null && discount !== "") parts.push(`回撤 ${discount}`);
+  if (Number.isFinite(progress)) parts.push(`進度 ${progress.toFixed(0)}%`);
+  parts.push(`建議 ${decisionAmountText(row)}`);
+  return parts.join("｜");
+}
+function buildMessage(truth, todayDecision) {
   const s = truth.summary || {};
   const cash = truth.cash || {};
-  const signals = truth.signals || { reached: [], near: [] };
+  const decisionRows = Array.isArray(todayDecision?.cards) ? todayDecision.cards : [];
   const lines = [
     "📊 DCA折價獵人日報",
     "",
     `時間：${twTime()}`,
     "",
-    `監控清單：${truth.monitorCount || 0} 檔`,
-    `策略持倉數：${s.holdingCount ?? "—"} 檔`,
+    `掃描清單：${truth.monitorCount || 0} 檔`,
+    `買點區持倉：${decisionRows.length} 檔`,
     `資料狀態：${s.costReady ? "正常" : `缺成本：${(s.missingSymbols || []).join("、") || "unknown"}`}`,
     "",
     `總投入：${money(s.totalCost)}`,
@@ -61,24 +79,34 @@ function buildMessage(truth) {
     "",
   ];
 
-  if ((signals.reached || []).length > 0) {
-    lines.push(`🔔 買點警報：已達 D 層 ${(signals.reached || []).length} 檔`);
-    (signals.reached || []).forEach((row) => lines.push(signalLine(row)));
+  if (decisionRows.length > 0) {
+    lines.push(`🧭 今日決策：買點區 ${decisionRows.length} 檔`);
+    decisionRows.forEach((row) => lines.push(decisionLine(row)));
     lines.push("");
-  }
-  if ((signals.near || []).length > 0) {
-    lines.push(`🔔 買點警報：接近下一個 D 層 ${(signals.near || []).length} 檔`);
-    (signals.near || []).forEach((row) => lines.push(signalLine(row)));
-    lines.push("");
-  }
-  if (!(signals.reached || []).length && !(signals.near || []).length) {
-    lines.push("🔔 買點警報：今日無持倉達標，也無持倉接近下一個 D 層");
+  } else {
+    lines.push("🧭 今日決策：目前無持倉進入買點區");
     lines.push("");
   }
 
-  lines.push("Wallet：Portfolio Truth 鏡像資料");
-  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。");
+  lines.push("資料來源：Portfolio Truth + App 今日決策鏡像");
+  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。");
   return lines.join("\n").trim();
+}
+
+async function fetchTodayDecision(base) {
+  const pricesRes = await fetch(`${base}/api/prices?t=${Date.now()}`, { cache: "no-store" });
+  const prices = await readJsonSafe(pricesRes);
+  if (!pricesRes.ok || prices?.ok === false) throw new Error(prices?.error || `prices ${pricesRes.status}`);
+  const rows = Array.isArray(prices.data) ? prices.data : [];
+  const decisionRes = await fetch(`${base}/api/v17/ui-decisions?t=${Date.now()}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markets: marketMapFromRows(rows), persistState: false }),
+    cache: "no-store",
+  });
+  const decision = await readJsonSafe(decisionRes);
+  if (!decisionRes.ok || decision?.ok === false) throw new Error(decision?.error || `ui-decisions ${decisionRes.status}`);
+  return decision;
 }
 
 async function handler(req, res) {
@@ -87,7 +115,10 @@ async function handler(req, res) {
   }
   try {
     const base = baseUrlFromReq(req);
-    const truthRes = await fetch(`${base}/api/v17/portfolio-truth?t=${Date.now()}`, { cache: "no-store" });
+    const [truthRes, todayDecision] = await Promise.all([
+      fetch(`${base}/api/v17/portfolio-truth?t=${Date.now()}`, { cache: "no-store" }),
+      fetchTodayDecision(base),
+    ]);
     const truth = await readJsonSafe(truthRes);
     if (!truthRes.ok || truth?.ok === false) {
       const message = [
@@ -100,7 +131,7 @@ async function handler(req, res) {
       return res.status(500).json({ ok: false, sent: Boolean(telegram && !telegram.skipped), previewOnly: !shouldSendError, telegram, message });
     }
 
-    const message = buildMessage(truth);
+    const message = buildMessage(truth, todayDecision);
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const force = String(req.query.force || "") === "1";
     const telegramOptions = force ? {} : { cooldownKey: "telegram-daily:daily-report", cooldownHours: 20 };
@@ -110,17 +141,16 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "telegram-daily-mirror-v1",
-      sourcePolicy: "portfolio-truth-mirror",
+      version: "telegram-daily-app-decision-mirror-v2",
+      sourcePolicy: "portfolio-truth-plus-app-today-decision-mirror",
       sent: Boolean(telegram && !telegram.skipped),
       deduped: Boolean(telegram?.deduped),
       previewOnly: !shouldSend,
       force,
-      alertCount: (truth.signals?.reached || []).length,
-      nearCount: (truth.signals?.near || []).length,
+      decisionCount: Array.isArray(todayDecision?.cards) ? todayDecision.cards.length : 0,
       totals: truth.summary,
       cash: truth.cash,
-      signals: truth.signals,
+      todayDecision,
       monitorCount: truth.monitorCount,
       telegram,
       message,
