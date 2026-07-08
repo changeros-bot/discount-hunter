@@ -35,20 +35,29 @@ export default function TradeReadiness() {
   }, []);
   const status = data?.readiness?.status;
   const tone = status === "READY_FOR_MANUAL_CONFIRMATION" ? "green" : status === "NEEDS_MANUAL_REVIEW" ? "red" : "yellow";
+  const cycle = data?.budget?.cycle || {};
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 460, margin: "0 auto", padding: "22px 14px 40px" }}>
       <a href="/v17" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回折價獵人</a>
       <header style={{ marginTop: 18, marginBottom: 18 }}>
         <div style={{ color: "#22c55e", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17.4 TRADE READINESS</div>
         <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>現金與預算檢查</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>只做 readiness，不下單。先檢查 Quality、現金、月預算、單日上限、單筆上限。</p>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>每月預算 12 號才入金；本頁用「12 號到次月 11 號」作為預算週期。只做 readiness，不下單。</p>
       </header>
       {error && <Box title="讀取失敗" tone="red"><div style={{ color: "#fecaca" }}>{error}</div></Box>}
       {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>檢查現金與預算中…</div></Box>}
       {data && <>
         <Box title="Readiness" tone={tone}>
-          <div><Pill tone={tone}>{data.readiness.label}</Pill><Pill>Auto Trade OFF</Pill><Pill>Kill Switch ON</Pill></div>
+          <div><Pill tone={tone}>{data.readiness.label}</Pill><Pill>Auto Trade OFF</Pill><Pill>Kill Switch ON</Pill><Pill tone="yellow">預算日 12 號</Pill></div>
           <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>{data.readiness.reason}</div>
+        </Box>
+        <Box title="預算週期" tone="yellow">
+          <div style={{ color: "#cbd5e1", fontWeight: 850, lineHeight: 1.7 }}>
+            今日：{cycle.todayTaipei || "—"}<br />
+            本期：{cycle.cycleStart || "—"} ～ {cycle.cycleEnd || "—"}<br />
+            下一次預算入金：{cycle.nextReleaseDate || "—"}<br />
+            <span style={{ color: "#fde68a" }}>{cycle.note}</span>
+          </div>
         </Box>
         <Box title="現金與預算">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850 }}>
@@ -56,7 +65,7 @@ export default function TradeReadiness() {
             <div>草稿合計：{Number(data.summary.totalDraftAmountUsdt || 0).toFixed(2)}U</div>
             <div>草稿後現金：{Number(data.summary.cashAfterDraftsUsdt || 0).toFixed(2)}U</div>
             <div>單日上限：{Number(data.budget.dailyDraftCapUsdt || 0).toFixed(2)}U</div>
-            <div>本月預算：{data.budget.monthlyBudgetTwd} TWD</div>
+            <div>本期預算：{data.budget.monthlyBudgetTwd} TWD</div>
             <div>逢低預算：約 {Number(data.budget.dipBudgetUsdt || 0).toFixed(2)}U</div>
           </div>
         </Box>
