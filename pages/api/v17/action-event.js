@@ -6,7 +6,7 @@ function cleanSymbol(value) {
 
 function cleanLayer(value) {
   const n = Number(String(value || "").replace(/[^0-9]/g, ""));
-  if (!Number.isInteger(n) || n < 1 || n > 4) throw new Error("invalid_layer");
+  if (!Number.isInteger(n) || n < 1 || n > 5) throw new Error("invalid_layer");
   return n;
 }
 
