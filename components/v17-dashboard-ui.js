@@ -38,14 +38,17 @@ function hasCostBasis(holding) { const cost = Number(holding?.totalCost || 0); i
 function avgCostText(holding) { if (!hasCostBasis(holding)) return "缺成本，不能算損益"; const avg = Number(holding?.averageCost || holding?.averageBuyPrice || 0); return avg > 0 ? `(均價 ${fmtUsd(avg, 2)})` : null; }
 function cycleHighDate(row) { return row?.cycleHighDate ? `(${row.cycleHighDate})` : null; }
 
-function qualityManual(row) {
+const OBJECTIVE_CHECKS = "營收成長、自由現金流、毛利率、資產負債表、資本支出趨勢";
+const QUALITATIVE_CHECKS = "產業領導地位、護城河、管理層品質、投資假設是否成立";
+
+function qualityChecklist(row) {
   const key = symbolKey(row?.symbol);
-  if (key === "BTC") return { tone: "green", status: "PASS", title: "Quality Manual", reason: "週期核心資產；允許固定 DCA 與 BTC 週期 D 層逢低。", dca: "允許", dip: "允許" };
-  if (["QQQON", "QQQ", "QQQM", "NVDAON", "TSMON", "AVGOON", "GOOGLON", "NVDA", "TSM", "AVGO", "GOOGL"].includes(key)) return { tone: "green", status: "PASS", title: "Quality Manual", reason: "核心持倉；投資假設目前保留，允許固定 DCA 與 D 層逢低。", dca: "允許", dip: "允許" };
-  if (["AMDON", "MRVLON", "AMD", "MRVL"].includes(key)) return { tone: "yellow", status: "WATCH", title: "Quality Manual", reason: "衛星 AI 標的；可投，但資金不足時低於核心排序。", dca: "允許 5U", dip: "允許" };
-  if (key === "SPCXON" || key === "SPCX") return { tone: "yellow", status: "DATA PENDING", title: "Quality Manual", reason: "SpaceX 特殊標的；逢低需確認使用上市以來高點，不用一般 52 週高點。", dca: "允許 5U", dip: "人工確認" };
-  if (key === "RKLBON" || key === "RKLB") return { tone: "red", status: "SPEC WATCH", title: "Quality Manual", reason: "高波動深折扣標的；不做固定 DCA，只等 -50% / -65% / -80%。", dca: "禁止", dip: "只深跌" };
-  return { tone: "yellow", status: "UNCHECKED", title: "Quality Manual", reason: "尚未人工封版，不新增資金。", dca: "待確認", dip: "待確認" };
+  if (key === "BTC") return { tone: "green", status: "通過", dca: "允許", dip: "允許", scope: "核心資產，可進半自動草稿。" };
+  if (["QQQON", "QQQ", "QQQM", "NVDAON", "TSMON", "AVGOON", "GOOGLON", "NVDA", "TSM", "AVGO", "GOOGL"].includes(key)) return { tone: "green", status: "通過", dca: "允許", dip: "允許", scope: "核心持倉，可進半自動草稿。" };
+  if (["AMDON", "MRVLON", "AMD", "MRVL"].includes(key)) return { tone: "yellow", status: "觀察", dca: "允許 5U", dip: "允許", scope: "衛星 AI 標的，可進草稿；資金不足時低於核心。" };
+  if (key === "SPCXON" || key === "SPCX") return { tone: "yellow", status: "未檢查", dca: "允許 5U", dip: "人工確認", scope: "逢低需確認使用上市以來高點。" };
+  if (key === "RKLBON" || key === "RKLB") return { tone: "red", status: "觀察", dca: "禁止", dip: "只深跌", scope: "不做固定 DCA；只等 -50% / -65% / -80%。" };
+  return { tone: "yellow", status: "未檢查", dca: "待確認", dip: "待確認", scope: "尚未人工封版，不新增資金。" };
 }
 
 function strategyPolicy(row) {
@@ -73,14 +76,17 @@ function toneStyle(tone) {
 
 function StrategyPolicyCard({ row }) {
   const p = strategyPolicy(row);
-  const q = qualityManual(row);
+  const q = qualityChecklist(row);
   const t = toneStyle(p.tone);
   const qt = toneStyle(q.tone);
   return <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
     <div style={{ padding: 10, borderRadius: 14, background: qt.bg, border: `1px solid ${qt.border}`, color: qt.color, fontWeight: 900, fontSize: 12, lineHeight: 1.5 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><span style={{ fontSize: 13, fontWeight: 1000 }}>{q.title}</span><span>{q.status}</span></div>
-      <div style={{ marginTop: 6 }}>DCA：{q.dca}｜逢低：{q.dip}</div>
-      <div style={{ marginTop: 4, color: "#cbd5e1" }}>{q.reason}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><span style={{ fontSize: 13, fontWeight: 1000 }}>Quality Checklist｜半自動範圍</span><span>{q.status}</span></div>
+      <div style={{ marginTop: 6, color: "#e2e8f0" }}>客觀條件：{OBJECTIVE_CHECKS}</div>
+      <div style={{ color: "#e2e8f0" }}>質化條件：{QUALITATIVE_CHECKS}</div>
+      <div style={{ marginTop: 4 }}>DCA：{q.dca}｜逢低：{q.dip}</div>
+      <div style={{ color: "#cbd5e1" }}>{q.scope}</div>
+      <div style={{ marginTop: 4, color: "#94a3b8" }}>V17.2 顯示框架｜V17.3 手動保存｜V17.4 接客觀財務資料</div>
     </div>
     <div style={{ padding: 10, borderRadius: 14, background: t.bg, border: `1px solid ${t.border}`, color: t.color, fontWeight: 900, fontSize: 12, lineHeight: 1.5 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><span style={{ fontSize: 13, fontWeight: 1000 }}>{p.title}</span><span style={{ color: "#e2e8f0", opacity: .88 }}>策略封版</span></div>
