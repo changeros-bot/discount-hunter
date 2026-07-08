@@ -1,4 +1,0 @@
-ticker,data_symbol,name,engine,scheme,filter,events,avg_drawdown_at_trigger,avg_max_adverse_252d,avg_ret_21d,win_rate_ret_21d,avg_ret_63d,win_rate_ret_63d,avg_ret_126d,win_rate_ret_126d,avg_ret_252d,win_rate_ret_252d,baseline_events,baseline_avg_ret_63d,baseline_avg_ret_126d,baseline_avg_max_adverse_252d,filter_verdict
-ARM,ARM,AI semiconductor stock candidate,AI基礎建設,AI_A_15_25_35_50,D_2560,1,-21.72%,-41.20%,-4.79%,0.00%,-23.21%,0.00%,12.00%,100.00%,-24.66%,0.00%,18,19.27%,55.19%,-20.32%,WATCH_SAMPLE_LOW
-CNDX,CNDX.L,Nasdaq 100 UCITS ETF candidate,核心ETF代理,ETF_A_10_20_30,D_2560,1,-10.49%,-3.58%,9.02%,100.00%,5.31%,100.00%,26.63%,100.00%,29.48%,100.00%,22,12.63%,18.34%,-6.13%,WATCH_SAMPLE_LOW
-UFO,UFO,Space economy ETF candidate,主題ETF,ETF_A_10_20_30,D_2560,2,-13.39%,-10.55%,8.94%,50.00%,28.14%,50.00%,37.64%,50.00%,,0.00%,19,12.05%,21.62%,-16.16%,WATCH_SAMPLE_LOW
