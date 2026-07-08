@@ -40,7 +40,7 @@ export default function Market91Shortlist() {
         <Box title="統計" tone="green"><div><Pill>總數 {rows.length}</Pill><Pill tone="green">深審 {deep.length}</Pill><Pill tone="yellow">二審 {second.length}</Pill></div></Box>
         <Box title={`深審池（${deep.length}）`} tone="green">{deep.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
         <Box title={`二審池（${second.length}）`} tone="yellow">{second.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
-        <Box title="入口"><a href="/v17-quality" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>Quality Audit Center</a><br /><a href="/auto-whitelist" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>自動化門口</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="入口"><a href="/market-91-quality" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>深審 Quality Gate 草稿</a><br /><a href="/v17-quality" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>正式 Quality Audit Center</a><br /><a href="/auto-whitelist" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>自動化門口</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
