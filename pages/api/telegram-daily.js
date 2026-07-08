@@ -34,7 +34,7 @@ async function readJsonSafe(response) {
 function rowAmountText(row) {
   return row?.decision?.amountText || (row?.decision?.amount ? `${row.decision.amount}U` : row?.amountText || "--");
 }
-function zoneLine(row) {
+function baseLineParts(row) {
   const symbol = row?.symbol || "—";
   const tier = row?.decision?.tier || row?.tier || row?.signalTier || "D?";
   const progress = Number(row?.progressPct ?? row?.progress ?? row?.decision?.progress);
@@ -42,8 +42,13 @@ function zoneLine(row) {
   const parts = [`${symbol}`, `${tier}`];
   if (discount !== undefined && discount !== null && discount !== "") parts.push(`回撤 ${discount}`);
   if (Number.isFinite(progress)) parts.push(`進度 ${progress.toFixed(0)}%`);
-  parts.push(`建議 ${rowAmountText(row)}`);
-  return parts.join("｜");
+  return parts;
+}
+function holdingZoneLine(row) {
+  return [...baseLineParts(row), "狀態：已略過本層，等待下一層"].join("｜");
+}
+function decisionLine(row) {
+  return [...baseLineParts(row), `建議 ${rowAmountText(row)}`].join("｜");
 }
 function buildMessage(truth, sectionSummary) {
   const s = truth.summary || {};
@@ -72,7 +77,7 @@ function buildMessage(truth, sectionSummary) {
 
   if (holdingRows.length > 0) {
     lines.push(`✅ 買點區持倉：${holdingRows.length} 檔`);
-    holdingRows.forEach((row) => lines.push(zoneLine(row)));
+    holdingRows.forEach((row) => lines.push(holdingZoneLine(row)));
     lines.push("");
   } else {
     lines.push("✅ 買點區持倉：0 檔");
@@ -81,7 +86,7 @@ function buildMessage(truth, sectionSummary) {
 
   if (decisionRows.length > 0) {
     lines.push(`🧭 今日決策：${decisionRows.length} 檔待確認`);
-    decisionRows.forEach((row) => lines.push(zoneLine(row)));
+    decisionRows.forEach((row) => lines.push(decisionLine(row)));
     lines.push("");
   } else {
     lines.push("🧭 今日決策：目前無可執行買點");
@@ -120,23 +125,7 @@ async function handler(req, res) {
 
     if (telegram && !telegram.ok) return res.status(500).json({ ok: false, telegram });
 
-    return res.status(200).json({
-      ok: true,
-      version: "telegram-daily-app-section-mirror-v3",
-      sourcePolicy: "portfolio-truth-plus-app-section-mirror",
-      sent: Boolean(telegram && !telegram.skipped),
-      deduped: Boolean(telegram?.deduped),
-      previewOnly: !shouldSend,
-      force,
-      holdingZoneCount: sectionSummary.holdingRows?.length || 0,
-      decisionCount: sectionSummary.decisionRows?.length || 0,
-      totals: truth.summary,
-      cash: truth.cash,
-      sectionSummary,
-      monitorCount: truth.monitorCount,
-      telegram,
-      message,
-    });
+    return res.status(200).json({ ok: true, version: "telegram-daily-app-section-mirror-v3", sourcePolicy: "portfolio-truth-plus-app-section-mirror", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: sectionSummary.decisionRows?.length || 0, totals: truth.summary, cash: truth.cash, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Daily summary failed" });
   }
