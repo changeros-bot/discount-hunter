@@ -1,0 +1,33 @@
+name: V17 Paper Auto One Week Trial
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 08:10 Asia/Taipei daily. Trial window: 2026-07-09 to 2026-07-15 inclusive.
+    - cron: "10 0 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  paper-auto:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check trial window
+        id: window
+        run: |
+          TAIPEI_DATE=$(TZ=Asia/Taipei date +%F)
+          echo "taipei_date=$TAIPEI_DATE" >> "$GITHUB_OUTPUT"
+          if [[ "$TAIPEI_DATE" < "2026-07-09" || "$TAIPEI_DATE" > "2026-07-15" ]]; then
+            echo "run_trial=false" >> "$GITHUB_OUTPUT"
+            echo "Outside one-week trial window: $TAIPEI_DATE"
+          else
+            echo "run_trial=true" >> "$GITHUB_OUTPUT"
+            echo "Inside one-week trial window: $TAIPEI_DATE"
+          fi
+      - name: Run paper auto engine
+        if: steps.window.outputs.run_trial == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          TAIPEI_DATE: ${{ steps.window.outputs.taipei_date }}
+        run: |
+          curl -fsS "https://discount-hunter-sigma.vercel.app/api/v17/paper-auto-engine?run=1&source=github-actions-${TAIPEI_DATE}" | tee paper-auto-result.json
