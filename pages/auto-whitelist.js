@@ -31,20 +31,20 @@ export default function AutoWhitelist() {
   const s = data?.summary || {};
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 460, margin: "0 auto", padding: "22px 14px 40px" }}>
-      <a href="/semi-auto-flow-log" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回流程紀錄</a>
+      <a href="/semi-auto-drafts" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回半自動草稿</a>
       <header style={{ marginTop: 18, marginBottom: 18 }}>
-        <div style={{ color: "#f59e0b", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17.5 PRECHECK ONLY</div>
-        <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>有限自動白名單前置檢查</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>只檢查資格，不啟用真實下單。Draft 不能進白名單；必須 Approved 且連續兩次季度通過。</p>
+        <div style={{ color: "#f59e0b", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17.5 AUTOMATION DOORSTEP</div>
+        <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>自動化門口</h1>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>只判斷誰有資格靠近自動化。現在仍不啟用真實下單；Draft 不能進白名單，必須 Approved 且連續兩次季度通過。</p>
       </header>
       {error && <Box title="讀取失敗" tone="red"><div style={{ color: "#fecaca" }}>{error}</div></Box>}
-      {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>檢查白名單資格中…</div></Box>}
+      {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>檢查自動化門檻中…</div></Box>}
       {data && <>
-        <Box title="安全邊界" tone="yellow"><div><Pill tone="red">Auto Trade OFF</Pill><Pill>Precheck Only</Pill><Pill tone="yellow">Kill Switch Required</Pill></div><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>目前沒有任何標的會因為這頁而自動下單。這只是白名單前置檢查。</div></Box>
+        <Box title="安全邊界" tone="yellow"><div><Pill tone="red">Auto Trade OFF</Pill><Pill>Doorstep Only</Pill><Pill tone="yellow">Kill Switch Required</Pill></div><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>目前沒有任何標的會因為這頁而自動下單。這只是自動化門口，不是自動交易。</div></Box>
         <Box title="統計"><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}><Pill>總數 {s.total || 0}</Pill><Pill tone="yellow">尚未達標 {s.NOT_YET || 0}</Pill><Pill tone="red">排除 {s.EXCLUDED || 0}</Pill></div></Box>
         <Box title="規則"><ul style={{ margin: 0, paddingLeft: 18, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.7 }}>{(data.rules || []).map((x) => <li key={x}>{x}</li>)}</ul></Box>
         <Box title={`標的檢查（${rows.length}）`}>{rows.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
-        <Box title="入口"><a href="/semi-auto-flow-log" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>半自動流程紀錄</a><br /><a href="/v17-quality" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>Quality Audit Center</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="入口"><a href="/semi-auto-drafts" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>半自動草稿</a><br /><a href="/v17-quality" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>Quality Audit Center</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
