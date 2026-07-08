@@ -48,7 +48,7 @@ export default function Market91Quality() {
         <Box title="統計" tone="green"><div><Pill>總數 {rows.length}</Pill><Pill tone="green">草稿通過 {passed.length}</Pill><Pill tone="yellow">觀察 {watch.length}</Pill></div></Box>
         <Box title={`草稿通過（${passed.length}）`} tone="green">{passed.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
         <Box title={`觀察（${watch.length}）`} tone="yellow">{watch.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
-        <Box title="入口"><a href="/market-91-shortlist" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>91檔二審池</a><br /><a href="/v17-quality" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>正式 Quality Audit Center</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="入口"><a href="/market-91-observation" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>正式觀察候選</a><br /><a href="/market-91-shortlist" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>91檔二審池</a><br /><a href="/v17-quality" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>正式 Quality Audit Center</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
