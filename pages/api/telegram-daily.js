@@ -36,6 +36,26 @@ function signedPct(value) {
 function twTime() {
   return new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
 }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function isoDate(y, m, d) { return `${y}-${pad2(m)}-${pad2(d)}`; }
+function addMonth(y, m, delta) {
+  const date = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return { y: date.getUTCFullYear(), m: date.getUTCMonth() + 1 };
+}
+function taipeiParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const get = (type) => Number(parts.find((p) => p.type === type)?.value);
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+function budgetCycle(date = new Date(), releaseDay = 12) {
+  const { y, m, d } = taipeiParts(date);
+  const prev = addMonth(y, m, -1);
+  const next = addMonth(y, m, 1);
+  const start = d >= releaseDay ? { y, m, d: releaseDay } : { y: prev.y, m: prev.m, d: releaseDay };
+  const endMonth = d >= releaseDay ? next : { y, m };
+  const nextRelease = d >= releaseDay ? { y: next.y, m: next.m, d: releaseDay } : { y, m, d: releaseDay };
+  return { cycleStart: isoDate(start.y, start.m, start.d), cycleEnd: isoDate(endMonth.y, endMonth.m, releaseDay - 1), nextReleaseDate: isoDate(nextRelease.y, nextRelease.m, nextRelease.d), beforeThisMonthRelease: d < releaseDay };
+}
 function baseUrlFromReq(req) {
   const host = req.headers.host;
   const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -82,6 +102,7 @@ function blockedLine(item) {
 function buildMessage(truth, sectionSummary) {
   const s = truth.summary || {};
   const cash = truth.cash || {};
+  const cycle = budgetCycle(new Date(), 12);
   const holdingRows = Array.isArray(sectionSummary?.holdingRows) ? sectionSummary.holdingRows : [];
   const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
   const routed = decisionRows.map(routeDecision);
@@ -103,7 +124,8 @@ function buildMessage(truth, sectionSummary) {
     "",
     `現金檢查：可用 USDT ${num(cash.totalUSDT).toFixed(2)}U`,
     `Wallet USDT：${num(cash.walletUSDT).toFixed(2)}U｜Exchange USDT：${num(cash.exchangeUSDT).toFixed(2)}U`,
-    `本月預算：3000 TWD｜固定DCA 1500｜逢低 1500`,
+    `預算週期：${cycle.cycleStart}～${cycle.cycleEnd}｜下次預算日：${cycle.nextReleaseDate}`,
+    `本期預算：3000 TWD｜固定DCA 1500｜逢低 1500`,
     "",
     "🛡 Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON",
     `半自動草稿候選：${draftable.length} 檔｜被擋下：${blocked.length} 檔`,
@@ -135,9 +157,9 @@ function buildMessage(truth, sectionSummary) {
     lines.push("");
   }
 
-  lines.push("入口：/v17 ｜ /semi-auto-drafts ｜ /v17-quality");
+  lines.push("入口：/v17 ｜ /semi-auto-drafts ｜ /trade-readiness ｜ /v17-quality");
   lines.push("資料來源：Portfolio Truth + App 分區鏡像 + Quality Gate Router");
-  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。Draft 不代表自動交易白名單。");
+  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。Draft 不代表自動交易白名單。每月新預算 12 號才入金。");
   return lines.join("\n").trim();
 }
 async function handler(req, res) {
@@ -172,7 +194,7 @@ async function handler(req, res) {
 
     if (telegram && !telegram.ok) return res.status(500).json({ ok: false, telegram });
 
-    return res.status(200).json({ ok: true, version: "telegram-daily-quality-gate-router-v4", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-quality-gate", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, draftableCount, blockedCount, totals: truth.summary, cash: truth.cash, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
+    return res.status(200).json({ ok: true, version: "telegram-daily-budget-cycle-v5", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-quality-gate-plus-budget-cycle", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, draftableCount, blockedCount, totals: truth.summary, cash: truth.cash, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Daily summary failed" });
   }
