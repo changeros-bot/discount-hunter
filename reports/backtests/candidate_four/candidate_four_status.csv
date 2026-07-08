@@ -1,0 +1,5 @@
+ticker,data_symbol,status,rows,error
+BAI,BAI,DATA_PENDING,0,empty yfinance response
+UFO,UFO,OK,1699,
+CNDX,CNDX.L,OK,3868,
+ARM,ARM,OK,585,
