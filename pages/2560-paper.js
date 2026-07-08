@@ -111,11 +111,11 @@ export default function Paper2560() {
       <a href="/" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回專案首頁</a>
       <header style={{ marginTop: 18, marginBottom: 16, border: "1px solid rgba(56,189,248,.22)", background: "linear-gradient(180deg,rgba(8,47,73,.42),rgba(2,6,23,.52))", borderRadius: 28, padding: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <div style={{ color: "#38bdf8", letterSpacing: 2, fontWeight: 1000, fontSize: 13 }}>2560 TECHNICAL LAB</div>
-          <Pill color="#f59e0b">Paper V0.8</Pill>
+          <div style={{ color: "#38bdf8", letterSpacing: 2, fontWeight: 1000, fontSize: 13 }}>研究專案</div>
+          <Pill color="#f59e0b">紙上交易</Pill>
         </div>
-        <h1 style={{ fontSize: 35, lineHeight: 1.05, margin: "12px 0 8px", fontWeight: 1000 }}>2560 紙上交易作戰板</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>類折扣獵人版面｜紙上交易運行中 / 等待訊號區 / 觀察區｜只記錄，不下單。</p>
+        <h1 style={{ fontSize: 35, lineHeight: 1.05, margin: "12px 0 8px", fontWeight: 1000 }}>2560 技術研究室</h1>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>盤後訊號研究｜隔日開盤紙上紀錄｜只記錄，不執行真實下單。</p>
       </header>
 
       {error && <section style={{ border: "1px solid #ef444455", background: "#ef444414", color: "#fecaca", borderRadius: 20, padding: 16, fontWeight: 850 }}>讀取失敗：{error}</section>}
