@@ -1,4 +1,5 @@
 ticker,data_symbol,name,engine,scheme,filter,events,avg_drawdown_at_trigger,avg_max_adverse_252d,avg_ret_21d,win_rate_ret_21d,avg_ret_63d,win_rate_ret_63d,avg_ret_126d,win_rate_ret_126d,avg_ret_252d,win_rate_ret_252d,discount_verdict
 ARM,ARM,AI semiconductor stock candidate,AI基礎建設,AI_C_25_35_45_60,D_ONLY,11,-32.97%,-17.91%,1.39%,36.36%,26.31%,63.64%,71.31%,81.82%,11.19%,45.45%,CANDIDATE
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_B_15_25_35,D_ONLY,5,-20.59%,-2.69%,20.36%,80.00%,40.52%,80.00%,62.44%,60.00%,95.44%,40.00%,CANDIDATE
 CNDX,CNDX.L,Nasdaq 100 UCITS ETF candidate,核心ETF代理,ETF_B_15_25_35,D_ONLY,9,-20.33%,-7.70%,6.55%,77.78%,15.38%,88.89%,21.07%,77.78%,34.32%,88.89%,CANDIDATE
 UFO,UFO,Space economy ETF candidate,主題ETF,ETF_B_15_25_35,D_ONLY,11,-23.94%,-17.35%,-0.96%,54.55%,13.96%,54.55%,26.28%,45.45%,48.48%,45.45%,WATCH

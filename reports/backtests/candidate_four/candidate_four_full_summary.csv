@@ -10,6 +10,12 @@ ARM,ARM,AI semiconductor stock candidate,AI基礎建設,AI_B_20_30_40_55,D_VOLUM
 ARM,ARM,AI semiconductor stock candidate,AI基礎建設,AI_C_25_35_45_60,D_MA25,3,-26.76%,-14.74%,-15.93%,0.00%,-2.00%,0.00%,2.60%,33.33%,-5.44%,0.00%
 ARM,ARM,AI semiconductor stock candidate,AI基礎建設,AI_C_25_35_45_60,D_ONLY,11,-32.97%,-17.91%,1.39%,36.36%,26.31%,63.64%,71.31%,81.82%,11.19%,45.45%
 ARM,ARM,AI semiconductor stock candidate,AI基礎建設,AI_C_25_35_45_60,D_VOLUME,6,-30.69%,-16.11%,-4.42%,16.67%,12.39%,50.00%,114.11%,66.67%,11.73%,33.33%
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_A_10_20_30,D_MA25,4,-12.25%,-3.32%,-0.35%,25.00%,22.89%,50.00%,37.65%,25.00%,,0.00%
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_A_10_20_30,D_ONLY,8,-18.36%,-4.13%,12.00%,62.50%,35.52%,75.00%,59.05%,50.00%,97.17%,37.50%
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_A_10_20_30,D_VOLUME,6,-20.21%,-4.24%,14.36%,66.67%,34.35%,83.33%,59.05%,66.67%,97.17%,50.00%
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_B_15_25_35,D_MA25,1,-15.99%,0.00%,,0.00%,,0.00%,,0.00%,,0.00%
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_B_15_25_35,D_ONLY,5,-20.59%,-2.69%,20.36%,80.00%,40.52%,80.00%,62.44%,60.00%,95.44%,40.00%
+BAI,BAI,BlackRock AI / AI thematic ETF candidate,主題ETF,ETF_B_15_25_35,D_VOLUME,5,-20.59%,-2.69%,20.36%,80.00%,40.52%,80.00%,62.44%,60.00%,95.44%,40.00%
 CNDX,CNDX.L,Nasdaq 100 UCITS ETF candidate,核心ETF代理,ETF_A_10_20_30,D_2560,1,-10.49%,-3.58%,9.02%,100.00%,5.31%,100.00%,26.63%,100.00%,29.48%,100.00%
 CNDX,CNDX.L,Nasdaq 100 UCITS ETF candidate,核心ETF代理,ETF_A_10_20_30,D_MA25,5,-10.65%,-6.27%,2.85%,60.00%,11.05%,100.00%,23.73%,100.00%,37.09%,100.00%
 CNDX,CNDX.L,Nasdaq 100 UCITS ETF candidate,核心ETF代理,ETF_A_10_20_30,D_ONLY,22,-13.82%,-6.13%,5.02%,72.73%,12.63%,86.36%,18.34%,86.36%,28.96%,86.36%
