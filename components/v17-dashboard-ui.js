@@ -26,6 +26,7 @@ export function Metric({ label, value, signed, subValue }) {
 }
 
 function absDepth(value) { return Math.abs(Number(value || 0)); }
+function symbolKey(symbol) { return String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function highLabel(row) { return row?.referenceMode === "cycle_high" || row?.discountModel === "btc_cycle_high_v1" || row?.assetType === "crypto" ? "Cycle High" : "高點"; }
 function drawdownLabel(row) { return row?.referenceMode === "cycle_high" || row?.discountModel === "btc_cycle_high_v1" || row?.assetType === "crypto" ? "距Cycle High降幅" : "距52週高點降幅"; }
 function referenceHigh(row) { return Number(row?.high || row?.cycleHigh || row?.high52w || 0); }
@@ -36,6 +37,39 @@ function quantityText(holding) { if (!holding) return "—"; const qty = Number(
 function hasCostBasis(holding) { const cost = Number(holding?.totalCost || 0); if (!(cost > 0) || holding?.costBasisMissing) return false; const source = String(holding?.costBasisSource || ""); return source.includes("transfer_history") || source.includes("binance_myTrades") || source.includes("raw_buy_ledger_recovered") || source.includes("verified_tx_hash_receipt"); }
 function avgCostText(holding) { if (!hasCostBasis(holding)) return "缺成本，不能算損益"; const avg = Number(holding?.averageCost || holding?.averageBuyPrice || 0); return avg > 0 ? `(均價 ${fmtUsd(avg, 2)})` : null; }
 function cycleHighDate(row) { return row?.cycleHighDate ? `(${row.cycleHighDate})` : null; }
+
+function strategyPolicy(row) {
+  const key = symbolKey(row?.symbol);
+  const core = { tone: "green", title: "核心策略", dca: "固定 DCA：每月 5U", dip: "逢低買進：照 D 層執行", note: "長期持有核心池，可 DCA + 逢低。" };
+  const aiCore = { tone: "green", title: "AI核心策略", dca: "固定 DCA：每月 5U", dip: "逢低買進：照 D 層執行", note: "AI長期核心，DCA 與折價加碼都可用。" };
+  const satellite = { tone: "yellow", title: "衛星策略", dca: "固定 DCA：每月 5U", dip: "逢低買進：照 D 層執行", note: "可投，但資金不足時優先級低於核心。" };
+  if (key === "BTC") return { tone: "green", title: "BTC 週期核心", dca: "固定 DCA：每月 5U", dip: "逢低買進：照 BTC 週期 D 層", note: "核心資產；交易所持有，DCA + 深跌加碼。" };
+  if (key === "QQQON" || key === "QQQ" || key === "QQQM") return { ...core, title: "ETF核心策略", note: "ETF型核心，最適合穩定 DCA。" };
+  if (["NVDAON", "TSMON", "AVGOON", "GOOGLON", "NVDA", "TSM", "AVGO", "GOOGL"].includes(key)) return aiCore;
+  if (["AMDON", "MRVLON", "AMD", "MRVL"].includes(key)) return satellite;
+  if (key === "RKLBON" || key === "RKLB") return { tone: "red", title: "深折扣策略", dca: "固定 DCA：不做", dip: "逢低買進：只等 -50% / -65% / -80%", note: "平常不買；未到 -50% 前只觀察。" };
+  if (key === "SPCXON" || key === "SPCX") return { tone: "yellow", title: "特殊觀察策略", dca: "固定 DCA：每月 5U", dip: "逢低買進：需人工確認", note: "必須用上市以來高點，不用一般 52 週高點。" };
+  return { tone: "yellow", title: "未分類策略", dca: "固定 DCA：待確認", dip: "逢低買進：待確認", note: "尚未封版，不自動執行。" };
+}
+
+function StrategyPolicyCard({ row }) {
+  const p = strategyPolicy(row);
+  const toneMap = {
+    green: { color: "#bbf7d0", bg: "rgba(20,83,45,.22)", border: "rgba(34,197,94,.34)" },
+    yellow: { color: "#fde68a", bg: "rgba(120,53,15,.20)", border: "rgba(245,158,11,.34)" },
+    red: { color: "#fecaca", bg: "rgba(127,29,29,.20)", border: "rgba(248,113,113,.34)" },
+  };
+  const t = toneMap[p.tone] || toneMap.yellow;
+  return <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: t.bg, border: `1px solid ${t.border}`, color: t.color, fontWeight: 900, fontSize: 12, lineHeight: 1.5 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+      <span style={{ fontSize: 13, fontWeight: 1000 }}>{p.title}</span>
+      <span style={{ color: "#e2e8f0", opacity: .88 }}>策略封版</span>
+    </div>
+    <div style={{ marginTop: 6 }}>{p.dca}</div>
+    <div>{p.dip}</div>
+    <div style={{ marginTop: 4, color: "#cbd5e1" }}>{p.note}</div>
+  </div>;
+}
 
 export function TierProgress({ row }) {
   if (!row) return null; const p = nextTierProgress(row);
@@ -77,6 +111,7 @@ export function AssetCard({ row, children }) {
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", marginBottom: 10 }}><div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}><span style={{ flex: "0 0 auto", width: 15, height: 15, borderRadius: 999, background: "#35f59a", boxShadow: "0 0 16px rgba(53,245,154,.75)" }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 21, fontWeight: 1000, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.symbol}</div><div style={{ color: "#94a3b8", fontWeight: 850, fontSize: 12 }}>{row.name || "--"}</div></div></div><strong style={{ flex: "0 0 auto", padding: "6px 10px", borderRadius: 999, background: tone.bg, border: `1px solid ${tone.border}`, color: tone.color, fontSize: 13, boxShadow: `0 0 18px ${tone.border}` }}>{row.tier}</strong></div>
     <CardMetrics row={row} />
     <div style={{ marginTop: 10 }}>{children}</div>
+    <StrategyPolicyCard row={row} />
     <LayerRules row={row} rules={row.rules || []} amounts={row.amounts || []} activeTier={row.tier} />
   </article>;
 }
