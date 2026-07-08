@@ -99,10 +99,26 @@ function decisionLine(row) {
 function blockedLine(item) {
   return [...baseLineParts(item.row), `Quality：${item.gate.label}`, `原因：${item.gate.reason}`].join("｜");
 }
-function buildMessage(truth, sectionSummary) {
+function readinessLines(readinessPayload) {
+  if (!readinessPayload?.ok) return ["🧪 Trade Readiness：讀取失敗或尚未同步"];
+  const r = readinessPayload.readiness || {};
+  const summary = readinessPayload.summary || {};
+  const budget = readinessPayload.budget || {};
+  const cycle = budget.cycle || budgetCycle(new Date(), 12);
+  const failedChecks = (readinessPayload.checks || []).filter((x) => !x.passed).map((x) => x.name);
+  const lines = [
+    `🧪 Trade Readiness：${r.label || r.status || "—"}`,
+    `預算週期：${cycle.cycleStart}～${cycle.cycleEnd}｜下次預算日：${cycle.nextReleaseDate}`,
+    `草稿合計：${num(summary.totalDraftAmountUsdt).toFixed(2)}U｜草稿後現金：${num(summary.cashAfterDraftsUsdt).toFixed(2)}U｜逢低預算：約 ${num(budget.dipBudgetUsdt).toFixed(2)}U`,
+  ];
+  if (failedChecks.length) lines.push(`需覆核：${failedChecks.join("、")}`);
+  else lines.push("檢查：Quality / 現金 / 預算 / 上限 OK");
+  return lines;
+}
+function buildMessage(truth, sectionSummary, tradeReadiness) {
   const s = truth.summary || {};
   const cash = truth.cash || {};
-  const cycle = budgetCycle(new Date(), 12);
+  const cycle = tradeReadiness?.budget?.cycle || budgetCycle(new Date(), 12);
   const holdingRows = Array.isArray(sectionSummary?.holdingRows) ? sectionSummary.holdingRows : [];
   const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
   const routed = decisionRows.map(routeDecision);
@@ -129,6 +145,8 @@ function buildMessage(truth, sectionSummary) {
     "",
     "🛡 Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON",
     `半自動草稿候選：${draftable.length} 檔｜被擋下：${blocked.length} 檔`,
+    "",
+    ...readinessLines(tradeReadiness),
     "",
   ];
 
@@ -158,8 +176,8 @@ function buildMessage(truth, sectionSummary) {
   }
 
   lines.push("入口：/v17 ｜ /semi-auto-drafts ｜ /trade-readiness ｜ /v17-quality");
-  lines.push("資料來源：Portfolio Truth + App 分區鏡像 + Quality Gate Router");
-  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。Draft 不代表自動交易白名單。每月新預算 12 號才入金。");
+  lines.push("資料來源：Portfolio Truth + App 分區鏡像 + Quality Gate Router + Trade Readiness");
+  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。Draft 不代表自動交易白名單。每月新預算 12 號才入金。實際交易仍需你手動確認。");
   return lines.join("\n").trim();
 }
 async function handler(req, res) {
@@ -168,12 +186,14 @@ async function handler(req, res) {
   }
   try {
     const base = baseUrlFromReq(req);
-    const [truthRes, sectionRes] = await Promise.all([
+    const [truthRes, sectionRes, readinessRes] = await Promise.all([
       fetch(`${base}/api/v17/portfolio-truth?t=${Date.now()}`, { cache: "no-store" }),
       fetch(`${base}/api/v17/section-summary?t=${Date.now()}`, { cache: "no-store" }),
+      fetch(`${base}/api/v17/trade-readiness?t=${Date.now()}`, { cache: "no-store" }),
     ]);
     const truth = await readJsonSafe(truthRes);
     const sectionSummary = await readJsonSafe(sectionRes);
+    const tradeReadiness = await readJsonSafe(readinessRes);
     if (!truthRes.ok || truth?.ok === false) {
       const message = ["🔴 DCA折價獵人日報失敗", "", `Portfolio Truth：${truth.message || truth.error || truthRes.status}`].join("\n");
       const shouldSendError = req.method === "POST" || String(req.query.send || "") === "1";
@@ -186,7 +206,7 @@ async function handler(req, res) {
     const routed = decisionRows.map(routeDecision);
     const draftableCount = routed.filter((x) => x.draftable).length;
     const blockedCount = routed.length - draftableCount;
-    const message = buildMessage(truth, sectionSummary);
+    const message = buildMessage(truth, sectionSummary, tradeReadiness);
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const force = String(req.query.force || "") === "1";
     const telegramOptions = force ? {} : { cooldownKey: "telegram-daily:daily-report", cooldownHours: 20 };
@@ -194,7 +214,7 @@ async function handler(req, res) {
 
     if (telegram && !telegram.ok) return res.status(500).json({ ok: false, telegram });
 
-    return res.status(200).json({ ok: true, version: "telegram-daily-budget-cycle-v5", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-quality-gate-plus-budget-cycle", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, draftableCount, blockedCount, totals: truth.summary, cash: truth.cash, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
+    return res.status(200).json({ ok: true, version: "telegram-daily-trade-readiness-v6", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-quality-gate-plus-trade-readiness", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, draftableCount, blockedCount, readinessStatus: tradeReadiness?.readiness?.status || null, totals: truth.summary, cash: truth.cash, tradeReadiness, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Daily summary failed" });
   }
