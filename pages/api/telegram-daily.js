@@ -1,5 +1,18 @@
 const { sendTelegramMessage } = require("../../lib/telegram/notify");
 
+const QUALITY_GATE = {
+  BTC: { quality: "PASSED", label: "通過", role: "Cycle Core", permission: "可草稿", allowDraft: true, reason: "週期核心；人工確認後可草稿。" },
+  QQQON: { quality: "PASSED", label: "通過", role: "ETF Core", permission: "可草稿", allowDraft: true, reason: "ETF 核心；人工確認後可草稿。" },
+  NVDAON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心 AI 標的；人工確認後可草稿。" },
+  TSMON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心半導體標的；人工確認後可草稿。" },
+  AVGOON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心 AI 基礎建設；人工確認後可草稿。" },
+  GOOGLON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心平台型標的；人工確認後可草稿。" },
+  AMDON: { quality: "PASSED", label: "通過", role: "Satellite", permission: "低優先草稿", allowDraft: true, reason: "Quality 通過，但仍是衛星標的；資金不足時低於核心。" },
+  MRVLON: { quality: "PASSED", label: "通過", role: "Satellite", permission: "低優先草稿", allowDraft: true, reason: "Quality 通過，但仍是衛星標的；資金不足時低於核心。" },
+  RKLBON: { quality: "WATCH", label: "觀察", role: "Spec Watch", permission: "只深跌人工確認", allowDraft: true, reason: "RKLBon 不固定 DCA；只允許 -50/-65/-80 深折扣低優先人工草稿。" },
+  SPCXON: { quality: "PENDING", label: "新上市觀察", role: "Data Pending", permission: "人工確認", allowDraft: false, reason: "SPCXon 新上市 / 歷史不足；逢低必須人工確認資料源與上市以來高點。" },
+};
+
 function num(value) {
   const n = Number(String(value ?? "0").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -31,6 +44,13 @@ function baseUrlFromReq(req) {
 async function readJsonSafe(response) {
   return response ? response.json().catch(() => ({})) : {};
 }
+function symbolKey(symbol) {
+  return String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function gateFor(row) {
+  const key = symbolKey(row?.symbol);
+  return QUALITY_GATE[key] || { quality: "PENDING", label: "資料待確認", role: "Unknown", permission: "禁止", allowDraft: false, reason: "Quality Gate 未建檔，不產生草稿。" };
+}
 function rowAmountText(row) {
   return row?.decision?.amountText || (row?.decision?.amount ? `${row.decision.amount}U` : row?.amountText || "--");
 }
@@ -47,14 +67,26 @@ function baseLineParts(row) {
 function holdingZoneLine(row) {
   return [...baseLineParts(row), "狀態：已略過本層，等待下一層"].join("｜");
 }
+function routeDecision(row) {
+  const gate = gateFor(row);
+  return { row, gate, draftable: Boolean(gate.allowDraft) };
+}
 function decisionLine(row) {
-  return [...baseLineParts(row), `建議 ${rowAmountText(row)}`].join("｜");
+  const gate = gateFor(row);
+  const action = gate.allowDraft ? `半自動：${gate.permission}` : "半自動：不產生草稿";
+  return [...baseLineParts(row), `建議 ${rowAmountText(row)}`, `Quality：${gate.label}`, action].join("｜");
+}
+function blockedLine(item) {
+  return [...baseLineParts(item.row), `Quality：${item.gate.label}`, `原因：${item.gate.reason}`].join("｜");
 }
 function buildMessage(truth, sectionSummary) {
   const s = truth.summary || {};
   const cash = truth.cash || {};
   const holdingRows = Array.isArray(sectionSummary?.holdingRows) ? sectionSummary.holdingRows : [];
   const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
+  const routed = decisionRows.map(routeDecision);
+  const draftable = routed.filter((x) => x.draftable);
+  const blocked = routed.filter((x) => !x.draftable);
   const lines = [
     "📊 DCA折價獵人日報",
     "",
@@ -73,6 +105,9 @@ function buildMessage(truth, sectionSummary) {
     `Wallet USDT：${num(cash.walletUSDT).toFixed(2)}U｜Exchange USDT：${num(cash.exchangeUSDT).toFixed(2)}U`,
     `本月預算：3000 TWD｜固定DCA 1500｜逢低 1500`,
     "",
+    "🛡 Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON",
+    `半自動草稿候選：${draftable.length} 檔｜被擋下：${blocked.length} 檔`,
+    "",
   ];
 
   if (holdingRows.length > 0) {
@@ -90,11 +125,19 @@ function buildMessage(truth, sectionSummary) {
     lines.push("");
   } else {
     lines.push("🧭 今日決策：目前無可執行買點");
+    lines.push("半自動草稿：0｜被 Quality Gate 擋下：0");
     lines.push("");
   }
 
-  lines.push("資料來源：Portfolio Truth + App 分區鏡像");
-  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。");
+  if (blocked.length > 0) {
+    lines.push(`⛔ Quality Gate 擋下：${blocked.length} 檔`);
+    blocked.forEach((item) => lines.push(blockedLine(item)));
+    lines.push("");
+  }
+
+  lines.push("入口：/v17 ｜ /semi-auto-drafts ｜ /v17-quality");
+  lines.push("資料來源：Portfolio Truth + App 分區鏡像 + Quality Gate Router");
+  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。Draft 不代表自動交易白名單。");
   return lines.join("\n").trim();
 }
 async function handler(req, res) {
@@ -117,6 +160,10 @@ async function handler(req, res) {
     }
     if (!sectionRes.ok || sectionSummary?.ok === false) throw new Error(sectionSummary?.error || `section-summary ${sectionRes.status}`);
 
+    const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
+    const routed = decisionRows.map(routeDecision);
+    const draftableCount = routed.filter((x) => x.draftable).length;
+    const blockedCount = routed.length - draftableCount;
     const message = buildMessage(truth, sectionSummary);
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const force = String(req.query.force || "") === "1";
@@ -125,7 +172,7 @@ async function handler(req, res) {
 
     if (telegram && !telegram.ok) return res.status(500).json({ ok: false, telegram });
 
-    return res.status(200).json({ ok: true, version: "telegram-daily-app-section-mirror-v3", sourcePolicy: "portfolio-truth-plus-app-section-mirror", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: sectionSummary.decisionRows?.length || 0, totals: truth.summary, cash: truth.cash, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
+    return res.status(200).json({ ok: true, version: "telegram-daily-quality-gate-router-v4", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-quality-gate", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, draftableCount, blockedCount, totals: truth.summary, cash: truth.cash, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Daily summary failed" });
   }
