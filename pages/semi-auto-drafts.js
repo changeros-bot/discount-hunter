@@ -6,6 +6,9 @@ function Box({ title, children }) {
     {children}
   </section>;
 }
+function LinkButton({ href, children }) {
+  return <a href={href} style={{ display: "block", marginTop: 10, padding: "12px 10px", borderRadius: 14, border: "1px solid rgba(59,130,246,.38)", background: "rgba(59,130,246,.13)", color: "#bfdbfe", fontWeight: 1000, textAlign: "center", textDecoration: "none" }}>{children}</a>;
+}
 function GateBadge({ gate }) {
   const color = gate?.quality === "PASSED" ? "#bbf7d0" : gate?.quality === "WATCH" ? "#fde68a" : gate?.quality === "FAILED" ? "#fecaca" : "#cbd5e1";
   return <div style={{ marginTop: 8, padding: 9, borderRadius: 14, background: "rgba(15,23,42,.74)", border: "1px solid rgba(148,163,184,.18)", color, fontSize: 12, fontWeight: 900, lineHeight: 1.55 }}>
@@ -71,12 +74,13 @@ export default function SemiAutoDrafts() {
         <div style={{ color: "#f59e0b", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17.3 QUALITY ROUTER</div>
         <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>半自動下單草稿</h1>
         <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>Quality Gate 先擋，再產生可複製草稿。不連交易 API、不自動下單，實際交易必須由你在 Binance 手動確認。</p>
+        <LinkButton href="/v17-quality">查看 Quality Audit Center</LinkButton>
       </header>
       {error && <Box title="讀取失敗"><div style={{ color: "#fecaca" }}>{error}</div></Box>}
       {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>產生半自動草稿中…</div></Box>}
       {data && <>
         <Box title="安全邊界"><div style={{ color: "#cbd5e1", lineHeight: 1.7, fontWeight: 850 }}>草稿數：{data.draftCount}｜被擋下：{data.blockedCount}｜總金額：{Number(data.totalDraftAmountUsd || 0).toFixed(2)} USDT<br />Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON</div></Box>
-        {drafts.length === 0 ? <Box title="目前沒有草稿"><div style={{ color: "#94a3b8", lineHeight: 1.6, fontWeight: 850 }}>沒有進入買點的標的，或目前買點已被略過 / 完成 / 被 Quality Gate 擋下。</div></Box> : drafts.map((draft) => <DraftCard key={`${draft.symbol}-${draft.tier}`} draft={draft} />)}
+        {drafts.length === 0 ? <Box title="目前沒有草稿"><div style={{ color: "#94a3b8", lineHeight: 1.6, fontWeight: 850 }}>這是正常狀態：目前沒有新的 D 層買點需要執行，或買點已被你略過 / 完成。Quality Gate 只在「今日決策出現」時才會產生草稿或擋下原因。</div><LinkButton href="/v17">回主頁看持倉區 / 觀察區</LinkButton><LinkButton href="/v17-quality">看 10 檔 Quality 稽核表</LinkButton></Box> : drafts.map((draft) => <DraftCard key={`${draft.symbol}-${draft.tier}`} draft={draft} />)}
         {blocked.length > 0 ? <Box title="Quality Gate 擋下"><div>{blocked.map((item) => <BlockedCard key={`${item.symbol}-${item.tier}`} item={item} />)}</div></Box> : null}
       </>}
     </div>
