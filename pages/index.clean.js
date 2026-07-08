@@ -28,11 +28,11 @@ const projects = [
   },
   {
     id: 4,
-    eyebrow: "RESEARCH",
-    title: "2560 Lab",
-    description: "Technical Lab V0.5。EOD signal, next-open paper log, no order execution.",
+    eyebrow: "研究專案",
+    title: "2560 技術研究室",
+    description: "盤後訊號研究。隔日開盤紙上紀錄。不執行真實下單。",
     href: "/2560-paper",
-    status: "Paper",
+    status: "紙上交易",
     accent: "#f59e0b",
   },
 ];
@@ -71,7 +71,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        入口：富邦 DCA、折價獵人、Josh 2026多元記帳本、2560 Lab。回測功能保留在 GitHub Actions / reports，不放主卡。
+        入口：富邦 DCA、折價獵人、Josh 2026多元記帳本、2560 技術研究室。回測功能保留在 GitHub Actions / reports，不放主卡。
       </footer>
     </div>
   </main>;
