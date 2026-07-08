@@ -36,7 +36,7 @@ export default function Market91Observation() {
         <Box title="安全邊界" tone="yellow"><div><Pill tone="red">Not Buying List</Pill><Pill>Observation Only</Pill><Pill>Manual Research</Pill></div><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>正式觀察候選只代表值得做來源驗證與追蹤，不會進固定 DCA、半自動草稿或自動化白名單。</div></Box>
         <Box title="5 檔正式觀察候選" tone="green">{rows.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
         <Box title="保留但暫不進正式觀察" tone="yellow">{reserve.map((row) => <div key={row.symbol} style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}><Pill tone="yellow">{row.symbol}</Pill>{row.reason}</div>)}</Box>
-        <Box title="入口"><a href="/market-91-quality" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>深審 Quality Gate 草稿</a><br /><a href="/market-91-shortlist" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>91檔二審池</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="入口"><a href="/market-91-source-verification" style={{ color: "#facc15", fontWeight: 1000, textDecoration: "none" }}>來源驗證清單</a><br /><a href="/market-91-quality" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>深審 Quality Gate 草稿</a><br /><a href="/market-91-shortlist" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>91檔二審池</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
