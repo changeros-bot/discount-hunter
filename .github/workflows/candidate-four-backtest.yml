@@ -24,6 +24,7 @@ jobs:
           pip install pandas yfinance
       - name: Run BAI UFO CNDX ARM candidate backtests
         run: |
+          echo "Trigger candidate four one-shot backtest"
           python scripts/backtest_candidate_four.py
       - name: Commit candidate reports
         run: |
