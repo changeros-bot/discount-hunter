@@ -35,6 +35,15 @@ const projects = [
     status: "紙上交易",
     accent: "#f59e0b",
   },
+  {
+    id: 5,
+    eyebrow: "MARKET 91",
+    title: "100分公平篩選",
+    description: "91檔截圖宇宙 → 47檔價格回測研究池 → 100分公平篩選。只決定正式觀察候選，不是買入名單。",
+    href: "/market-91-governance",
+    status: "Research Only",
+    accent: "#60a5fa",
+  },
 ];
 
 function ProjectCard({ project }) {
@@ -71,7 +80,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 20, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        入口：富邦 DCA、折價獵人、Josh 2026多元記帳本、2560 技術研究室。回測功能保留在 GitHub Actions / reports，不放主卡。
+        入口：富邦 DCA、折價獵人、Josh 2026多元記帳本、2560 技術研究室、Market 91 公平篩選。回測功能保留在 GitHub Actions / reports，不放主卡。
       </footer>
     </div>
   </main>;
