@@ -12,7 +12,7 @@ function Pill({ children, tone = "blue" }) {
 function RowCard({ row }) {
   const deep = row.tier === "DEEP_REVIEW";
   return <article style={{ marginTop: 10, padding: 12, borderRadius: 18, background: "rgba(2,6,23,.48)", border: `1px solid ${deep ? "rgba(34,197,94,.32)" : "rgba(245,158,11,.28)"}` }}>
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><strong style={{ color: "#f8fafc", fontSize: 20 }}>{row.symbol}</strong><Pill tone={deep ? "green" : "yellow"}>{deep ? "深審" : "二審"}</Pill></div>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><strong style={{ color: "#f8fafc", fontSize: 20 }}>{row.symbol}</strong><Pill tone={deep ? "green" : "yellow"}>{deep ? "深審候選" : "二審候選"}</Pill></div>
     <div style={{ marginTop: 6, color: "#cbd5e1", fontWeight: 850, fontSize: 13, lineHeight: 1.55 }}>{row.name}｜{row.bucket}<br />角色：{row.proposedRole}</div>
     <div style={{ marginTop: 8, color: "#94a3b8", fontWeight: 850, fontSize: 12, lineHeight: 1.55 }}>理由：{row.reason}<br />規則：{row.proposedRule}</div>
   </article>;
@@ -29,18 +29,18 @@ export default function Market91Shortlist() {
     <div style={{ maxWidth: 460, margin: "0 auto", padding: "22px 14px 40px" }}>
       <a href="/v17" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回折價獵人</a>
       <header style={{ marginTop: 18, marginBottom: 18 }}>
-        <div style={{ color: "#38bdf8", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>MARKET 91 SECOND REVIEW</div>
-        <h1 style={{ fontSize: 36, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>91檔二審池</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>這不是正式加入名單，只是把 91 檔回測後可考慮的標的，收斂成二審池與深審池。</p>
+        <div style={{ color: "#38bdf8", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>MARKET 91 STRATEGY BUCKET REVIEW</div>
+        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>91檔候選池</h1>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>這不是正式買入名單，也不是自動化門口。用途是把 Market 91 的個股 / xStocks 候選收斂到 Strategy Bucket，再交給 Action Gate 判斷。</p>
       </header>
       {error && <Box title="讀取失敗"><div style={{ color: "#fecaca" }}>{error}</div></Box>}
-      {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>讀取二審池中…</div></Box>}
+      {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>讀取候選池中…</div></Box>}
       {data && <>
-        <Box title="定位" tone="yellow"><div><Pill tone="red">Not Official List</Pill><Pill>Research Only</Pill><Pill>Quality Gate Next</Pill></div><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>91 檔裡回測能看的 47 檔，先收斂成 25 檔二審池；其中 10 檔進深審。</div></Box>
-        <Box title="統計" tone="green"><div><Pill>總數 {rows.length}</Pill><Pill tone="green">深審 {deep.length}</Pill><Pill tone="yellow">二審 {second.length}</Pill></div></Box>
-        <Box title={`深審池（${deep.length}）`} tone="green">{deep.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
-        <Box title={`二審池（${second.length}）`} tone="yellow">{second.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
-        <Box title="入口"><a href="/market-91-quality" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>深審 Quality Gate 草稿</a><br /><a href="/v17-quality" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>正式 Quality Audit Center</a><br /><a href="/auto-whitelist" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>自動化門口</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="定位" tone="yellow"><div><Pill tone="red">Not Buy List</Pill><Pill>Strategy Bucket Only</Pill><Pill tone="green">Action Gate Next</Pill></div><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>富邦 0050 / VOO / QQQM 不在 Market 91。這裡只處理個股 / xStocks 的候選分層與折價加碼資格。</div></Box>
+        <Box title="統計" tone="green"><div><Pill>總數 {rows.length}</Pill><Pill tone="green">深審候選 {deep.length}</Pill><Pill tone="yellow">二審候選 {second.length}</Pill></div></Box>
+        <Box title={`深審候選（${deep.length}）`} tone="green">{deep.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
+        <Box title={`二審候選（${second.length}）`} tone="yellow">{second.map((row) => <RowCard key={row.symbol} row={row} />)}</Box>
+        <Box title="入口"><a href="/semi-auto-drafts" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>Action Gate</a><br /><a href="/trade-readiness" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>現金與預算檢查</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
