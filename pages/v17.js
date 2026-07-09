@@ -60,13 +60,14 @@ export default function V17Dashboard() {
   const [error, setError] = useState(null);
 
   async function load() {
-    const [truth, sections, readiness, gate] = await Promise.all([
+    const [truth, sections, readiness, gate, paper] = await Promise.all([
       readJson(`/api/v17/portfolio-truth?t=${Date.now()}`),
       readJson(`/api/v17/section-summary?t=${Date.now()}`),
       readJson(`/api/v17/trade-readiness?t=${Date.now()}`),
       readJson(`/api/v17/semi-auto-drafts?t=${Date.now()}`),
+      readJson(`/api/v17/market-91-paper?t=${Date.now()}`),
     ]);
-    setData({ truth, sections, readiness, gate, updatedAt: new Date().toISOString() });
+    setData({ truth, sections, readiness, gate, paper, updatedAt: new Date().toISOString() });
   }
 
   useEffect(() => {
@@ -77,9 +78,9 @@ export default function V17Dashboard() {
   const cash = data?.truth?.cash || {};
   const holdingRows = data?.sections?.holdingRows || [];
   const watchRows = data?.sections?.watchRows || [];
-  const decisionRows = data?.sections?.decisionRows || [];
   const allowed = data?.gate?.discountAddAllowed || [];
   const noAction = data?.gate?.noAction || [];
+  const paperTriggered = data?.paper?.triggered || [];
   const readiness = data?.readiness?.readiness || {};
   const readyTone = readiness.status === "READY_FOR_MANUAL_CONFIRMATION" ? "green" : readiness.status === "NEEDS_MANUAL_REVIEW" ? "red" : "yellow";
 
@@ -96,8 +97,14 @@ export default function V17Dashboard() {
 
       {data && <>
         <Box title="系統邊界" tone="yellow">
-          <div><Pill tone="green">Action Gate ON</Pill><Pill tone="red">Auto Trade OFF</Pill><Pill tone="red">Drafts OFF</Pill><Pill tone="red">Whitelist OFF</Pill></div>
-          <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.65 }}>允許輸出只有：No Action / Discount Add Allowed / Watch Only / Blocked。這裡不決定 0050 / VOO / QQQM。</div>
+          <div><Pill tone="green">Action Gate ON</Pill><Pill tone="green">Paper Trading ON</Pill><Pill tone="red">Real Orders OFF</Pill><Pill tone="red">Whitelist OFF</Pill></div>
+          <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.65 }}>允許輸出只有：No Action / Discount Add Allowed / Watch Only / Blocked。紙上交易只記錄績效，不代表實盤。</div>
+        </Box>
+
+        <Box title="紙上交易買點" tone={paperTriggered.length ? "green" : "yellow"}>
+          <div><Pill tone="green">觸發 {data.paper?.summary?.triggeredCount || 0}</Pill><Pill tone="yellow">無動作 {data.paper?.summary?.noActionCount || 0}</Pill></div>
+          <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850 }}>模擬金額：{Number(data.paper?.summary?.totalPaperAmountUsd || 0).toFixed(2)}U。用來看 30 / 60 / 90 天績效。</div>
+          <LinkButton href="/market-91-paper">查看紙上交易明細</LinkButton>
         </Box>
 
         <Box title="今日 Action Gate" tone={allowed.length ? "green" : "yellow"}>
@@ -132,7 +139,8 @@ export default function V17Dashboard() {
         </Box>
 
         <Box title="入口">
-          <LinkButton href="/market-91-shortlist">Market 91 候選池</LinkButton>
+          <LinkButton href="/market-91-paper">紙上交易績效測試</LinkButton>
+          <LinkButton href="/market-91-shortlist">17檔主名單</LinkButton>
           <LinkButton href="/v17-quality">Quality Audit Center</LinkButton>
           <LinkButton href="/auto-whitelist">已凍結流程狀態</LinkButton>
         </Box>
