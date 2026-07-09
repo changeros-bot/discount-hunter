@@ -63,13 +63,14 @@ export default function Market91Paper() {
   const coreRows = idle.filter((x) => x.ruleKey === "core");
   const satelliteRows = idle.filter((x) => x.ruleKey === "satellite");
   const highVolRows = idle.filter((x) => x.ruleKey === "highVolatility");
+  const excluded = paper?.excludedLiveDiscountHunter || [];
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 460, margin: "0 auto", padding: "22px 14px 40px" }}>
       <a href="/v17" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回實盤折價獵人</a>
       <header style={{ marginTop: 8, marginBottom: 18 }}>
-        <div style={{ color: "#38bdf8", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>MARKET 91 / PAPER TRADING</div>
+        <div style={{ color: "#38bdf8", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>MARKET 91 / PAPER EXPANSION</div>
         <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>紙上折價獵人</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>版面跟折價獵人一致，但這裡只跑 17 檔紙上交易規則。所有訊號都是模擬，不會下真單。</p>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>版面跟折價獵人一致，但這裡只測尚未在實盤折價獵人運行的擴充候選。所有訊號都是模擬，不會下真單。</p>
       </header>
 
       {error && <Box title="讀取失敗" tone="red"><div style={{ color: "#fecaca" }}>{error}</div></Box>}
@@ -77,14 +78,14 @@ export default function Market91Paper() {
 
       {data && <>
         <Box title="系統邊界" tone="yellow">
-          <div><Pill tone="green">Paper Trading ON</Pill><Pill tone="red">Real Orders OFF</Pill><Pill tone="red">Whitelist OFF</Pill><Pill tone="blue">17檔主名單</Pill></div>
-          <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.65 }}>這個分頁只測買點規則與績效，不影響真實持倉、不產生下單草稿、不進自動化。</div>
+          <div><Pill tone="green">Paper Trading ON</Pill><Pill tone="red">Real Orders OFF</Pill><Pill tone="red">Whitelist OFF</Pill><Pill tone="blue">Expansion {paper.summary?.universeCount || 0}檔</Pill></div>
+          <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.65 }}>已在實盤折價獵人運行的 {paper.summary?.excludedLiveCount || 0} 檔不做紙上交易：{excluded.map((x) => x.symbol).join(" / ") || "—"}。</div>
         </Box>
 
         <Box title="今日紙上 Action Gate" tone={triggered.length ? "green" : "yellow"}>
           <div><Pill tone="green">Paper Buy {paper.summary?.triggeredCount || 0}</Pill><Pill tone="yellow">No Paper Action {paper.summary?.noActionCount || 0}</Pill></div>
           <div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850 }}>今日模擬金額：{num(paper.summary?.totalPaperAmountUsd).toFixed(2)}U。之後用來看 30 / 60 / 90 天績效。</div>
-          <LinkButton href="/market-91-shortlist">查看 17 檔主名單</LinkButton>
+          <LinkButton href="/market-91-shortlist">查看完整 17 檔主名單</LinkButton>
         </Box>
 
         <Box title="紙上交易規則" tone="yellow">
