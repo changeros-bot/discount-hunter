@@ -1,5 +1,5 @@
 function num(value, fallback = 0) {
-  const n = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  const n = Number(String(value ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : fallback;
 }
 function round2(value) {
@@ -73,15 +73,15 @@ export default async function handler(req, res) {
       releaseDay: 12,
       cycle,
       monthlyBudgetTwd: 3000,
-      fixedDcaTwd: 1500,
-      dipBudgetTwd: 1500,
+      fubonMainDcaTwd: 1500,
+      market91DipBudgetTwd: 1500,
       monthlyBudgetUsdt: round2(3000 / fxTwdPerUsdt),
-      fixedDcaBudgetUsdt: round2(1500 / fxTwdPerUsdt),
-      dipBudgetUsdt: round2(1500 / fxTwdPerUsdt),
-      dailyDraftCapUsdt: 30,
-      singleDraftCapUsdt: 30,
+      fubonMainDcaBudgetUsdt: round2(1500 / fxTwdPerUsdt),
+      market91DipBudgetUsdt: round2(1500 / fxTwdPerUsdt),
+      dailyActionCapUsdt: 30,
+      singleActionCapUsdt: 30,
       minimumCashReserveUsdt: 5,
-      note: "每月預算日固定為 12 號；Trade Readiness 使用 12 號到次月 11 號作為預算週期。FX is configurable with ?fx=.",
+      note: "富邦 0050 / VOO / QQQM 是主 DCA 系統；Market 91 只檢查個股 / xStocks 逢低輔助預算。FX is configurable with ?fx=.",
     };
 
     const [pricesRes, truthRes] = await Promise.all([
@@ -95,45 +95,47 @@ export default async function handler(req, res) {
 
     const rows = Array.isArray(prices.data) ? prices.data : [];
     const markets = marketMapFromRows(rows);
-    const draftsRes = await fetch(`${base}/api/v17/semi-auto-drafts?t=${Date.now()}`, {
+    const gateRes = await fetch(`${base}/api/v17/semi-auto-drafts?t=${Date.now()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ markets }),
     });
-    const draftsPayload = await readJsonSafe(draftsRes);
-    if (!draftsRes.ok || draftsPayload?.ok === false) throw new Error(draftsPayload?.error || `semi-auto-drafts ${draftsRes.status}`);
+    const gatePayload = await readJsonSafe(gateRes);
+    if (!gateRes.ok || gatePayload?.ok === false) throw new Error(gatePayload?.error || `action-gate ${gateRes.status}`);
 
     const cash = truth.cash || {};
     const totalCashUsdt = num(cash.totalUSDT);
-    const drafts = Array.isArray(draftsPayload.drafts) ? draftsPayload.drafts : [];
-    const blocked = Array.isArray(draftsPayload.blocked) ? draftsPayload.blocked : [];
-    const totalDraftAmountUsdt = round2(drafts.reduce((s, d) => s + num(d.amountUsd), 0));
-    const maxSingleOrder = drafts.reduce((m, d) => Math.max(m, num(d.amountUsd)), 0);
+    const candidates = Array.isArray(gatePayload.discountAddAllowed) ? gatePayload.discountAddAllowed : [];
+    const noAction = Array.isArray(gatePayload.noAction) ? gatePayload.noAction : [];
+    const totalCandidateAmountUsdt = round2(candidates.reduce((s, d) => s + num(d.amountUsd), 0));
+    const maxSingleAction = candidates.reduce((m, d) => Math.max(m, num(d.amountUsd)), 0);
 
     const checks = [
       check("Budget Cycle", true, `預算日 12 號｜本期 ${cycle.cycleStart} 至 ${cycle.cycleEnd}｜下一次 ${cycle.nextReleaseDate}.`),
-      check("Quality Gate", draftsPayload.safety?.qualityGateEnabled === true, "Quality Gate must be ON before any draft is considered."),
-      check("Auto Trade OFF", draftsPayload.safety?.autoTrade === false, "This stage is readiness-only; no order API is allowed."),
-      check("Manual Confirm ON", draftsPayload.safety?.requiresManualBinanceConfirmation === true, "User must manually confirm in Binance."),
-      check("Cash Enough", totalCashUsdt >= totalDraftAmountUsdt, `Cash ${totalCashUsdt.toFixed(2)}U vs draft ${totalDraftAmountUsdt.toFixed(2)}U.`),
-      check("Cash Reserve", totalCashUsdt - totalDraftAmountUsdt >= budget.minimumCashReserveUsdt || totalDraftAmountUsdt === 0, `Keep at least ${budget.minimumCashReserveUsdt}U after drafts.`),
-      check("Current Cycle Dip Budget", totalDraftAmountUsdt <= budget.dipBudgetUsdt, `本期逢低預算 ${budget.dipBudgetUsdt.toFixed(2)}U vs draft ${totalDraftAmountUsdt.toFixed(2)}U.`),
-      check("Daily Cap", totalDraftAmountUsdt <= budget.dailyDraftCapUsdt, `Daily cap ${budget.dailyDraftCapUsdt.toFixed(2)}U.`),
-      check("Single Order Cap", maxSingleOrder <= budget.singleDraftCapUsdt, `Single order max ${budget.singleDraftCapUsdt.toFixed(2)}U.`),
+      check("Action Gate", gatePayload.safety?.createsDrafts === false && gatePayload.safety?.whitelist === false, "Action Gate must not create drafts or whitelist entries."),
+      check("Auto Trade OFF", gatePayload.safety?.autoTrade === false, "This stage is readiness-only; no order API is allowed."),
+      check("Manual Confirm ON", gatePayload.safety?.requiresManualConfirmation === true, "User must manually confirm any real action outside the app."),
+      check("Cash Enough", totalCashUsdt >= totalCandidateAmountUsdt, `Cash ${totalCashUsdt.toFixed(2)}U vs candidate ${totalCandidateAmountUsdt.toFixed(2)}U.`),
+      check("Cash Reserve", totalCashUsdt - totalCandidateAmountUsdt >= budget.minimumCashReserveUsdt || totalCandidateAmountUsdt === 0, `Keep at least ${budget.minimumCashReserveUsdt}U after candidates.`),
+      check("Current Cycle Market 91 Dip Budget", totalCandidateAmountUsdt <= budget.market91DipBudgetUsdt, `本期 Market 91 逢低預算 ${budget.market91DipBudgetUsdt.toFixed(2)}U vs candidate ${totalCandidateAmountUsdt.toFixed(2)}U.`),
+      check("Daily Action Cap", totalCandidateAmountUsdt <= budget.dailyActionCapUsdt, `Daily cap ${budget.dailyActionCapUsdt.toFixed(2)}U.`),
+      check("Single Action Cap", maxSingleAction <= budget.singleActionCapUsdt, `Single action max ${budget.singleActionCapUsdt.toFixed(2)}U.`),
     ];
     const blockers = checks.filter((x) => !x.passed && x.severity === "blocker");
-    const readiness = totalDraftAmountUsdt === 0
-      ? { status: "READY_IDLE", label: "目前無草稿", canShowDrafts: false, canManualConfirm: false, reason: `No new executable D-layer draft today. ${cycle.note}` }
+    const readiness = totalCandidateAmountUsdt === 0
+      ? { status: "READY_IDLE", label: "目前無可加碼候選", canShowCandidates: false, canManualConfirm: false, reason: `No Discount Add Allowed candidate today. ${cycle.note}` }
       : blockers.length === 0
-        ? { status: "READY_FOR_MANUAL_CONFIRMATION", label: "可人工確認", canShowDrafts: true, canManualConfirm: true, reason: `Quality, cash, cycle budget and safety checks passed for manual-confirm draft. ${cycle.note}` }
-        : { status: "NEEDS_MANUAL_REVIEW", label: "需人工覆核", canShowDrafts: true, canManualConfirm: false, reason: blockers.map((x) => x.name).join(" / ") };
+        ? { status: "READY_FOR_MANUAL_CONFIRMATION", label: "可人工確認", canShowCandidates: true, canManualConfirm: true, reason: `Action Gate, cash, cycle budget and safety checks passed for manual confirmation. ${cycle.note}` }
+        : { status: "NEEDS_MANUAL_REVIEW", label: "需人工覆核", canShowCandidates: true, canManualConfirm: false, reason: blockers.map((x) => x.name).join(" / ") };
 
     return res.status(200).json({
       ok: true,
-      version: "v17-trade-readiness-budget-cycle-v2",
+      version: "v17-4-market91-action-readiness-v1",
       updatedAt: now,
-      mode: "readiness_only_no_order_execution",
+      mode: "market91_action_readiness_no_drafts_no_order_execution",
       autoTradingEnabled: false,
+      createsDrafts: false,
+      whitelistEnabled: false,
       killSwitch: true,
       cash: {
         totalUSDT: round2(totalCashUsdt),
@@ -142,20 +144,26 @@ export default async function handler(req, res) {
       },
       budget,
       summary: {
-        draftCount: drafts.length,
-        blockedCount: blocked.length,
-        totalDraftAmountUsdt,
-        maxSingleOrderUsdt: round2(maxSingleOrder),
-        cashAfterDraftsUsdt: round2(totalCashUsdt - totalDraftAmountUsdt),
+        candidateCount: candidates.length,
+        noActionCount: noAction.length,
+        totalCandidateAmountUsdt,
+        maxSingleActionUsdt: round2(maxSingleAction),
+        cashAfterCandidatesUsdt: round2(totalCashUsdt - totalCandidateAmountUsdt),
+        draftCount: 0,
+        blockedCount: noAction.length,
+        totalDraftAmountUsdt: 0,
+        cashAfterDraftsUsdt: round2(totalCashUsdt),
       },
       readiness,
       checks,
-      drafts,
-      blocked,
+      candidates,
+      noAction,
+      drafts: [],
+      blocked: noAction,
       source: {
         prices: "/api/prices",
         portfolioTruth: "/api/v17/portfolio-truth",
-        semiAutoDrafts: "/api/v17/semi-auto-drafts",
+        actionGateCompat: "/api/v17/semi-auto-drafts",
       },
     });
   } catch (error) {
