@@ -1,6 +1,6 @@
 {
   "name": "discount-hunter",
-  "version": "1.0.0",
+  "version": "1.0.0-restore-original-v17",
   "private": true,
   "scripts": {
     "dev": "next dev",
