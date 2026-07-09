@@ -39,11 +39,12 @@ export default function Market91QualityGateQueue() {
       {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>讀取 Quality Gate 佇列中…</div></Box>}
       {data && <>
         <Box title="安全邊界" tone="yellow"><Pill tone="red">Queue Only</Pill><Pill>No Buy</Pill><Pill>No DCA</Pill><Pill>No Semi-auto</Pill><Pill>No Whitelist</Pill><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>佇列只是深審順序；完全驗證 18/18 前，不給任何交易權限。</div></Box>
+        <Box title="下一步深審" tone="green"><a href="/market-91-quality-gate-drafts" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>查看 META / NOW 18 分深審草稿 →</a><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>草稿通過不等於交易權限；只是確認可以繼續官方文件驗證。</div></Box>
         <Box title="統計" tone="green"><Pill>進入深審 {data.summary?.eligible}</Pill><Pill tone="red">排除 {data.summary?.excluded}</Pill><Pill tone="yellow">順序 {(data.summary?.nextReviewOrder || []).join(" → ")}</Pill></Box>
         <Box title="進入 18 分 Quality Gate">{(data.eligible || []).map((row) => <Candidate key={row.symbol} row={row} />)}</Box>
         <Box title="18 分規則"><Pill>Objective 10</Pill><Pill>Qualitative 8</Pill><Pill tone="yellow">Pass {data.rules?.passThreshold}</Pill><Pill tone="green">Strong {data.rules?.strongThreshold}</Pill><Pill tone="red">Trading Review {data.rules?.tradingThreshold}</Pill><List items={data.rules?.permissionPolicy} /></Box>
         <Box title="越級阻擋"><Excluded rows={data.excluded} /></Box>
-        <Box title="入口"><a href="/market-91-fair-score-report" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>100分公平篩選總報告</a><br /><a href="/market-91-governance" style={{ color: "#38bdf8", fontWeight: 1000, textDecoration: "none" }}>100分公平篩選規則</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="入口"><a href="/market-91-quality-gate-drafts" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>18 分深審草稿</a><br /><a href="/market-91-fair-score-report" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>100分公平篩選總報告</a><br /><a href="/market-91-governance" style={{ color: "#38bdf8", fontWeight: 1000, textDecoration: "none" }}>100分公平篩選規則</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
