@@ -199,6 +199,56 @@ function V18GovernanceCard() {
   </section>;
 }
 
+function AutoExecutionStatusCard() {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState("");
+
+  async function loadAutoStatus() {
+    try {
+      const [mode, readiness, drafts, logs] = await Promise.all([
+        jsonFetch(`/api/v17/auto-mode?t=${Date.now()}`),
+        jsonFetch(`/api/v17/trade-readiness?t=${Date.now()}`).catch(() => null),
+        jsonFetch(`/api/v17/trade-drafts?t=${Date.now()}`).catch(() => ({ drafts: [] })),
+        jsonFetch(`/api/v17/execution-log?t=${Date.now()}`).catch(() => ({ logs: [] })),
+      ]);
+      setStatus({ mode, readiness, drafts: drafts?.drafts || [], logs: logs?.logs || [] });
+      setError("");
+    } catch (err) {
+      setError(err.message || "auto_status_failed");
+    }
+  }
+
+  useEffect(() => { loadAutoStatus(); }, []);
+
+  const mode = status?.mode?.mode || "DRY_RUN";
+  const tradeStatus = status?.readiness?.status || "WAIT";
+  const draftsToday = status?.drafts?.length || 0;
+  const simulatedToday = (status?.logs || []).filter((log) => log.status === "SIMULATED").length;
+  const tone = tradeStatus === "READY" ? "green" : tradeStatus === "BLOCKED" ? "red" : "yellow";
+
+  return <section style={{ margin: "12px 0 16px", padding: 14, borderRadius: 18, background: "linear-gradient(135deg, rgba(6,78,59,.55), rgba(15,23,42,.96))", border: "1px solid rgba(34,197,94,.28)", boxShadow: "0 14px 36px rgba(34,197,94,.10)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 1000, color: "#dcfce7" }}>Auto Execution Status</h2>
+        <div style={{ marginTop: 5, color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>V17.6｜Dry-run only｜不在主頁直接下單</div>
+      </div>
+      <Pill tone={tone}>{tradeStatus}</Pill>
+    </div>
+    <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 850, lineHeight: 1.55 }}>
+      <div>Mode：<strong style={{ color: "#f8fafc" }}>{mode}</strong></div>
+      <div>Risk Gate：<strong style={{ color: tradeStatus === "BLOCKED" ? "#fecaca" : "#bbf7d0" }}>{tradeStatus === "BLOCKED" ? "BLOCKED" : "PASS / WAIT"}</strong></div>
+      <div>Drafts：{draftsToday}</div>
+      <div>Simulated：{simulatedToday}</div>
+    </div>
+    {error ? <div style={{ marginTop: 8, color: "#fecaca", fontSize: 12, fontWeight: 850 }}>Auto Status 讀取失敗：{error}</div> : null}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 12 }}>
+      <a href="/trade-readiness" style={{ textAlign: "center", textDecoration: "none", padding: "9px 6px", borderRadius: 12, background: "rgba(34,197,94,.14)", border: "1px solid rgba(34,197,94,.24)", color: "#bbf7d0", fontSize: 12, fontWeight: 1000 }}>Readiness</a>
+      <a href="/semi-auto-draft" style={{ textAlign: "center", textDecoration: "none", padding: "9px 6px", borderRadius: 12, background: "rgba(14,165,233,.13)", border: "1px solid rgba(14,165,233,.22)", color: "#bae6fd", fontSize: 12, fontWeight: 1000 }}>Drafts</a>
+      <a href="/execution-log" style={{ textAlign: "center", textDecoration: "none", padding: "9px 6px", borderRadius: 12, background: "rgba(245,158,11,.14)", border: "1px solid rgba(245,158,11,.24)", color: "#fde68a", fontSize: 12, fontWeight: 1000 }}>Log</a>
+    </div>
+  </section>;
+}
+
 function AssetMeta({ row }) {
   return <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
     <Pill tone="blue">{categoryFor(row)}</Pill>
@@ -402,6 +452,7 @@ export default function V17Dashboard() {
 
   return <PageShell loading={loading && !hydratedFromCache} updatedAt={updatedAt} error={error}>
     <V18GovernanceCard />
+    <AutoExecutionStatusCard />
     <Section title="今日決策" count={classified.decisionRows.length} rows={classified.decisionRows} empty="已略過目前所有可執行買點，等待下一層" render={(row) => <AssetCard key={`decision-${row.symbol}`} row={row}><AssetMeta row={row} /><DecisionStatusBox row={row} walletSummaryData={ws} /><TierProgress row={row} /><DecisionActions row={row} onAction={handleDecisionAction} busy={Boolean(actionBusy)} /></AssetCard>} />
     <PortfolioSummaryCard summary={ws} updatedAt={wallet?.lastSyncTime || updatedAt} />
     <Collapsible title="✅ 持倉區" count={classified.holdingRows.length} rows={classified.holdingRows} open render={(row) => <AssetCard key={`holding-${row.symbol}`} row={row}><AssetMeta row={row} /><div style={{ marginTop: 10, padding: 10, borderRadius: 12, fontWeight: 900, ...tierStatusStyle(row) }}>{tierStatusText(row)}</div><TierProgress row={row} /></AssetCard>} />
@@ -416,7 +467,7 @@ export default function V17Dashboard() {
         <div>Wallet Source：{wallet?.source || "cached / loading"}</div>
         <div>Wallet Sync：{wallet?.walletSyncSource || "background refresh"}</div>
         <div>成本政策：全部持倉合併計算，不在畫面上拆成 BTC / xStocks 兩套資產。</div>
-        <div>Auto Trading：Phase 1 訊號只讀；後續版本逐步加入確認、草稿、限額與 Kill Switch</div>
+        <div>Auto Trading：V17.6 DRY-RUN；主頁只顯示狀態與入口，不直接下單。</div>
         <div>Last Sync：{wallet?.lastSyncTime || updatedAt}</div>
       </div>
     </details>
