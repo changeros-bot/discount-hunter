@@ -1,0 +1,35 @@
+name: Market 91 Fair Score
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fair-score:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas
+
+      - name: Run fair score screen
+        run: python scripts/score_market_91_fair_screen.py
+
+      - name: Commit generated reports
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add reports/backtests/market_91/market_91_fair_score.csv reports/backtests/market_91/market_91_fair_score_summary.md reports/backtests/market_91/market_91_fair_manual_inputs_template.csv
+          git diff --cached --quiet || git commit -m "Generate Market 91 fair score reports"
+          git push
