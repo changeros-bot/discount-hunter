@@ -1,3 +1,4 @@
+// RESTORE_LOCK_20260709: /v17 is the live Discount Hunter page only. Do not add paper trading UI here.
 import { useEffect, useState } from "react";
 
 function Box({ title, children, tone = "blue" }) {
@@ -77,7 +78,6 @@ export default function V17Dashboard() {
   const cash = data?.truth?.cash || {};
   const holdingRows = data?.sections?.holdingRows || [];
   const watchRows = data?.sections?.watchRows || [];
-  const decisionRows = data?.sections?.decisionRows || [];
   const allowed = data?.gate?.discountAddAllowed || [];
   const noAction = data?.gate?.noAction || [];
   const readiness = data?.readiness?.readiness || {};
