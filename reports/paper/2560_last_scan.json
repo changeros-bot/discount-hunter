@@ -1,104 +1,113 @@
 {
-  "ok": true,
-  "run_at_utc": "2026-07-08T23:37:51.709574+00:00",
+  "ok": false,
+  "run_at_utc": "2026-07-09T23:46:46.198137+00:00",
   "source": "yfinance",
   "universe_count": 10,
   "scanned_count": 10,
-  "error_count": 0,
+  "error_count": 2,
   "new_signal_count": 2,
   "new_signals": [
     {
       "ticker": "AAPL",
       "pattern": "弱量續攻",
-      "signal_date": "2026-07-08",
-      "trade_id": "2560-AAPL-20260708-弱量續攻"
+      "signal_date": "2026-07-09",
+      "trade_id": "2560-AAPL-20260709-弱量續攻"
     },
     {
       "ticker": "DELL",
       "pattern": "弱量續攻",
-      "signal_date": "2026-07-08",
-      "trade_id": "2560-DELL-20260708-弱量續攻"
+      "signal_date": "2026-07-09",
+      "trade_id": "2560-DELL-20260709-弱量續攻"
     }
   ],
-  "errors": [],
+  "errors": [
+    {
+      "ticker": "AAPL",
+      "error": "UPDATE: Invalid value '2026-07-09 00:00:00' for dtype 'str'. Value should be a string or missing value, got 'Timestamp' instead."
+    },
+    {
+      "ticker": "DELL",
+      "error": "UPDATE: Invalid value '2026-07-09 00:00:00' for dtype 'str'. Value should be a string or missing value, got 'Timestamp' instead."
+    }
+  ],
   "scans": [
     {
       "ticker": "AAPL",
       "industry": "大型科技平台",
-      "latest_market_date": "2026-07-08",
-      "close": 313.39,
+      "latest_market_date": "2026-07-09",
+      "close": 316.22,
       "pattern": "弱量續攻",
       "allowed_signal": true
     },
     {
       "ticker": "MSFT",
       "industry": "大型科技平台",
-      "latest_market_date": "2026-07-08",
-      "close": 383.34,
+      "latest_market_date": "2026-07-09",
+      "close": 384.36,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "GOOGL",
       "industry": "大型科技平台",
-      "latest_market_date": "2026-07-08",
-      "close": 361.92,
+      "latest_market_date": "2026-07-09",
+      "close": 358.89,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "META",
       "industry": "大型科技平台",
-      "latest_market_date": "2026-07-08",
-      "close": 603.12,
+      "latest_market_date": "2026-07-09",
+      "close": 631.48,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "AMZN",
       "industry": "大型科技平台",
-      "latest_market_date": "2026-07-08",
-      "close": 243.62,
+      "latest_market_date": "2026-07-09",
+      "close": 247.04,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "NFLX",
       "industry": "大型科技平台",
-      "latest_market_date": "2026-07-08",
-      "close": 75.59,
+      "latest_market_date": "2026-07-09",
+      "close": 75.47,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "MU",
       "industry": "AI半導體",
-      "latest_market_date": "2026-07-08",
-      "close": 948.8,
+      "latest_market_date": "2026-07-09",
+      "close": 991.64,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "DELL",
       "industry": "AI基礎建設",
-      "latest_market_date": "2026-07-08",
-      "close": 431.97,
+      "latest_market_date": "2026-07-09",
+      "close": 450.22,
       "pattern": "弱量續攻",
       "allowed_signal": true
     },
     {
       "ticker": "PLTR",
       "industry": "AI應用/國防軟體",
-      "latest_market_date": "2026-07-08",
-      "close": 132.22,
+      "latest_market_date": "2026-07-09",
+      "close": 129.04,
       "pattern": "",
       "allowed_signal": false
     },
     {
       "ticker": "NBIS",
       "industry": "高波動AI雲端",
-      "latest_market_date": "2026-07-08",
-      "close": 216.48,
+      "latest_market_date": "2026-07-09",
+      "close": 216.2,
       "pattern": "",
       "allowed_signal": false
     }
