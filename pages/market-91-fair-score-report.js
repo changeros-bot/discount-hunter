@@ -39,13 +39,14 @@ export default function Market91FairScoreReport() {
       {!data && !error && <Box title="讀取中"><div style={{ color: "#94a3b8" }}>讀取總報告中…</div></Box>}
       {data && <>
         <Box title="安全邊界" tone="yellow"><Pill tone="red">Not Buy List</Pill><Pill>No DCA</Pill><Pill>No Semi-auto</Pill><Pill>No Whitelist</Pill><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>100分制只決定正式觀察候選；交易權限仍必須通過 18 分 Quality Gate。</div></Box>
+        <Box title="下一關" tone="green"><a href="/market-91-quality-gate-queue" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>進入 18 分 Quality Gate 候選佇列 →</a><div style={{ marginTop: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.55 }}>只有正式觀察候選可以進入深審；其他標的不得越級。</div></Box>
         <Box title="統計" tone="green"><Pill>總數 {data.summary?.total}</Pill><Pill tone="green">正式觀察 {data.summary?.formalObservationCandidateOnly}</Pill><Pill tone="yellow">二審 {data.summary?.reserveSecondReview}</Pill><Pill tone="blue">研究池 {data.summary?.researchPoolOnly}</Pill><Pill tone="red">阻擋 {data.summary?.blocked}</Pill><Pill tone="yellow">待驗證 {data.summary?.pendingVerification}</Pill></Box>
         <Group title="正式觀察候選 Only" rows={groups.formalObservationCandidateOnly} tone="green" />
         <Group title="二審保留" rows={groups.reserveSecondReview} tone="yellow" />
         <Group title="研究池 Only" rows={groups.researchPoolOnly} tone="blue" />
         <Group title="阻擋" rows={groups.blocked} tone="red" />
         <Group title="待驗證 / 草稿" rows={groups.pendingVerification} tone="yellow" />
-        <Box title="入口"><a href="/market-91-first-batch" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>第一批公平篩選結果</a><br /><a href="/market-91-second-batch" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>第二批公平篩選結果</a><br /><a href="/market-91-governance" style={{ color: "#38bdf8", fontWeight: 1000, textDecoration: "none" }}>100分公平篩選規則</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
+        <Box title="入口"><a href="/market-91-quality-gate-queue" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>18 分 Quality Gate 候選佇列</a><br /><a href="/market-91-first-batch" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>第一批公平篩選結果</a><br /><a href="/market-91-second-batch" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>第二批公平篩選結果</a><br /><a href="/market-91-governance" style={{ color: "#38bdf8", fontWeight: 1000, textDecoration: "none" }}>100分公平篩選規則</a><br /><a href="/v17" style={{ color: "#bfdbfe", fontWeight: 1000, textDecoration: "none" }}>折價獵人主頁</a></Box>
       </>}
     </div>
   </main>;
