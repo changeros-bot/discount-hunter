@@ -1,16 +1,16 @@
 const { sendTelegramMessage } = require("../../lib/telegram/notify");
 
-const QUALITY_GATE = {
-  BTC: { quality: "PASSED", label: "通過", role: "Cycle Core", permission: "可草稿", allowDraft: true, reason: "週期核心；人工確認後可草稿。" },
-  QQQON: { quality: "PASSED", label: "通過", role: "ETF Core", permission: "可草稿", allowDraft: true, reason: "ETF 核心；人工確認後可草稿。" },
-  NVDAON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心 AI 標的；人工確認後可草稿。" },
-  TSMON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心半導體標的；人工確認後可草稿。" },
-  AVGOON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心 AI 基礎建設；人工確認後可草稿。" },
-  GOOGLON: { quality: "PASSED", label: "通過", role: "Core", permission: "可草稿", allowDraft: true, reason: "核心平台型標的；人工確認後可草稿。" },
-  AMDON: { quality: "PASSED", label: "通過", role: "Satellite", permission: "低優先草稿", allowDraft: true, reason: "Quality 通過，但仍是衛星標的；資金不足時低於核心。" },
-  MRVLON: { quality: "PASSED", label: "通過", role: "Satellite", permission: "低優先草稿", allowDraft: true, reason: "Quality 通過，但仍是衛星標的；資金不足時低於核心。" },
-  RKLBON: { quality: "WATCH", label: "觀察", role: "Spec Watch", permission: "只深跌人工確認", allowDraft: true, reason: "RKLBon 不固定 DCA；只允許 -50/-65/-80 深折扣低優先人工草稿。" },
-  SPCXON: { quality: "PENDING", label: "新上市觀察", role: "Data Pending", permission: "人工確認", allowDraft: false, reason: "SPCXon 新上市 / 歷史不足；逢低必須人工確認資料源與上市以來高點。" },
+const ACTION_GATE = {
+  BTC: { quality: "PASSED", label: "通過", role: "Cycle Core", permission: "Discount Add Allowed", allowAction: true, reason: "BTC DCA 是獨立加密資產折價系統；需人工確認後才可執行。" },
+  QQQON: { quality: "WATCH", label: "觀察", role: "ETF Mirror", permission: "Watch Only", allowAction: false, reason: "QQQ/QQQM 長期 DCA 屬富邦主系統；Market 91 不處理 ETF 核心 DCA。" },
+  NVDAON: { quality: "PASSED", label: "通過", role: "AI Core / Satellite", permission: "Discount Add Allowed", allowAction: true, reason: "AI Core / Satellite；僅在折價觸發、現金與上限通過後允許加碼。" },
+  TSMON: { quality: "PASSED", label: "通過", role: "AI Core / Satellite", permission: "Discount Add Allowed", allowAction: true, reason: "AI Core / Satellite；僅在折價觸發、現金與上限通過後允許加碼。" },
+  AVGOON: { quality: "PASSED", label: "通過", role: "AI Core / Satellite", permission: "Discount Add Allowed", allowAction: true, reason: "AI Core / Satellite；僅在折價觸發、現金與上限通過後允許加碼。" },
+  GOOGLON: { quality: "PASSED", label: "通過", role: "AI Core / Satellite", permission: "Discount Add Allowed", allowAction: true, reason: "AI Core / Satellite；僅在折價觸發、現金與上限通過後允許加碼。" },
+  AMDON: { quality: "PASSED", label: "通過", role: "AI Core / Satellite", permission: "Discount Add Allowed", allowAction: true, reason: "AI Core / Satellite；資金不足時低於更高優先序標的。" },
+  MRVLON: { quality: "PASSED", label: "通過", role: "Discount Buy Candidate", permission: "Discount Add Allowed", allowAction: true, reason: "Discount Buy Candidate；只在折價觸發與 thesis 沒壞時允許人工確認。" },
+  RKLBON: { quality: "WATCH", label: "觀察", role: "Watch Only", permission: "Watch Only", allowAction: false, reason: "RKLBon 目前只觀察；除非重新升級，不進入今日可加碼清單。" },
+  SPCXON: { quality: "PENDING", label: "新上市觀察", role: "Discount Buy Candidate", permission: "No Action", allowAction: false, reason: "SPCXon 新上市 / 歷史不足；逢低必須人工確認資料源與上市以來高點。" },
 };
 
 function num(value) {
@@ -69,7 +69,7 @@ function symbolKey(symbol) {
 }
 function gateFor(row) {
   const key = symbolKey(row?.symbol);
-  return QUALITY_GATE[key] || { quality: "PENDING", label: "資料待確認", role: "Unknown", permission: "禁止", allowDraft: false, reason: "Quality Gate 未建檔，不產生草稿。" };
+  return ACTION_GATE[key] || { quality: "PENDING", label: "資料待確認", role: "Unknown", permission: "No Action", allowAction: false, reason: "Action Gate 未建檔，不進入可加碼清單。" };
 }
 function rowAmountText(row) {
   return row?.decision?.amountText || (row?.decision?.amount ? `${row.decision.amount}U` : row?.amountText || "--");
@@ -89,30 +89,29 @@ function holdingZoneLine(row) {
 }
 function routeDecision(row) {
   const gate = gateFor(row);
-  return { row, gate, draftable: Boolean(gate.allowDraft) };
+  return { row, gate, actionable: Boolean(gate.allowAction) };
 }
 function decisionLine(row) {
   const gate = gateFor(row);
-  const action = gate.allowDraft ? `半自動：${gate.permission}` : "半自動：不產生草稿";
-  return [...baseLineParts(row), `建議 ${rowAmountText(row)}`, `Quality：${gate.label}`, action].join("｜");
+  return [...baseLineParts(row), `建議 ${rowAmountText(row)}`, `Bucket：${gate.role}`, `Action Gate：${gate.permission}`].join("｜");
 }
 function blockedLine(item) {
-  return [...baseLineParts(item.row), `Quality：${item.gate.label}`, `原因：${item.gate.reason}`].join("｜");
+  return [...baseLineParts(item.row), `Bucket：${item.gate.role}`, `Action Gate：${item.gate.permission}`, `原因：${item.gate.reason}`].join("｜");
 }
 function readinessLines(readinessPayload) {
-  if (!readinessPayload?.ok) return ["🧪 Trade Readiness：讀取失敗或尚未同步"];
+  if (!readinessPayload?.ok) return ["🧪 Readiness：讀取失敗或尚未同步"];
   const r = readinessPayload.readiness || {};
   const summary = readinessPayload.summary || {};
   const budget = readinessPayload.budget || {};
   const cycle = budget.cycle || budgetCycle(new Date(), 12);
   const failedChecks = (readinessPayload.checks || []).filter((x) => !x.passed).map((x) => x.name);
   const lines = [
-    `🧪 Trade Readiness：${r.label || r.status || "—"}`,
+    `🧪 Action Readiness：${r.label || r.status || "—"}`,
     `預算週期：${cycle.cycleStart}～${cycle.cycleEnd}｜下次預算日：${cycle.nextReleaseDate}`,
-    `草稿合計：${num(summary.totalDraftAmountUsdt).toFixed(2)}U｜草稿後現金：${num(summary.cashAfterDraftsUsdt).toFixed(2)}U｜逢低預算：約 ${num(budget.dipBudgetUsdt).toFixed(2)}U`,
+    `候選合計：${num(summary.totalDraftAmountUsdt).toFixed(2)}U｜候選後現金：${num(summary.cashAfterDraftsUsdt).toFixed(2)}U｜逢低預算：約 ${num(budget.dipBudgetUsdt).toFixed(2)}U`,
   ];
   if (failedChecks.length) lines.push(`需覆核：${failedChecks.join("、")}`);
-  else lines.push("檢查：Quality / 現金 / 預算 / 上限 OK");
+  else lines.push("檢查：Bucket / 現金 / 預算 / 上限 OK");
   return lines;
 }
 function buildMessage(truth, sectionSummary, tradeReadiness) {
@@ -122,10 +121,10 @@ function buildMessage(truth, sectionSummary, tradeReadiness) {
   const holdingRows = Array.isArray(sectionSummary?.holdingRows) ? sectionSummary.holdingRows : [];
   const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
   const routed = decisionRows.map(routeDecision);
-  const draftable = routed.filter((x) => x.draftable);
-  const blocked = routed.filter((x) => !x.draftable);
+  const actionable = routed.filter((x) => x.actionable);
+  const blocked = routed.filter((x) => !x.actionable);
   const lines = [
-    "📊 DCA折價獵人日報",
+    "📊 Market 91 / xStocks 折價獵人日報",
     "",
     `時間：${twTime()}`,
     "",
@@ -141,10 +140,10 @@ function buildMessage(truth, sectionSummary, tradeReadiness) {
     `現金檢查：可用 USDT ${num(cash.totalUSDT).toFixed(2)}U`,
     `Wallet USDT：${num(cash.walletUSDT).toFixed(2)}U｜Exchange USDT：${num(cash.exchangeUSDT).toFixed(2)}U`,
     `預算週期：${cycle.cycleStart}～${cycle.cycleEnd}｜下次預算日：${cycle.nextReleaseDate}`,
-    `本期預算：3000 TWD｜固定DCA 1500｜逢低 1500`,
+    `本期預算：Market 91 只使用逢低輔助預算；富邦 0050 / VOO / QQQM 主 DCA 不在本系統內`,
     "",
-    "🛡 Quality Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON",
-    `半自動草稿候選：${draftable.length} 檔｜被擋下：${blocked.length} 檔`,
+    "🛡 Action Gate：ON｜Auto Trade：OFF｜Manual Confirm：ON｜Kill Switch：ON",
+    `Discount Add Allowed：${actionable.length} 檔｜No Action / Watch / Blocked：${blocked.length} 檔`,
     "",
     ...readinessLines(tradeReadiness),
     "",
@@ -160,24 +159,24 @@ function buildMessage(truth, sectionSummary, tradeReadiness) {
   }
 
   if (decisionRows.length > 0) {
-    lines.push(`🧭 今日決策：${decisionRows.length} 檔待確認`);
+    lines.push(`🧭 今日 Action Gate：${decisionRows.length} 檔待確認`);
     decisionRows.forEach((row) => lines.push(decisionLine(row)));
     lines.push("");
   } else {
-    lines.push("🧭 今日決策：目前無可執行買點");
-    lines.push("半自動草稿：0｜被 Quality Gate 擋下：0");
+    lines.push("🧭 今日 Action Gate：No Action");
+    lines.push("Discount Add Allowed：0｜Watch Only / Blocked：0");
     lines.push("");
   }
 
   if (blocked.length > 0) {
-    lines.push(`⛔ Quality Gate 擋下：${blocked.length} 檔`);
+    lines.push(`⛔ No Action / Watch / Blocked：${blocked.length} 檔`);
     blocked.forEach((item) => lines.push(blockedLine(item)));
     lines.push("");
   }
 
-  lines.push("入口：/v17 ｜ /semi-auto-drafts ｜ /trade-readiness ｜ /v17-quality");
-  lines.push("資料來源：Portfolio Truth + App 分區鏡像 + Quality Gate Router + Trade Readiness");
-  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。觀察區不列入買點區持倉。Draft 不代表自動交易白名單。每月新預算 12 號才入金。實際交易仍需你手動確認。");
+  lines.push("入口：/v17 ｜ /trade-readiness ｜ /v17-quality");
+  lines.push("資料來源：Portfolio Truth + App 分區鏡像 + Action Gate Router + Trade Readiness");
+  lines.push("Telegram 僅推播，不另行計算總投入/市值/持倉數。Market 91 只處理個股 / xStocks 逢低輔助；0050 / VOO / QQQM 屬富邦長期 DCA 主系統。實際交易仍需你手動確認。");
   return lines.join("\n").trim();
 }
 async function handler(req, res) {
@@ -195,7 +194,7 @@ async function handler(req, res) {
     const sectionSummary = await readJsonSafe(sectionRes);
     const tradeReadiness = await readJsonSafe(readinessRes);
     if (!truthRes.ok || truth?.ok === false) {
-      const message = ["🔴 DCA折價獵人日報失敗", "", `Portfolio Truth：${truth.message || truth.error || truthRes.status}`].join("\n");
+      const message = ["🔴 Market 91 / xStocks 折價獵人日報失敗", "", `Portfolio Truth：${truth.message || truth.error || truthRes.status}`].join("\n");
       const shouldSendError = req.method === "POST" || String(req.query.send || "") === "1";
       const telegram = shouldSendError ? await sendTelegramMessage(message, { cooldownKey: "telegram-daily:error", cooldownHours: 12 }) : null;
       return res.status(500).json({ ok: false, sent: Boolean(telegram && !telegram.skipped), previewOnly: !shouldSendError, telegram, message });
@@ -204,8 +203,8 @@ async function handler(req, res) {
 
     const decisionRows = Array.isArray(sectionSummary?.decisionRows) ? sectionSummary.decisionRows : [];
     const routed = decisionRows.map(routeDecision);
-    const draftableCount = routed.filter((x) => x.draftable).length;
-    const blockedCount = routed.length - draftableCount;
+    const actionableCount = routed.filter((x) => x.actionable).length;
+    const blockedCount = routed.length - actionableCount;
     const message = buildMessage(truth, sectionSummary, tradeReadiness);
     const shouldSend = req.method === "POST" || String(req.query.send || "") === "1";
     const force = String(req.query.force || "") === "1";
@@ -214,7 +213,7 @@ async function handler(req, res) {
 
     if (telegram && !telegram.ok) return res.status(500).json({ ok: false, telegram });
 
-    return res.status(200).json({ ok: true, version: "telegram-daily-trade-readiness-v6", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-quality-gate-plus-trade-readiness", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, draftableCount, blockedCount, readinessStatus: tradeReadiness?.readiness?.status || null, totals: truth.summary, cash: truth.cash, tradeReadiness, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
+    return res.status(200).json({ ok: true, version: "telegram-daily-market91-action-gate-v17-4", sourcePolicy: "portfolio-truth-plus-app-section-mirror-plus-action-gate-plus-trade-readiness", sent: Boolean(telegram && !telegram.skipped), deduped: Boolean(telegram?.deduped), previewOnly: !shouldSend, force, holdingZoneCount: sectionSummary.holdingRows?.length || 0, decisionCount: decisionRows.length, actionableCount, blockedCount, readinessStatus: tradeReadiness?.readiness?.status || null, totals: truth.summary, cash: truth.cash, tradeReadiness, sectionSummary, monitorCount: truth.monitorCount, telegram, message });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "Daily summary failed" });
   }
