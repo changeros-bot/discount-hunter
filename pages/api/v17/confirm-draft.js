@@ -1,5 +1,6 @@
 import { appendExecutionLog } from "../../../lib/v17-execution-log";
 import { updateDraftStatus } from "../../../lib/v17-trade-drafts";
+import { assertKillSwitchAllowsDryRun, automationErrorStatus, requireAutomationWriteAuth } from "../../../lib/v17-automation-security";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
@@ -7,6 +8,9 @@ export default async function handler(req, res) {
     if (req.method !== "POST") {
       return res.status(405).json({ ok: false, error: "method_not_allowed" });
     }
+
+    requireAutomationWriteAuth(req);
+    assertKillSwitchAllowsDryRun();
 
     const { draftId, action } = req.body || {};
     const normalizedAction = String(action || "").trim().toUpperCase();
@@ -36,6 +40,6 @@ export default async function handler(req, res) {
       storage,
     });
   } catch (error) {
-    return res.status(400).json({ ok: false, error: error.message });
+    return res.status(automationErrorStatus(error)).json({ ok: false, error: error.message });
   }
 }
