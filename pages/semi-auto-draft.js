@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { automationAuthHeaders, readAutomationSessionToken, saveAutomationSessionToken } from "../lib/v17-automation-client";
 
 function Box({ title, children, tone = "blue" }) {
   const border = tone === "green" ? "rgba(34,197,94,.38)" : tone === "red" ? "rgba(248,113,113,.36)" : tone === "yellow" ? "rgba(245,158,11,.34)" : "rgba(59,130,246,.30)";
@@ -39,6 +40,7 @@ export default function SemiAutoDraft() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [accessCode, setAccessCode] = useState("");
 
   async function load() {
     setBusy(true);
@@ -62,7 +64,7 @@ export default function SemiAutoDraft() {
     try {
       const res = await fetch("/api/v17/confirm-draft", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: automationAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ draftId, action }),
       });
       const json = await res.json();
@@ -76,7 +78,10 @@ export default function SemiAutoDraft() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    setAccessCode(readAutomationSessionToken());
+    load();
+  }, []);
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 520, margin: "0 auto", padding: "22px 14px 40px" }}>
@@ -88,6 +93,18 @@ export default function SemiAutoDraft() {
       </header>
       {error && <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{error}</div></Box>}
       {message && <Box title="結果" tone="green"><div style={{ color: "#bbf7d0", fontWeight: 900 }}>{message}</div></Box>}
+      <Box title="Secure Access">
+        <input
+          type="password"
+          value={accessCode}
+          onChange={(event) => setAccessCode(event.target.value)}
+          placeholder="輸入 V17.7 Automation Access Code"
+          autoComplete="off"
+          style={{ width: "100%", boxSizing: "border-box", padding: "12px 10px", borderRadius: 14, border: "1px solid rgba(148,163,184,.28)", background: "rgba(2,6,23,.55)", color: "#f8fafc", fontWeight: 850 }}
+        />
+        <button onClick={() => { saveAutomationSessionToken(accessCode); setMessage("本次工作階段的安全碼已保存。"); }} style={{ width: "100%", marginTop: 8, padding: "11px 10px", borderRadius: 14, border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.12)", color: "#bfdbfe", fontWeight: 1000 }}>Save for this session</button>
+        <div style={{ marginTop: 8, color: "#94a3b8", fontSize: 12, fontWeight: 800 }}>只保存在目前瀏覽器工作階段，關閉後自動清除。</div>
+      </Box>
       <Box title="Actions">
         <a href="/trade-readiness" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>Trade Readiness / Create Draft</a><br />
         <a href="/execution-log" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>Execution Log</a>
