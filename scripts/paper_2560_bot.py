@@ -161,8 +161,8 @@ def run(args):
                         entry_price = float(e.open) * (1.0 + args.slippage)
                     row = {
                         "trade_id": tid, "status": "PENDING", "ticker": ticker, "industry": industry, "pattern": pattern,
-                        "signal_date": last.date, "entry_date": entry_date, "entry_price": entry_price,
-                        "stop_price": "", "target_price": "", "last_date": last.date, "last_price": float(last.close),
+                        "signal_date": iso_date(last.date), "entry_date": iso_date(entry_date) if entry_date != "" else "", "entry_price": entry_price,
+                        "stop_price": "", "target_price": "", "last_date": iso_date(last.date), "last_price": float(last.close),
                         "exit_date": "", "exit_price": "", "exit_reason": "", "hold_days": "", "return_pct": "",
                         "created_at": now, "updated_at": now,
                     }
@@ -187,7 +187,7 @@ def run(args):
                 if idxs:
                     e = p.iloc[idxs[0]]
                     ep = float(e.open) * (1.0 + args.slippage)
-                    ledger.loc[i, ["status","entry_date","entry_price","stop_price","target_price","last_date","last_price","updated_at"]] = ["OPEN", e.date, ep, ep * 0.92, ep * 1.15, last.date, float(last.close), now]
+                    ledger.loc[i, ["status","entry_date","entry_price","stop_price","target_price","last_date","last_price","updated_at"]] = ["OPEN", iso_date(e.date), ep, ep * 0.92, ep * 1.15, iso_date(last.date), float(last.close), now]
             elif status == "OPEN":
                 ep = float(tr.entry_price); entry_date = pd.to_datetime(tr.entry_date)
                 idxs = p.index[p.date >= entry_date].tolist()
@@ -197,9 +197,9 @@ def run(args):
                 if ret <= -0.08: reason = "stop_loss_8pct"
                 elif ret >= 0.15: reason = "take_profit_15pct"
                 elif hold >= 30: reason = "max_30d"
-                ledger.loc[i, ["last_date","last_price","hold_days","return_pct","updated_at"]] = [last.date, close, hold, ret, now]
+                ledger.loc[i, ["last_date","last_price","hold_days","return_pct","updated_at"]] = [iso_date(last.date), close, hold, ret, now]
                 if reason:
-                    ledger.loc[i, ["status","exit_date","exit_price","exit_reason","updated_at"]] = ["CLOSED", last.date, close, reason, now]
+                    ledger.loc[i, ["status","exit_date","exit_price","exit_reason","updated_at"]] = ["CLOSED", iso_date(last.date), close, reason, now]
         except Exception as exc:
             scan_errors.append({"ticker": getattr(tr, "ticker", ""), "error": f"UPDATE: {exc}"})
             print(f"UPDATE SKIP {getattr(tr, 'ticker', '')}: {exc}")
