@@ -18,6 +18,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: 2560-paper-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   paper:
     runs-on: ubuntu-latest
@@ -48,5 +52,6 @@ jobs:
             echo "No paper report changes to commit."
           else
             git commit -m "Update 2560 paper reports"
+            git pull --rebase origin main
             git push
           fi
