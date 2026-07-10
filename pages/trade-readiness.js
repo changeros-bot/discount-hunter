@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { automationAuthHeaders, readAutomationSessionToken, saveAutomationSessionToken } from "../lib/v17-automation-client";
 
 function Box({ title, children, tone = "blue" }) {
   const border = tone === "green" ? "rgba(34,197,94,.38)" : tone === "red" ? "rgba(248,113,113,.36)" : tone === "yellow" ? "rgba(245,158,11,.34)" : "rgba(59,130,246,.30)";
@@ -30,6 +31,7 @@ export default function TradeReadiness() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [accessCode, setAccessCode] = useState("");
 
   async function load() {
     setBusy(true);
@@ -53,7 +55,7 @@ export default function TradeReadiness() {
     try {
       const res = await fetch("/api/v17/trade-drafts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: automationAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ candidate: data.candidate }),
       });
       const json = await res.json();
@@ -66,7 +68,10 @@ export default function TradeReadiness() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    setAccessCode(readAutomationSessionToken());
+    load();
+  }, []);
 
   const tone = data?.status === "READY" ? "green" : data?.status === "BLOCKED" ? "red" : "yellow";
   const candidate = data?.candidate;
@@ -100,6 +105,19 @@ export default function TradeReadiness() {
         <Box title="Risk Checks" tone={tone}>
           <div style={{ display: "grid", gap: 8 }}>{(data.checks || []).map((x) => <CheckRow key={x.name} check={x} />)}</div>
           {data.blockedReasons?.length ? <div style={{ marginTop: 10, color: "#fecaca", fontWeight: 900 }}>Blocked：{data.blockedReasons.join(" / ")}</div> : null}
+        </Box>
+
+        <Box title="Secure Access">
+          <input
+            type="password"
+            value={accessCode}
+            onChange={(event) => setAccessCode(event.target.value)}
+            placeholder="輸入 V17.7 Automation Access Code"
+            autoComplete="off"
+            style={{ width: "100%", boxSizing: "border-box", padding: "12px 10px", borderRadius: 14, border: "1px solid rgba(148,163,184,.28)", background: "rgba(2,6,23,.55)", color: "#f8fafc", fontWeight: 850 }}
+          />
+          <button onClick={() => { saveAutomationSessionToken(accessCode); setMessage("本次工作階段的安全碼已保存。"); }} style={{ width: "100%", marginTop: 8, padding: "11px 10px", borderRadius: 14, border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.12)", color: "#bfdbfe", fontWeight: 1000 }}>Save for this session</button>
+          <div style={{ marginTop: 8, color: "#94a3b8", fontSize: 12, fontWeight: 800 }}>只保存在目前瀏覽器工作階段，關閉後自動清除。</div>
         </Box>
 
         <Box title="Actions">
