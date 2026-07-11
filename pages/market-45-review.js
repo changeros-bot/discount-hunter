@@ -37,6 +37,7 @@ function RowCard({ row, final = false }) {
       {final && row.finalRank ? <span style={{ color: "#f8fafc", background: "rgba(245,158,11,.16)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>#{row.finalRank}</span> : null}
       {row.finalBucket ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>{row.finalBucket}</span> : null}
       {row.evidenceState ? <span style={{ color: row.evidenceState === "VERIFIED" ? "#bbf7d0" : "#fde68a", background: "rgba(245,158,11,.10)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>Evidence：{row.evidenceState}</span> : null}
+      {row.evidenceTag ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>{row.evidenceTag}</span> : null}
       {row.hasBlocker ? <span style={{ color: "#fecaca", background: "rgba(248,113,113,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>Blocker</span> : null}
       {row.bucket ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.bucket}</span> : null}
       {row.quality ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.quality}</span> : null}
@@ -92,6 +93,8 @@ export default function Market45Review() {
           <div>正式觀察：{finalSummary["正式觀察"] ?? "—"} 檔</div>
           <div>待驗證：{finalSummary["待驗證候選"] ?? "—"} 檔</div>
           <div>封鎖：{finalSummary["封鎖"] ?? "—"} 檔</div>
+          <div>Evidence Registry：{data?.evidenceOverlayCount ?? 0} 檔</div>
+          <div>真實交易：禁止</div>
         </div>
         {data?.completionText ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900, lineHeight: 1.5 }}>{data.completionText}</div> : null}
         {data?.finalRules?.rule ? <div style={{ marginTop: 8, color: "#fde68a", fontWeight: 850, lineHeight: 1.5 }}>{data.finalRules.rule}</div> : null}
