@@ -98,6 +98,44 @@ function hideTransitionalCards(root = document.body) {
   }
 }
 
+function addV17PaperLinks() {
+  if (typeof document === "undefined") return;
+  if (!location.pathname.startsWith("/v17")) return;
+  if (document.querySelector("[data-v17-paper-links='true']")) return;
+
+  const cards = [...document.querySelectorAll("section")];
+  const autoCard = cards.find((card) => (card.textContent || "").includes("自動化執行狀態") || (card.textContent || "").includes("Auto Execution Status"));
+  if (!autoCard) return;
+
+  const row = document.createElement("div");
+  row.setAttribute("data-v17-paper-links", "true");
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "1fr 1fr";
+  row.style.gap = "8px";
+  row.style.marginTop = "8px";
+
+  const links = [
+    ["/paper-auto", "紙上測試", "rgba(168,85,247,.14)", "rgba(168,85,247,.28)", "#ddd6fe"],
+    ["/market-45-review", "45檔總表", "rgba(20,184,166,.14)", "rgba(20,184,166,.28)", "#99f6e4"],
+  ];
+  for (const [href, text, bg, border, color] of links) {
+    const a = document.createElement("a");
+    a.href = href;
+    a.textContent = text;
+    a.style.textAlign = "center";
+    a.style.textDecoration = "none";
+    a.style.padding = "9px 6px";
+    a.style.borderRadius = "12px";
+    a.style.background = bg;
+    a.style.border = `1px solid ${border}`;
+    a.style.color = color;
+    a.style.fontSize = "12px";
+    a.style.fontWeight = "1000";
+    row.appendChild(a);
+  }
+  autoCard.appendChild(row);
+}
+
 function localizeNode(root) {
   if (typeof document === "undefined" || !root) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -117,6 +155,7 @@ function localizeNode(root) {
     if (next !== node.nodeValue) node.nodeValue = next;
   }
   hideTransitionalCards(root.nodeType === 1 ? root : document.body);
+  addV17PaperLinks();
 }
 
 export default function App({ Component, pageProps }) {
@@ -133,6 +172,7 @@ export default function App({ Component, pageProps }) {
         }
       }
       hideTransitionalCards(document.body);
+      addV17PaperLinks();
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
