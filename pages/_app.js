@@ -44,6 +44,9 @@ const UI_TRANSLATIONS = [
   ["Order ID：", "訂單編號："],
   ["Tx Hash：", "交易雜湊："],
   ["Error：", "錯誤："],
+  ["State Machine", "狀態機"],
+  ["Status Ready for Review", "狀態：待檢視"],
+  ["Quality Checklist", "品質檢查表"],
   ["No real order was sent.", "沒有送出任何真實訂單。"],
   ["Confirm 只會寫入 SIMULATED 紀錄，不會真實下單。", "確認後只會寫入模擬紀錄，不會真實下單。"],
   ["交易黑盒子。V17.6 只允許 SIMULATED / BLOCKED / FAILED，不會出現真實 EXECUTED。", "交易黑盒子。V17.6 只允許模擬、阻擋、失敗三種紀錄，不會出現真實成交。"],
@@ -65,12 +68,34 @@ const UI_TRANSLATIONS = [
   ["Blocked：", "阻擋原因："],
 ];
 
+const HIDE_CARD_TEXT = [
+  "App V17.1",
+  "Playbook Josh Portfolio",
+  "Status Ready for Review",
+  "狀態：待檢視",
+  "中文 Quality Checklist",
+  "中文 品質檢查表",
+  "品質檢查表｜半自動範圍",
+];
+
 function translateText(value) {
   let next = value;
   for (const [from, to] of UI_TRANSLATIONS) {
     next = next.split(from).join(to);
   }
   return next;
+}
+
+function hideTransitionalCards(root = document.body) {
+  if (typeof document === "undefined" || !root) return;
+  const cards = root.querySelectorAll?.("section, details") || [];
+  for (const card of cards) {
+    const text = card.textContent || "";
+    if (HIDE_CARD_TEXT.some((needle) => text.includes(needle))) {
+      card.style.display = "none";
+      card.setAttribute("data-v17-hidden", "transitional-card");
+    }
+  }
 }
 
 function localizeNode(root) {
@@ -91,6 +116,7 @@ function localizeNode(root) {
     const next = translateText(node.nodeValue || "");
     if (next !== node.nodeValue) node.nodeValue = next;
   }
+  hideTransitionalCards(root.nodeType === 1 ? root : document.body);
 }
 
 export default function App({ Component, pageProps }) {
@@ -106,6 +132,7 @@ export default function App({ Component, pageProps }) {
           localizeNode(node);
         }
       }
+      hideTransitionalCards(document.body);
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
