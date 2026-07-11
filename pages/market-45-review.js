@@ -113,7 +113,10 @@ export default function Market45Review() {
         {rows.length ? rows.map((row) => <RowCard key={row.symbol || row.name} row={row} final={useFinal} />) : <div style={{ color: "#94a3b8", fontWeight: 850 }}>無。</div>}
       </Box>)}
       <Box title="入口">
-        <a href="/paper-auto" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>紙上交易自動測試</a>
+        <div style={{ display: "grid", gap: 8 }}>
+          <a href="/market-45-evidence" style={{ color: "#fde68a", fontWeight: 1000, textDecoration: "none" }}>Market45 批次 Evidence 驗證</a>
+          <a href="/paper-auto" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>紙上交易自動測試</a>
+        </div>
       </Box>
     </div>
   </main>;
