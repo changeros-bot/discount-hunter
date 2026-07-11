@@ -1,0 +1,19 @@
+{
+  "mode": "AUTO_PAPER",
+  "testDays": 7,
+  "dailyMaxTrades": 3,
+  "perTradeUSDT": 5,
+  "existingTenSymbols": [
+    "BTC",
+    "QQQon",
+    "NVDAon",
+    "TSMon",
+    "AVGOon",
+    "SPCXon",
+    "GOOGLon",
+    "AMDon",
+    "MRVLon",
+    "RKLBon"
+  ],
+  "note": "Existing V17 ten assets run auto paper trading for 7 days. No real order path."
+}
