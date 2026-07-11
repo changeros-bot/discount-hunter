@@ -8,6 +8,31 @@ function Box({ title, children, tone = "blue" }) {
   </section>;
 }
 
+function statusText(status) {
+  if (status === "partial_consolidation") return "已收斂部分資料";
+  if (status === "consolidated") return "已完成收斂";
+  return "待收斂";
+}
+
+function RowCard({ row }) {
+  return <div style={{ padding: 10, borderRadius: 12, background: "rgba(2,6,23,.45)", border: "1px solid rgba(148,163,184,.14)", marginTop: 8 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+      <div>
+        <strong style={{ color: "#f8fafc", fontSize: 15 }}>{row.symbol || row.name}</strong>
+        {row.name && row.name !== row.symbol ? <span style={{ color: "#94a3b8", marginLeft: 6, fontSize: 12 }}>{row.name}</span> : null}
+      </div>
+      <div style={{ color: "#fde68a", fontWeight: 1000, fontSize: 12 }}>{row.totalScore !== null && row.totalScore !== undefined ? `${row.totalScore}分` : "未評分"}</div>
+    </div>
+    <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap", gap: 5 }}>
+      {row.bucket ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.bucket}</span> : null}
+      {row.quality ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.quality}</span> : null}
+      {row.tier ? <span style={{ color: "#ddd6fe", background: "rgba(168,85,247,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.tier}</span> : null}
+    </div>
+    <div style={{ marginTop: 7, color: "#cbd5e1", fontSize: 12, fontWeight: 850, lineHeight: 1.5 }}>{row.decision || row.reason || "—"}</div>
+    {row.rule ? <div style={{ marginTop: 5, color: "#94a3b8", fontSize: 11, fontWeight: 800, lineHeight: 1.45 }}>規則：{row.rule}</div> : null}
+  </div>;
+}
+
 export default function Market45Review() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -26,6 +51,7 @@ export default function Market45Review() {
   useEffect(() => { load(); }, []);
 
   const buckets = data?.buckets || {};
+  const summary = data?.summary || {};
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "22px 14px 40px" }}>
       <a href="/v17" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回折價獵人 V17</a>
@@ -36,25 +62,24 @@ export default function Market45Review() {
       </header>
       {error && <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{error}</div></Box>}
       <Box title="目前進度" tone="yellow">
-        <div style={{ color: "#cbd5e1", fontWeight: 850, lineHeight: 1.6 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850, lineHeight: 1.6 }}>
           <div>總數：{data?.total || 45} 檔</div>
-          <div>狀態：{data?.status === "pending_consolidation" ? "待收斂" : data?.status || "待收斂"}</div>
+          <div>已收斂：{data?.covered || 0} 檔</div>
+          <div>缺資料：{data?.missingCount ?? 45} 檔</div>
+          <div>狀態：{statusText(data?.status)}</div>
           <div>正式觀察目標：10～15 檔</div>
-          <div>紙上交易測試目標：3～5 檔</div>
-          <div>測試週期：7 天</div>
+          <div>紙上測試目標：3～5 檔</div>
+        </div>
+        {data?.note ? <div style={{ marginTop: 10, color: "#fde68a", fontWeight: 850, lineHeight: 1.5 }}>{data.note}</div> : null}
+      </Box>
+      <Box title="分類統計" tone="blue">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850 }}>
+          {Object.entries(summary).map(([key, value]) => <div key={key}>{key}：<strong style={{ color: "#f8fafc" }}>{value}</strong></div>)}
         </div>
       </Box>
-      {Object.entries(buckets).map(([name, rows]) => <Box key={name} title={`${name}（${rows.length}）`} tone={rows.length ? "green" : "blue"}>
-        {rows.length ? rows.map((row) => <div key={row.symbol || row.name} style={{ padding: 10, borderRadius: 12, background: "rgba(2,6,23,.45)", marginTop: 8 }}>{row.symbol || row.name}</div>) : <div style={{ color: "#94a3b8", fontWeight: 850 }}>尚未收斂。</div>}
+      {Object.entries(buckets).map(([name, rows]) => <Box key={name} title={`${name}（${rows.length}）`} tone={name === "紙上交易候選" ? "green" : name === "缺資料" ? "yellow" : rows.length ? "blue" : "blue"}>
+        {rows.length ? rows.map((row) => <RowCard key={row.symbol || row.name} row={row} />) : <div style={{ color: "#94a3b8", fontWeight: 850 }}>尚未收斂。</div>}
       </Box>)}
-      <Box title="下一步">
-        <div style={{ color: "#cbd5e1", fontWeight: 850, lineHeight: 1.6 }}>
-          <div>1. 把 Market 91 各批分數接進這張總表。</div>
-          <div>2. 45 檔分成正式觀察、次級觀察、工具題材、封鎖、缺資料。</div>
-          <div>3. 正式觀察挑 10～15 檔。</div>
-          <div>4. 紙上交易挑 3～5 檔跑 7 天。</div>
-        </div>
-      </Box>
       <Box title="入口">
         <a href="/paper-auto" style={{ color: "#bbf7d0", fontWeight: 1000, textDecoration: "none" }}>紙上交易自動測試</a>
       </Box>
