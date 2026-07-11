@@ -34,10 +34,12 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, error: "method_not_allowed" });
     }
     const body = req.method === "POST" ? (req.body || {}) : {};
+    const force = body.force === true || req.query?.force === "true";
     const markets = { ...FALLBACK_MARKETS, ...(body.markets || {}) };
-    const result = await runAutoPaperTrading({ markets, force: body.force === true });
+    const result = await runAutoPaperTrading({ markets, force });
     return res.status(200).json({
       ...result,
+      force,
       fallbackMarketsUsed: Object.keys(FALLBACK_MARKETS),
       fallbackNote: "Market45 紙上候選若沒有即時價格，先用 100U 基準價建倉，只用來驗證流程與 7 天追蹤；不代表真實價格。",
     });
