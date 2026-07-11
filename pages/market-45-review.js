@@ -15,6 +15,15 @@ function statusText(status) {
   return "待收斂";
 }
 
+function toneForBucket(name) {
+  if (name === "紙上交易測試") return "green";
+  if (name === "正式觀察") return "blue";
+  if (name === "待驗證候選") return "yellow";
+  if (name === "缺資料") return "yellow";
+  if (name === "封鎖") return "red";
+  return "blue";
+}
+
 function RowCard({ row, final = false }) {
   return <div style={{ padding: 10, borderRadius: 12, background: "rgba(2,6,23,.45)", border: "1px solid rgba(148,163,184,.14)", marginTop: 8 }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
@@ -70,7 +79,7 @@ export default function Market45Review() {
       <header style={{ marginTop: 18, marginBottom: 18 }}>
         <div style={{ color: "#22c55e", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>Market 45 最終篩選</div>
         <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>45 檔門檻式篩選結果</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>紙上交易與正式觀察採浮動名額：符合分數、Quality Gate、Evidence 與 Blocker 條件幾檔，就是幾檔；不湊數、不硬砍。</p>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>Evidence PENDING 只能進待驗證候選；只有 VERIFIED 且通過門檻，才可進紙上交易或正式觀察。不湊數、不硬砍。</p>
       </header>
       {error && <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{error}</div></Box>}
       <Box title="完成狀態" tone={useFinal ? "green" : "yellow"}>
@@ -81,12 +90,15 @@ export default function Market45Review() {
           <div>狀態：{statusText(data?.status)}</div>
           <div>紙上交易：{finalSummary["紙上交易測試"] ?? "—"} 檔</div>
           <div>正式觀察：{finalSummary["正式觀察"] ?? "—"} 檔</div>
+          <div>待驗證：{finalSummary["待驗證候選"] ?? "—"} 檔</div>
+          <div>封鎖：{finalSummary["封鎖"] ?? "—"} 檔</div>
         </div>
         {data?.completionText ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900, lineHeight: 1.5 }}>{data.completionText}</div> : null}
         {data?.finalRules?.rule ? <div style={{ marginTop: 8, color: "#fde68a", fontWeight: 850, lineHeight: 1.5 }}>{data.finalRules.rule}</div> : null}
         <div style={{ marginTop: 8, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.5 }}>
           紙上門檻：{data?.finalRules?.paperQualityGate || "—"}<br />
-          正式觀察門檻：{data?.finalRules?.formalWatchGate || "—"}
+          正式觀察門檻：{data?.finalRules?.formalWatchGate || "—"}<br />
+          待驗證規則：{data?.finalRules?.pendingCandidateGate || "—"}
         </div>
       </Box>
       <Box title="最終分類統計" tone="blue">
@@ -94,7 +106,7 @@ export default function Market45Review() {
           {Object.entries(visibleSummary).map(([key, value]) => <div key={key}>{key}：<strong style={{ color: "#f8fafc" }}>{value}</strong></div>)}
         </div>
       </Box>
-      {Object.entries(visibleBuckets).map(([name, rows]) => <Box key={name} title={`${name}（${rows.length}）`} tone={name === "紙上交易測試" ? "green" : name === "正式觀察" ? "blue" : name === "缺資料" ? "yellow" : rows.length ? "blue" : "blue"}>
+      {Object.entries(visibleBuckets).map(([name, rows]) => <Box key={name} title={`${name}（${rows.length}）`} tone={toneForBucket(name)}>
         {rows.length ? rows.map((row) => <RowCard key={row.symbol || row.name} row={row} final={useFinal} />) : <div style={{ color: "#94a3b8", fontWeight: 850 }}>無。</div>}
       </Box>)}
       <Box title="入口">
