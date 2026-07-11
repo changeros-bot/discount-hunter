@@ -7,7 +7,8 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, error: "method_not_allowed" });
     }
     const body = req.method === "POST" ? (req.body || {}) : {};
-    const result = await getPaperSummary({ markets: body.markets || {} });
+    const persistMetrics = String(req.query?.persistMetrics || body.persistMetrics || "").toLowerCase() === "true";
+    const result = await getPaperSummary({ markets: body.markets || {}, persistMetrics });
     return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "paper_summary_failed" });
