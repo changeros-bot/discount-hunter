@@ -19,6 +19,12 @@ const FALLBACK_MARKETS = {
     discount: 0,
     source: "paper_fallback_price_market45",
   },
+  REGN: {
+    price: 100,
+    high52w: 100,
+    discount: 0,
+    source: "paper_fallback_price_market45",
+  },
 };
 
 export default async function handler(req, res) {
