@@ -1,31 +1,36 @@
 import { runAutoPaperTrading } from "../../../lib/v17-paper-engine";
+import { fetchYahooStockQuotes, PAPER_STOCK_SYMBOLS } from "../../../lib/v17-paper-stock-quotes";
+import { getAllPaperDiscountRules } from "../../../lib/v17-paper-discount-rules";
 
-const FALLBACK_MARKETS = {
-  NOW: {
-    price: 100,
-    high52w: 100,
-    discount: 0,
-    source: "paper_fallback_price_market45",
-  },
-  QCOM: {
-    price: 100,
-    high52w: 100,
-    discount: 0,
-    source: "paper_fallback_price_market45",
-  },
-  DELL: {
-    price: 100,
-    high52w: 100,
-    discount: 0,
-    source: "paper_fallback_price_market45",
-  },
-  REGN: {
-    price: 100,
-    high52w: 100,
-    discount: 0,
-    source: "paper_fallback_price_market45",
-  },
-};
+function buildPaperStockAssetMap() {
+  const rules = getAllPaperDiscountRules();
+  return Object.fromEntries(PAPER_STOCK_SYMBOLS.map((symbol) => {
+    const rule = rules[symbol] || {};
+    return [symbol, {
+      symbol,
+      rules: rule.rules || [],
+      amounts: rule.amounts || [],
+      profile: rule.profile || "paper_stock",
+      ruleNote: rule.note || "Market paper stock quote",
+    }];
+  }));
+}
+
+function marketMapFromQuotes(quotes = []) {
+  return Object.fromEntries(
+    quotes
+      .filter((row) => row?.symbol && Number(row?.price || 0) > 0)
+      .map((row) => [row.symbol, row])
+  );
+}
+
+function quoteHealth(quotes = []) {
+  const ok = quotes.filter((row) => row?.quoteAudit?.status === "PASS").map((row) => row.symbol);
+  const failed = quotes
+    .filter((row) => row?.quoteAudit?.status !== "PASS")
+    .map((row) => ({ symbol: row.symbol, status: row?.quoteAudit?.status || "UNKNOWN", error: row?.quoteAudit?.error || null }));
+  return { okCount: ok.length, ok, failedCount: failed.length, failed };
+}
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
@@ -35,13 +40,18 @@ export default async function handler(req, res) {
     }
     const body = req.method === "POST" ? (req.body || {}) : {};
     const force = body.force === true || req.query?.force === "true";
-    const markets = { ...FALLBACK_MARKETS, ...(body.markets || {}) };
+    const quotes = await fetchYahooStockQuotes(PAPER_STOCK_SYMBOLS, buildPaperStockAssetMap());
+    const quoteMarkets = marketMapFromQuotes(quotes);
+    const markets = { ...quoteMarkets, ...(body.markets || {}) };
     const result = await runAutoPaperTrading({ markets, force });
     return res.status(200).json({
       ...result,
       force,
-      fallbackMarketsUsed: Object.keys(FALLBACK_MARKETS),
-      fallbackNote: "Market45 紙上候選若沒有即時價格，先用 100U 基準價建倉，只用來驗證流程與 7 天追蹤；不代表真實價格。",
+      quoteSource: "Yahoo Finance chart",
+      quoteHealth: quoteHealth(quotes),
+      placeholderFallbackDisabled: true,
+      fallbackMarketsUsed: [],
+      fallbackNote: "$100 placeholder fallback 已停用；缺價格時只會 skip，不會建倉。",
     });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "paper_auto_run_failed" });
