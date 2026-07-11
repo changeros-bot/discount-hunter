@@ -1,4 +1,6 @@
 import { getAssetRegistry } from "../../lib/v17-asset-registry";
+import { fetchYahooStockQuotes, PAPER_STOCK_SYMBOLS } from "../../lib/v17-paper-stock-quotes";
+import { getAllPaperDiscountRules } from "../../lib/v17-paper-discount-rules";
 
 const BINANCE_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai";
 const BINANCE_DYNAMIC_URL = "https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/market/token/rwa/dynamic/ai";
@@ -24,20 +26,16 @@ function mapAsset(asset) {
     cycleHighSource: asset.cycleHighSource,
     cycleHighUpdateRule: asset.cycleHighUpdateRule,
     unitAmount: asset.unitAmount,
-    capitalUnits: asset.capitalUnits
+    capitalUnits: asset.capitalUnits,
   };
 }
 
 function getWatchlist() {
-  return getAssetRegistry()
-    .filter((asset) => String(asset.assetType || "").startsWith("tokenized_stock"))
-    .map(mapAsset);
+  return getAssetRegistry().filter((asset) => String(asset.assetType || "").startsWith("tokenized_stock")).map(mapAsset);
 }
 
 function getCryptoWatchlist() {
-  return getAssetRegistry()
-    .filter((asset) => asset.assetType === "crypto")
-    .map(mapAsset);
+  return getAssetRegistry().filter((asset) => asset.assetType === "crypto").map(mapAsset);
 }
 
 const headers = {
@@ -49,12 +47,12 @@ const headers = {
   origin: "https://www.binance.com",
   pragma: "no-cache",
   referer: "https://www.binance.com/en/markets/overview",
-  "user-agent": "Mozilla/5.0 (V17 Discount Hunter) binance-web"
+  "user-agent": "Mozilla/5.0 (V17 Discount Hunter) binance-web",
 };
 
-function getSignal(discount, rules, amounts) {
-  for (let i = rules.length - 1; i >= 0; i--) {
-    if (discount <= rules[i]) return { text: `第${i + 1}買點`, amount: `${amounts[i]}U`, level: i + 1 };
+function getSignal(discount, rules = [], amounts = []) {
+  for (let i = rules.length - 1; i >= 0; i -= 1) {
+    if (discount <= Number(rules[i])) return { text: `第${i + 1}買點`, amount: `${amounts[i] || 0}U`, level: i + 1 };
   }
   return { text: "尚未到買點", amount: "0U", level: 0 };
 }
@@ -130,8 +128,7 @@ async function getBinanceDynamic(item) {
 }
 
 function normalize(asset, tokenMeta, dynamicResult) {
-  const dynamicRaw = dynamicResult?.json;
-  const root = dynamicRaw?.data || dynamicRaw || {};
+  const root = dynamicResult?.json?.data || dynamicResult?.json || {};
   const tokenInfo = root.tokenInfo || root.token || {};
   const stockInfo = root.stockInfo || root.stock || {};
   const rawTokenPrice = firstNumber(tokenInfo.price, root.price);
@@ -140,14 +137,11 @@ function normalize(asset, tokenMeta, dynamicResult) {
   const displayPrice = rawTokenPrice > 0 ? rawTokenPrice / sharesMultiplier : stockPrice;
   const high = firstNumber(stockInfo.priceHigh52w, stockInfo.week52High, stockInfo.fiftyTwoWeekHigh);
   const low = firstNumber(stockInfo.priceLow52w, stockInfo.week52Low, stockInfo.fiftyTwoWeekLow);
-  const marketCap = firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap);
-  const volume = firstNumber(stockInfo.volume, tokenInfo.volume24h, root.volume);
   const stockDiffPct = pctDiff(displayPrice, stockPrice);
   const rawDiffPct = pctDiff(rawTokenPrice, displayPrice);
   const priceAuditAbsPct = stockDiffPct === null ? null : Math.abs(stockDiffPct);
   const discountRaw = high > 0 && displayPrice > 0 ? ((displayPrice - high) / high) * 100 : null;
   const discount = discountRaw === null ? null : Number(discountRaw.toFixed(1));
-  const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
   return {
     ...asset,
     price: displayPrice,
@@ -156,15 +150,17 @@ function normalize(asset, tokenMeta, dynamicResult) {
     stockPrice,
     high,
     low,
-    marketCap,
-    volume,
+    high52w: high,
+    low52w: low,
+    marketCap: firstNumber(stockInfo.marketCap, tokenInfo.marketCap, root.marketCap),
+    volume: firstNumber(stockInfo.volume, tokenInfo.volume24h, root.volume),
     sharesMultiplier,
     highType: "Binance 52週高點",
     lowType: "Binance 52週低點",
     priceSource: "Binance tokenInfo.price / sharesMultiplier",
     discount,
     discountRaw,
-    signal,
+    signal: discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts),
     binanceAudit: {
       status: auditStatus(priceAuditAbsPct),
       appPrice: displayPrice,
@@ -178,8 +174,8 @@ function normalize(asset, tokenMeta, dynamicResult) {
       chainId: dynamicResult?.chainId,
       contractAddress: dynamicResult?.contractAddress,
       checkedAt: new Date().toISOString(),
-      note: "App 價格=Binance tokenInfo.price / sharesMultiplier；與 stockInfo.price 比較作為自動稽核。"
-    }
+      note: "App 價格=Binance tokenInfo.price / sharesMultiplier；與 stockInfo.price 比較作為自動稽核。",
+    },
   };
 }
 
@@ -199,7 +195,6 @@ async function getBtcMarket(asset) {
     const cycleHigh = firstNumber(asset.cycleHigh);
     const discountRaw = cycleHigh > 0 && price > 0 ? ((price - cycleHigh) / cycleHigh) * 100 : null;
     const discount = discountRaw === null ? null : Number(discountRaw.toFixed(1));
-    const signal = discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts);
     return {
       ...asset,
       price,
@@ -207,10 +202,8 @@ async function getBtcMarket(asset) {
       tokenPrice: price,
       stockPrice: price,
       high: cycleHigh,
+      high52w: cycleHigh,
       cycleHigh,
-      cycleHighDate: asset.cycleHighDate,
-      cycleHighSource: asset.cycleHighSource,
-      cycleHighUpdateRule: asset.cycleHighUpdateRule,
       low: 0,
       marketCap: 0,
       volume: 0,
@@ -220,48 +213,43 @@ async function getBtcMarket(asset) {
       priceSource: "Binance Web BTCUSDT",
       discount,
       discountRaw,
-      signal,
-      binanceAudit: {
-        status: price > 0 && cycleHigh > 0 ? "PASS" : "MISSING_BTC_DATA",
-        appPrice: price,
-        rawTokenPrice: price,
-        stockPrice: price,
-        sharesMultiplier: 1,
-        latencyMs: priceResult.latencyMs || 0,
-        checkedAt: new Date().toISOString(),
-        note: `BTC 使用 Binance Web BTCUSDT 價格；Registry Cycle High=${cycleHigh} (${asset.cycleHighDate || "date missing"}) 作為 V17 anchor。`
-      }
+      signal: discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts),
+      binanceAudit: { status: price > 0 && cycleHigh > 0 ? "PASS" : "MISSING_BTC_DATA", checkedAt: new Date().toISOString(), latencyMs: priceResult.latencyMs || 0 },
     };
   } catch (error) {
     const cycleHigh = firstNumber(asset.cycleHigh);
-    return {
-      ...asset,
-      price: 0,
-      rawTokenPrice: 0,
-      tokenPrice: 0,
-      stockPrice: 0,
-      high: cycleHigh,
-      cycleHigh,
-      cycleHighDate: asset.cycleHighDate,
-      cycleHighSource: asset.cycleHighSource,
-      cycleHighUpdateRule: asset.cycleHighUpdateRule,
-      low: 0,
-      marketCap: 0,
-      volume: 0,
-      sharesMultiplier: 1,
-      highType: "BTC Cycle High",
-      lowType: "N/A",
-      priceSource: "Binance Web BTCUSDT",
-      discount: null,
-      discountRaw: null,
-      signal: { text: "BTC 資料未就緒", amount: "0U", level: 0 },
-      binanceAudit: {
-        status: "BTC_PROVIDER_ERROR",
-        checkedAt: new Date().toISOString(),
-        error: error.message
-      }
-    };
+    return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: cycleHigh, high52w: cycleHigh, low: 0, priceSource: "Binance Web BTCUSDT", discount: null, discountRaw: null, signal: { text: "BTC 資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "BTC_PROVIDER_ERROR", checkedAt: new Date().toISOString(), error: error.message } };
   }
+}
+
+function buildPaperStockAssetMap() {
+  const discountRules = getAllPaperDiscountRules();
+  return Object.fromEntries(PAPER_STOCK_SYMBOLS.map((symbol) => {
+    const rule = discountRules[symbol] || {};
+    return [symbol, {
+      symbol,
+      name: symbol,
+      assetType: "paper_stock",
+      engine: "paper_test",
+      strategy: "paper_discount_quote",
+      rules: rule.rules || [],
+      amounts: rule.amounts || [],
+      discountModel: "paper_stock_yahoo_quote_v1",
+      referenceMode: "52w_high_or_fallback",
+      profile: rule.profile || "paper_stock",
+      ruleNote: rule.note || "Market paper stock quote",
+    }];
+  }));
+}
+
+function dedupeBySymbol(rows = []) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = String(row?.symbol || "").toUpperCase();
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, row);
+  }
+  return [...map.values()];
 }
 
 export default async function handler(req, res) {
@@ -271,22 +259,41 @@ export default async function handler(req, res) {
   try {
     const watchlist = getWatchlist();
     const cryptoWatchlist = getCryptoWatchlist();
-    const tokenListResult = await getBinanceTokenList();
+    const paperStockAssetMap = buildPaperStockAssetMap();
+
+    const [tokenListResult, paperStockData] = await Promise.all([
+      getBinanceTokenList(),
+      fetchYahooStockQuotes(PAPER_STOCK_SYMBOLS, paperStockAssetMap),
+    ]);
+
     const tokenList = tokenListResult.list;
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
     const xstockData = await Promise.all(watchlist.map(async (asset) => {
       const tokenMeta = bySymbol.get(asset.symbol);
       if (!tokenMeta) {
-        return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: 0, low: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "Binance 52週高點", lowType: "Binance 52週低點", priceSource: "Binance tokenInfo.price / sharesMultiplier", discount: null, discountRaw: null, signal: { text: "資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() } };
+        return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: 0, low: 0, high52w: 0, low52w: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "Binance 52週高點", lowType: "Binance 52週低點", priceSource: "Binance tokenInfo.price / sharesMultiplier", discount: null, discountRaw: null, signal: { text: "資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() } };
       }
       const dynamic = await getBinanceDynamic(tokenMeta);
       return normalize(asset, tokenMeta, dynamic);
     }));
     const cryptoData = await Promise.all(cryptoWatchlist.map(getBtcMarket));
-    const data = [...cryptoData, ...xstockData];
-    const auditSummary = data.reduce((summary, item) => { const status = item.binanceAudit?.status || "UNKNOWN"; summary[status] = (summary[status] || 0) + 1; return summary; }, {});
-    res.status(200).json({ updatedAt: new Date().toISOString(), source: "Binance xStocks + Binance Web BTCUSDT｜V17 Asset Registry", sourceOfTruth: "lib/v17-asset-registry.js", count: data.length, cachePolicy: "no-store", binanceHealth: { ok: true, listStatus: tokenListResult.status, listLatencyMs: tokenListResult.latencyMs, auditSummary }, data });
+    const data = dedupeBySymbol([...cryptoData, ...xstockData, ...paperStockData]);
+    const auditSummary = data.reduce((summary, item) => {
+      const status = item.binanceAudit?.status || item.quoteAudit?.status || "UNKNOWN";
+      summary[status] = (summary[status] || 0) + 1;
+      return summary;
+    }, {});
+    res.status(200).json({
+      updatedAt: new Date().toISOString(),
+      source: "Binance xStocks + Binance Web BTCUSDT + Yahoo Finance paper stock quotes",
+      sourceOfTruth: "lib/v17-asset-registry.js + lib/v17-paper-stock-quotes.js",
+      count: data.length,
+      cachePolicy: "no-store",
+      binanceHealth: { ok: true, listStatus: tokenListResult.status, listLatencyMs: tokenListResult.latencyMs, auditSummary },
+      paperQuoteHealth: { symbols: PAPER_STOCK_SYMBOLS.length, auditSummary },
+      data,
+    });
   } catch (error) {
-    res.status(500).json({ error: "binance_prices_fetch_failed", message: error.message });
+    res.status(500).json({ error: "prices_fetch_failed", message: error.message });
   }
 }
