@@ -35,16 +35,6 @@ function normalizeKey(symbol) {
   return String(symbol || "").toUpperCase().replace(/ON$/, "");
 }
 
-function dedupePositions(rows = []) {
-  const seen = new Set();
-  return rows.filter((row) => {
-    const key = row.id || `${normalizeKey(row.symbol)}-${row.group || row.sourceType || "paper"}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function isCorePosition(row = {}) {
   const text = `${row.group || ""} ${row.sourceType || ""} ${row.source || ""}`;
   return /既有V17十檔|既有10檔|existing_ten/i.test(text);
@@ -59,18 +49,107 @@ function compactSource(row = {}) {
   return "紙上";
 }
 
-function PlaybookBlock({ playbook }) {
+function playbookScore(row = {}) {
+  const pb = row.playbook || {};
+  let score = 0;
+  if (row.discountModel) score += 4;
+  if (Array.isArray(row.rules) && row.rules.length) score += 4;
+  if (pb.buyPointRule) score += 3;
+  if (/折價層級|D1|參考高點/i.test(String(pb.entryRule || ""))) score += 2;
+  if (/不等待正式折價層級/i.test(String(pb.entryRule || ""))) score -= 10;
+  if (/sector|產業/i.test(`${row.sourceType || ""} ${row.group || ""}`)) score += 1;
+  return score;
+}
+
+function betterMeta(a = {}, b = {}) {
+  return playbookScore(b) >= playbookScore(a) ? b : a;
+}
+
+function aggregatePositionsBySymbol(rows = []) {
+  const map = new Map();
+  for (const row of rows || []) {
+    const key = normalizeKey(row.symbol);
+    if (!key) continue;
+    const cost = Number(row.amountUSDT || 0);
+    const qty = Number(row.quantity || 0);
+    const currentPrice = Number(row.currentPrice || row.price || 0);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        ...row,
+        id: `AGG-${key}`,
+        lots: [row],
+        lotCount: 1,
+        amountUSDT: cost,
+        quantity: qty,
+        currentPrice,
+        price: qty > 0 ? cost / qty : Number(row.price || 0),
+      });
+      continue;
+    }
+    const meta = betterMeta(existing, row);
+    const amountUSDT = Number(existing.amountUSDT || 0) + cost;
+    const quantity = Number(existing.quantity || 0) + qty;
+    const merged = {
+      ...existing,
+      ...meta,
+      id: `AGG-${key}`,
+      symbol: existing.symbol || row.symbol,
+      name: meta.name || existing.name || row.name,
+      group: meta.group || existing.group || row.group,
+      sourceType: meta.sourceType || existing.sourceType || row.sourceType,
+      tier: meta.tier || existing.tier || row.tier,
+      quality: meta.quality || existing.quality || row.quality,
+      score: meta.score || meta.totalScore || existing.score || existing.totalScore || row.score || row.totalScore,
+      bucket: meta.bucket || existing.bucket || row.bucket,
+      playbook: meta.playbook || existing.playbook || row.playbook,
+      discountModel: meta.discountModel || existing.discountModel || row.discountModel,
+      referenceMode: meta.referenceMode || existing.referenceMode || row.referenceMode,
+      profile: meta.profile || existing.profile || row.profile,
+      rules: meta.rules || existing.rules || row.rules,
+      amounts: meta.amounts || existing.amounts || row.amounts,
+      ruleNote: meta.ruleNote || existing.ruleNote || row.ruleNote,
+      lots: [...(existing.lots || []), row],
+      lotCount: Number(existing.lotCount || 1) + 1,
+      amountUSDT,
+      quantity,
+      currentPrice: currentPrice || existing.currentPrice,
+      price: quantity > 0 ? amountUSDT / quantity : existing.price,
+    };
+    map.set(key, merged);
+  }
+  return [...map.values()].map((row) => {
+    const currentValue = Number(row.currentPrice || 0) * Number(row.quantity || 0);
+    const cost = Number(row.amountUSDT || 0);
+    const pnl = currentValue - cost;
+    const pnlPct = cost > 0 ? pnl / cost : 0;
+    return { ...row, currentValue, pnl, pnlPct };
+  });
+}
+
+function sumRows(rows = []) {
+  return rows.reduce((acc, row) => {
+    acc.cost += Number(row.amountUSDT || 0);
+    acc.value += Number(row.currentValue || 0);
+    acc.pnl += Number(row.pnl || 0);
+    acc.lots += Number(row.lotCount || 1);
+    return acc;
+  }, { cost: 0, value: 0, pnl: 0, lots: 0 });
+}
+
+function PlaybookBlock({ row }) {
+  const playbook = row?.playbook;
   if (!playbook) return null;
+  const entry = playbook.buyPointRule || playbook.entryRule;
   const rows = [
-    ["假設", playbook.thesis],
-    ["買點", playbook.entryRule || playbook.buyPointRule],
+    ["買點", entry],
     ["資金", playbook.sizing],
     ["風控", playbook.riskRule],
     ["檢查", playbook.exitRule],
     ["不上真倉", playbook.whyNotReal],
   ];
   return <details style={{ marginTop: 8, borderTop: "1px solid rgba(148,163,184,.12)", paddingTop: 7 }}>
-    <summary style={{ cursor: "pointer", color: "#93c5fd", fontWeight: 1000, fontSize: 12 }}>📘 Playbook</summary>
+    <summary style={{ cursor: "pointer", color: "#93c5fd", fontWeight: 1000, fontSize: 12 }}>📘 Playbook / 買點規則</summary>
     <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
       {rows.map(([label, value]) => <div key={label} style={{ padding: 8, borderRadius: 10, background: "rgba(15,23,42,.70)", border: "1px solid rgba(148,163,184,.10)" }}>
         <div style={{ color: "#fde68a", fontSize: 10, fontWeight: 1000 }}>{label}</div>
@@ -98,6 +177,7 @@ function CompactPositionCard({ row }) {
 
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
       <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{compactSource(row)}</span>
+      <span style={{ color: "#fde68a", background: "rgba(245,158,11,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.lotCount || 1}筆</span>
       {row.tier ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.10)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.tier}</span> : null}
       {row.quality ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.10)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.quality}</span> : null}
       {score ? <span style={{ color: "#fde68a", background: "rgba(245,158,11,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{score}分</span> : null}
@@ -105,13 +185,17 @@ function CompactPositionCard({ row }) {
     </div>
 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 9, color: "#cbd5e1" }}>
-      <MiniStat label="成本" value={`$${n(row.amountUSDT)}`} />
+      <MiniStat label="總成本" value={`$${n(row.amountUSDT)}`} />
       <MiniStat label="市值" value={`$${n(row.currentValue)}`} />
       <MiniStat label="損益" value={`$${n(row.pnl)}`} color={pnlColor} />
       <MiniStat label="現價" value={`$${n(row.currentPrice, 2)}`} />
+      <MiniStat label="均價" value={`$${n(row.price, 2)}`} />
+      <MiniStat label="股數" value={n(row.quantity, 4)} />
+      <MiniStat label="批次" value={`${row.lotCount || 1}`} />
+      <MiniStat label="真倉" value="禁止" />
     </div>
 
-    <PlaybookBlock playbook={row.playbook} />
+    <PlaybookBlock row={row} />
   </div>;
 }
 
@@ -124,11 +208,16 @@ function MiniStat({ label, value, color = "#cbd5e1" }) {
 
 function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true }) {
   if (!rows.length) return null;
-  return <Box title={`${title}（${rows.length}）`} tone={tone}>
+  const sums = sumRows(rows);
+  const pnlPct = sums.cost > 0 ? sums.pnl / sums.cost : 0;
+  return <Box title={`${title}（${rows.length}檔 / ${sums.lots}筆）`} tone={tone}>
+    <div style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
+      成本 ${n(sums.cost)}｜市值 ${n(sums.value)}｜損益 ${n(sums.pnl)}｜報酬 {n(pnlPct * 100)}%
+    </div>
     <details open={defaultOpen}>
       <summary style={{ cursor: "pointer", color: "#bfdbfe", fontWeight: 1000, fontSize: 13 }}>展開 / 收合卡片</summary>
       <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-        {rows.map((row) => <CompactPositionCard key={row.id || row.symbol} row={row} />)}
+        {rows.map((row) => <CompactPositionCard key={row.symbol} row={row} />)}
       </div>
     </details>
   </Box>;
@@ -190,12 +279,14 @@ export default function PaperAutoPage() {
 
   useEffect(() => { load(); }, []);
 
-  const s = summary?.summary || {};
-  const pnlColor = Number(s.pnl || 0) >= 0 ? "#bbf7d0" : "#fecaca";
-  const positions = useMemo(() => dedupePositions(summary?.positions || []), [summary?.positions]);
-  const corePositions = useMemo(() => positions.filter(isCorePosition), [positions]);
-  const candidatePositions = useMemo(() => positions.filter((row) => !isCorePosition(row)), [positions]);
-  const market45PaperCount = summary?.market45PaperCandidates?.length || s.market45CandidateCount || 0;
+  const groupedPositions = useMemo(() => aggregatePositionsBySymbol(summary?.positions || []), [summary?.positions]);
+  const corePositions = useMemo(() => groupedPositions.filter(isCorePosition), [groupedPositions]);
+  const candidatePositions = useMemo(() => groupedPositions.filter((row) => !isCorePosition(row)), [groupedPositions]);
+  const portfolio = useMemo(() => sumRows(groupedPositions), [groupedPositions]);
+  const pnlColor = Number(portfolio.pnl || 0) >= 0 ? "#bbf7d0" : "#fecaca";
+  const portfolioPnlPct = portfolio.cost > 0 ? portfolio.pnl / portfolio.cost : 0;
+  const rawLotCount = summary?.summary?.openTrades || portfolio.lots || 0;
+  const market45PaperCount = summary?.market45PaperCandidates?.length || summary?.summary?.market45CandidateCount || 0;
   const sourceCounts = useMemo(() => candidatePositions.reduce((acc, row) => {
     const key = compactSource(row);
     acc[key] = (acc[key] || 0) + 1;
@@ -208,7 +299,7 @@ export default function PaperAutoPage() {
       <header style={{ marginTop: 18, marginBottom: 14 }}>
         <div style={{ color: "#22c55e", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17 紙上交易自動測試</div>
         <h1 style={{ fontSize: 30, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>紙上交易總控台</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.5, fontWeight: 850, margin: 0 }}>已瘦身：只看核心、候選、封鎖三類；Playbook 預設收合；不會送出任何真實訂單。</p>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.5, fontWeight: 850, margin: 0 }}>績效已改為依股票代號合併：同一檔多筆 lot 只顯示一張卡，成本與損益加總計算。</p>
       </header>
 
       {error && <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{error}</div></Box>}
@@ -217,15 +308,19 @@ export default function PaperAutoPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850, fontSize: 13 }}>
           <div>模式：{summary?.settings?.mode || "AUTO_PAPER"}</div>
           <div>週期：{summary?.settings?.testDays || 7} 天</div>
-          <div>開放部位：{s.openTrades || positions.length || 0}</div>
-          <div>投入成本：${n(s.cost)}</div>
-          <div>目前市值：${n(s.value)}</div>
-          <div>損益：<strong style={{ color: pnlColor }}>${n(s.pnl)}</strong></div>
-          <div>報酬率：<strong style={{ color: pnlColor }}>{n((s.pnlPct || 0) * 100)}%</strong></div>
+          <div>標的數：{groupedPositions.length} 檔</div>
+          <div>紙上批次：{rawLotCount} 筆</div>
+          <div>投入成本：${n(portfolio.cost)}</div>
+          <div>目前市值：${n(portfolio.value)}</div>
+          <div>損益：<strong style={{ color: pnlColor }}>${n(portfolio.pnl)}</strong></div>
+          <div>報酬率：<strong style={{ color: pnlColor }}>{n(portfolioPnlPct * 100)}%</strong></div>
           <div>真實下單：禁止</div>
         </div>
         <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>
           核心 {corePositions.length} 檔｜新增候選 {candidatePositions.length} 檔｜Market45 {market45PaperCount} 檔｜M91 {sourceCounts.M91 || 0}｜M10 {sourceCounts.M10 || 0}｜產業 {sourceCounts["產業"] || 0}
+        </div>
+        <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 8, lineHeight: 1.5 }}>
+          計算：總成本 = 各 lot 金額加總；市值 = 總股數 × 現價；損益 = 市值 - 成本；報酬率 = 損益 ÷ 成本。
         </div>
       </Box>
 
@@ -241,7 +336,7 @@ export default function PaperAutoPage() {
           <div>Market45：{market45?.covered || 0}/{market45?.total || 45}，{statusText(market45?.status)}</div>
           <div>缺資料：{market45?.missingCount ?? 0} 檔</div>
           <div>紙上交易候選：{market45PaperCount} 檔</div>
-          <div>頁面規則：不再重複顯示候選卡片，只顯示實際紙上部位。</div>
+          <div>頁面規則：同一股票合併顯示，不再用 lot 數灌水。</div>
         </div>
       </Box>
 
