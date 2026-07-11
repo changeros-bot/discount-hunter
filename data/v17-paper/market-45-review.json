@@ -1,0 +1,16 @@
+{
+  "updatedAt": null,
+  "total": 45,
+  "formalWatchTarget": "10-15",
+  "paperTestTarget": "3-5",
+  "paperTestDays": 7,
+  "status": "pending_consolidation",
+  "buckets": {
+    "正式觀察": [],
+    "次級觀察": [],
+    "工具股_題材股": [],
+    "封鎖": [],
+    "缺資料": []
+  },
+  "note": "Market 91 / 45-name review needs batch scores consolidated into this file or API output. Existing V17 ten assets are already eligible for paper test separately."
+}
