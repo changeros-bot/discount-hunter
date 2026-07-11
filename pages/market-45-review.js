@@ -27,6 +27,8 @@ function RowCard({ row, final = false }) {
     <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap", gap: 5 }}>
       {final && row.finalRank ? <span style={{ color: "#f8fafc", background: "rgba(245,158,11,.16)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>#{row.finalRank}</span> : null}
       {row.finalBucket ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>{row.finalBucket}</span> : null}
+      {row.evidenceState ? <span style={{ color: row.evidenceState === "VERIFIED" ? "#bbf7d0" : "#fde68a", background: "rgba(245,158,11,.10)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>Evidence：{row.evidenceState}</span> : null}
+      {row.hasBlocker ? <span style={{ color: "#fecaca", background: "rgba(248,113,113,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 1000 }}>Blocker</span> : null}
       {row.bucket ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.bucket}</span> : null}
       {row.quality ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.quality}</span> : null}
       {row.tier ? <span style={{ color: "#ddd6fe", background: "rgba(168,85,247,.12)", padding: "4px 7px", borderRadius: 999, fontSize: 11, fontWeight: 900 }}>{row.tier}</span> : null}
@@ -67,8 +69,8 @@ export default function Market45Review() {
       <a href="/v17" style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 900 }}>← 返回折價獵人 V17</a>
       <header style={{ marginTop: 18, marginBottom: 18 }}>
         <div style={{ color: "#22c55e", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>Market 45 最終篩選</div>
-        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>45 檔最終篩選結果</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>45 檔完成收斂後，固定 5 檔進 7 天紙上交易、10 檔進正式觀察，其餘不進自動化。</p>
+        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>45 檔門檻式篩選結果</h1>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.55, fontWeight: 850, margin: 0 }}>紙上交易與正式觀察採浮動名額：符合分數、Quality Gate、Evidence 與 Blocker 條件幾檔，就是幾檔；不湊數、不硬砍。</p>
       </header>
       {error && <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{error}</div></Box>}
       <Box title="完成狀態" tone={useFinal ? "green" : "yellow"}>
@@ -82,6 +84,10 @@ export default function Market45Review() {
         </div>
         {data?.completionText ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900, lineHeight: 1.5 }}>{data.completionText}</div> : null}
         {data?.finalRules?.rule ? <div style={{ marginTop: 8, color: "#fde68a", fontWeight: 850, lineHeight: 1.5 }}>{data.finalRules.rule}</div> : null}
+        <div style={{ marginTop: 8, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.5 }}>
+          紙上門檻：{data?.finalRules?.paperQualityGate || "—"}<br />
+          正式觀察門檻：{data?.finalRules?.formalWatchGate || "—"}
+        </div>
       </Box>
       <Box title="最終分類統計" tone="blue">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850 }}>
