@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { getMarket45EvidenceRegistry } from "../lib/v17-market-45-evidence-registry";
+import { readMarket45Review } from "../lib/v17-paper-engine";
+import { finalizeMarket45Review } from "../lib/v17-market-45-finalizer";
 
 function Box({ title, children, tone = "blue" }) {
   const border = tone === "green" ? "rgba(34,197,94,.38)" : tone === "red" ? "rgba(248,113,113,.36)" : tone === "yellow" ? "rgba(245,158,11,.34)" : "rgba(59,130,246,.30)";
@@ -39,9 +42,9 @@ function EvidenceCard({ row }) {
   </div>;
 }
 
-export default function Market45EvidencePage() {
-  const [data, setData] = useState(null);
-  const [review, setReview] = useState(null);
+export default function Market45EvidencePage({ initialData, initialReview }) {
+  const [data, setData] = useState(initialData || null);
+  const [review, setReview] = useState(initialReview || null);
   const [error, setError] = useState("");
 
   async function load() {
@@ -100,4 +103,15 @@ export default function Market45EvidencePage() {
       </Box>
     </div>
   </main>;
+}
+
+export async function getServerSideProps() {
+  const evidence = getMarket45EvidenceRegistry();
+  const review = finalizeMarket45Review(await readMarket45Review());
+  return {
+    props: {
+      initialData: JSON.parse(JSON.stringify({ ok: true, ...evidence })),
+      initialReview: JSON.parse(JSON.stringify({ ok: true, ...review })),
+    },
+  };
 }
