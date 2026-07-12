@@ -41,11 +41,11 @@ function isCorePosition(row = {}) {
 }
 
 function compactSource(row = {}) {
-  if (isCorePosition(row)) return "核心";
-  if (/market10/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "M10";
-  if (/market91/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "M91";
-  if (/產業|sector/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "產業";
-  if (/market45/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "M45";
+  if (isCorePosition(row)) return "核心10檔";
+  if (/market10/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "M10紙上";
+  if (/market91/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "M91紙上";
+  if (/產業|sector/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "產業紙上";
+  if (/market45/i.test(`${row.group || ""} ${row.sourceType || ""}`)) return "M45紙上";
   return "紙上";
 }
 
@@ -75,22 +75,13 @@ function aggregatePositionsBySymbol(rows = []) {
     const currentPrice = Number(row.currentPrice || row.price || 0);
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, {
-        ...row,
-        id: `AGG-${key}`,
-        lots: [row],
-        lotCount: 1,
-        amountUSDT: cost,
-        quantity: qty,
-        currentPrice,
-        price: qty > 0 ? cost / qty : Number(row.price || 0),
-      });
+      map.set(key, { ...row, id: `AGG-${key}`, lots: [row], lotCount: 1, amountUSDT: cost, quantity: qty, currentPrice, price: qty > 0 ? cost / qty : Number(row.price || 0) });
       continue;
     }
     const meta = betterMeta(existing, row);
     const amountUSDT = Number(existing.amountUSDT || 0) + cost;
     const quantity = Number(existing.quantity || 0) + qty;
-    const merged = {
+    map.set(key, {
       ...existing,
       ...meta,
       id: `AGG-${key}`,
@@ -115,8 +106,7 @@ function aggregatePositionsBySymbol(rows = []) {
       quantity,
       currentPrice: currentPrice || existing.currentPrice,
       price: quantity > 0 ? amountUSDT / quantity : existing.price,
-    };
-    map.set(key, merged);
+    });
   }
   return [...map.values()].map((row) => {
     const currentValue = Number(row.currentPrice || 0) * Number(row.quantity || 0);
@@ -135,6 +125,19 @@ function sumRows(rows = []) {
     acc.lots += Number(row.lotCount || 1);
     return acc;
   }, { cost: 0, value: 0, pnl: 0, lots: 0 });
+}
+
+function daysSince(row = {}) {
+  const raw = row.repairedAt || row.createdAt || row.dateKey;
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+
+function validationText(row = {}) {
+  const d = daysSince(row);
+  const remain = Math.max(0, 28 - d);
+  return remain > 0 ? `4週驗證中｜已 ${d} 天｜剩 ${remain} 天` : "已滿4週，可進下一階段覆核";
 }
 
 function PlaybookBlock({ row }) {
@@ -159,7 +162,7 @@ function PlaybookBlock({ row }) {
   </details>;
 }
 
-function CompactPositionCard({ row }) {
+function CompactPositionCard({ row, paperOnly = false }) {
   const pnl = Number(row.pnl || 0);
   const pnlColor = pnl >= 0 ? "#bbf7d0" : "#fecaca";
   const score = row.score || row.totalScore;
@@ -170,10 +173,14 @@ function CompactPositionCard({ row }) {
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 2 }}>{row.name || row.bucket || "—"}</div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ color: "#bbf7d0", fontSize: 11, fontWeight: 1000 }}>測試中</div>
+        <div style={{ color: "#fde68a", fontSize: 11, fontWeight: 1000 }}>{paperOnly ? "紙上驗證" : "測試中"}</div>
         <div style={{ color: pnlColor, fontSize: 13, fontWeight: 1000 }}>{n((row.pnlPct || 0) * 100)}%</div>
       </div>
     </div>
+
+    {paperOnly ? <div style={{ marginTop: 8, padding: "7px 9px", borderRadius: 12, background: "rgba(245,158,11,.12)", color: "#fde68a", fontSize: 11, fontWeight: 1000, lineHeight: 1.45 }}>
+      {validationText(row)}｜未滿 4 週不得進折扣獵人觀察區
+    </div> : null}
 
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
       <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{compactSource(row)}</span>
@@ -206,7 +213,7 @@ function MiniStat({ label, value, color = "#cbd5e1" }) {
   </div>;
 }
 
-function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true }) {
+function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true, paperOnly = false }) {
   if (!rows.length) return null;
   const sums = sumRows(rows);
   const pnlPct = sums.cost > 0 ? sums.pnl / sums.cost : 0;
@@ -214,10 +221,13 @@ function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true }
     <div style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
       成本 ${n(sums.cost)}｜市值 ${n(sums.value)}｜損益 ${n(sums.pnl)}｜報酬 {n(pnlPct * 100)}%
     </div>
+    {paperOnly ? <div style={{ marginBottom: 8, color: "#fde68a", background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.22)", borderRadius: 12, padding: 9, fontSize: 12, fontWeight: 950, lineHeight: 1.5 }}>
+      本區只放未滿 4 週的測試標的；不得顯示在折扣獵人觀察區，不得成為真實買入或自動交易名單。
+    </div> : null}
     <details open={defaultOpen}>
       <summary style={{ cursor: "pointer", color: "#bfdbfe", fontWeight: 1000, fontSize: 13 }}>展開 / 收合卡片</summary>
       <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-        {rows.map((row) => <CompactPositionCard key={row.symbol} row={row} />)}
+        {rows.map((row) => <CompactPositionCard key={row.symbol} row={row} paperOnly={paperOnly} />)}
       </div>
     </details>
   </Box>;
@@ -281,17 +291,16 @@ export default function PaperAutoPage() {
 
   const groupedPositions = useMemo(() => aggregatePositionsBySymbol(summary?.positions || []), [summary?.positions]);
   const corePositions = useMemo(() => groupedPositions.filter(isCorePosition), [groupedPositions]);
-  const candidatePositions = useMemo(() => groupedPositions.filter((row) => !isCorePosition(row)), [groupedPositions]);
+  const paperValidationPositions = useMemo(() => groupedPositions.filter((row) => !isCorePosition(row)), [groupedPositions]);
   const portfolio = useMemo(() => sumRows(groupedPositions), [groupedPositions]);
   const pnlColor = Number(portfolio.pnl || 0) >= 0 ? "#bbf7d0" : "#fecaca";
   const portfolioPnlPct = portfolio.cost > 0 ? portfolio.pnl / portfolio.cost : 0;
   const rawLotCount = summary?.summary?.openTrades || portfolio.lots || 0;
-  const market45PaperCount = summary?.market45PaperCandidates?.length || summary?.summary?.market45CandidateCount || 0;
-  const sourceCounts = useMemo(() => candidatePositions.reduce((acc, row) => {
+  const sourceCounts = useMemo(() => paperValidationPositions.reduce((acc, row) => {
     const key = compactSource(row);
     acc[key] = (acc[key] || 0) + 1;
     return acc;
-  }, {}), [candidatePositions]);
+  }, {}), [paperValidationPositions]);
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "22px 14px 40px" }}>
@@ -299,7 +308,7 @@ export default function PaperAutoPage() {
       <header style={{ marginTop: 18, marginBottom: 14 }}>
         <div style={{ color: "#22c55e", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17 紙上交易自動測試</div>
         <h1 style={{ fontSize: 30, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>紙上交易總控台</h1>
-        <p style={{ color: "#cbd5e1", lineHeight: 1.5, fontWeight: 850, margin: 0 }}>績效已改為依股票代號合併：同一檔多筆 lot 只顯示一張卡，成本與損益加總計算。</p>
+        <p style={{ color: "#cbd5e1", lineHeight: 1.5, fontWeight: 850, margin: 0 }}>折扣獵人主頁只放正式上線 10 檔；所有未滿 4 週的候選都留在本頁紙上驗證區。</p>
       </header>
 
       {error && <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{error}</div></Box>}
@@ -307,8 +316,9 @@ export default function PaperAutoPage() {
       <Box title="總覽" tone="green">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850, fontSize: 13 }}>
           <div>模式：{summary?.settings?.mode || "AUTO_PAPER"}</div>
-          <div>週期：{summary?.settings?.testDays || 7} 天</div>
-          <div>標的數：{groupedPositions.length} 檔</div>
+          <div>驗證期：4 週</div>
+          <div>核心正式：{corePositions.length} 檔</div>
+          <div>紙上候選：{paperValidationPositions.length} 檔</div>
           <div>紙上批次：{rawLotCount} 筆</div>
           <div>投入成本：${n(portfolio.cost)}</div>
           <div>目前市值：${n(portfolio.value)}</div>
@@ -317,7 +327,7 @@ export default function PaperAutoPage() {
           <div>真實下單：禁止</div>
         </div>
         <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>
-          核心 {corePositions.length} 檔｜新增候選 {candidatePositions.length} 檔｜Market45 {market45PaperCount} 檔｜M91 {sourceCounts.M91 || 0}｜M10 {sourceCounts.M10 || 0}｜產業 {sourceCounts["產業"] || 0}
+          核心10檔 {corePositions.length}｜4週紙上 {paperValidationPositions.length}｜M45 {sourceCounts["M45紙上"] || 0}｜M91 {sourceCounts["M91紙上"] || 0}｜M10 {sourceCounts["M10紙上"] || 0}｜產業 {sourceCounts["產業紙上"] || 0}
         </div>
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 8, lineHeight: 1.5 }}>
           計算：總成本 = 各 lot 金額加總；市值 = 總股數 × 現價；損益 = 市值 - 成本；報酬率 = 損益 ÷ 成本。
@@ -331,17 +341,17 @@ export default function PaperAutoPage() {
         {lastRun?.skipped?.length ? <div style={{ marginTop: 8, color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>略過原因：{lastRun.skipped.slice(0, 6).map((x) => `${x.symbol}:${x.reason}`).join("；")}</div> : null}
       </Box>
 
-      <Box title="收斂進度" tone="yellow">
+      <Box title="收斂規則" tone="yellow">
         <div style={{ color: "#cbd5e1", fontWeight: 850, lineHeight: 1.6, fontSize: 13 }}>
+          <div>折扣獵人主頁：只放目前正式上線 10 檔。</div>
+          <div>紙上候選：必須先在本頁跑滿 4 週。</div>
+          <div>未滿 4 週：不得進折扣獵人觀察區、不得真實下單、不得自動交易。</div>
           <div>Market45：{market45?.covered || 0}/{market45?.total || 45}，{statusText(market45?.status)}</div>
-          <div>缺資料：{market45?.missingCount ?? 0} 檔</div>
-          <div>紙上交易候選：{market45PaperCount} 檔</div>
-          <div>頁面規則：同一股票合併顯示，不再用 lot 數灌水。</div>
         </div>
       </Box>
 
-      <PositionSection title="核心持倉紙上測試" rows={corePositions} tone="blue" defaultOpen={false} />
-      <PositionSection title="新增候選紙上測試" rows={candidatePositions} tone="green" defaultOpen />
+      <PositionSection title="核心正式10檔紙上追蹤" rows={corePositions} tone="blue" defaultOpen={false} />
+      <PositionSection title="4週紙上驗證區" rows={paperValidationPositions} tone="green" defaultOpen paperOnly />
       <BlockedList market45={market45} />
     </div>
   </main>;
