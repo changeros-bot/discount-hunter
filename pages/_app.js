@@ -135,7 +135,7 @@ function addFinancialDateShortcuts() {
   const row = document.createElement("div");
   row.setAttribute("data-financial-date-shortcuts", "true");
   row.style.display = "grid";
-  row.style.gridTemplateColumns = "repeat(2, 1fr)";
+  row.style.gridTemplateColumns = "repeat(3, 1fr)";
   row.style.gap = "7px";
   row.style.marginTop = "10px";
   const now = new Date();
@@ -144,7 +144,6 @@ function addFinancialDateShortcuts() {
     const last = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
     return [first, offset === 0 ? now : last];
   };
-  const juneRange = () => [new Date(2026, 5, 1), new Date(2026, 5, 30)];
   const payrollRange = () => {
     const start = new Date(now.getFullYear(), now.getDate() >= 10 ? now.getMonth() : now.getMonth() - 1, 10);
     return [start, now];
@@ -152,8 +151,7 @@ function addFinancialDateShortcuts() {
   const makeRange = {
     "本月": () => monthRange(0),
     "上月": () => monthRange(-1),
-    "6月": juneRange,
-    "薪轉週期": payrollRange,
+    "發薪後": payrollRange,
   };
   for (const label of Object.keys(makeRange)) {
     const btn = document.createElement("button");
