@@ -136,6 +136,41 @@ function addV17PaperLinks() {
   autoCard.appendChild(row);
 }
 
+function addPaperApprovalGate() {
+  if (typeof document === "undefined") return;
+  if (!location.pathname.startsWith("/paper-auto")) return;
+
+  const textNodes = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  for (const node of textNodes) {
+    const value = node.nodeValue || "";
+    const next = value
+      .replaceAll("已滿4週，可進下一階段覆核", "已滿4週，只取得升格提案資格；必須 Josh 明確同意才可進折扣獵人")
+      .replaceAll("未滿 4 週不得進折扣獵人觀察區", "未滿4週不得進折扣獵人；滿4週也只取得提案資格，必須 Josh 明確同意才可升格")
+      .replaceAll("不得顯示在折扣獵人觀察區，不得成為真實買入或自動交易名單。", "不得顯示在折扣獵人觀察區；滿4週後也只能提出升格建議，必須 Josh 明確同意，才可進折扣獵人正式名單。")
+      .replaceAll("未滿 4 週：不得進折扣獵人觀察區、不得真實下單、不得自動交易。", "未滿4週：不得進折扣獵人；滿4週：只取得提案資格；進折扣獵人必須 Josh 明確同意。不得真實下單、不得自動交易。");
+    if (next !== value) node.nodeValue = next;
+  }
+
+  if (document.querySelector("[data-paper-approval-gate='true']")) return;
+  const header = document.querySelector("main header");
+  if (!header) return;
+  const gate = document.createElement("section");
+  gate.setAttribute("data-paper-approval-gate", "true");
+  gate.style.marginTop = "12px";
+  gate.style.border = "1px solid rgba(245,158,11,.40)";
+  gate.style.background = "rgba(245,158,11,.10)";
+  gate.style.borderRadius = "16px";
+  gate.style.padding = "11px";
+  gate.style.color = "#fde68a";
+  gate.style.fontSize = "12px";
+  gate.style.fontWeight = "1000";
+  gate.style.lineHeight = "1.55";
+  gate.textContent = "升格閘門：4週紙上驗證通過 ≠ 自動進折扣獵人；只能提出升格建議。必須 Josh 明確同意，才可進折扣獵人正式名單 / 觀察區 / 主頁。";
+  header.insertAdjacentElement("afterend", gate);
+}
+
 function localizeNode(root) {
   if (typeof document === "undefined" || !root) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -156,6 +191,7 @@ function localizeNode(root) {
   }
   hideTransitionalCards(root.nodeType === 1 ? root : document.body);
   addV17PaperLinks();
+  addPaperApprovalGate();
 }
 
 export default function App({ Component, pageProps }) {
@@ -173,6 +209,7 @@ export default function App({ Component, pageProps }) {
       }
       hideTransitionalCards(document.body);
       addV17PaperLinks();
+      addPaperApprovalGate();
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
