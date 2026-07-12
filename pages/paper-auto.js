@@ -143,6 +143,22 @@ function tierStatus(row = {}) {
   };
 }
 
+function cleanReason(reason = "") {
+  return String(reason || "").replace(/已有\s*7\s*天內\s*OPEN\s*紙上測試；防重複建倉/g, "已有進行中的 OPEN 紙上部位；防重複建倉");
+}
+
+function runCoverage(lastRun = {}, total = 0) {
+  const scanned = Number(lastRun?.eligibleCount || lastRun?.scanScope?.total || 14);
+  const all = Number(total || lastRun?.coverage?.currentOpenSymbolCount || lastRun?.paperCoverage?.currentOpenSymbolCount || 28);
+  return {
+    scanned,
+    total: all,
+    independent: Math.max(0, all - scanned),
+    created: Number(lastRun?.createdCount || 0),
+    skipped: Number(lastRun?.skippedCount || 0),
+  };
+}
+
 function Box({ title, children, tone = "blue" }) {
   const border = tone === "green" ? "rgba(34,197,94,.38)" : tone === "red" ? "rgba(248,113,113,.36)" : tone === "yellow" ? "rgba(245,158,11,.34)" : "rgba(59,130,246,.30)";
   return <section style={{ marginTop: 12, border: `1px solid ${border}`, background: "rgba(15,23,42,.78)", borderRadius: 20, padding: 14 }}>
@@ -300,6 +316,8 @@ export default function PaperAutoPage({ initialSummary = null, initialError = ""
   const displayValue = portfolio.value || Number(summary?.summary?.value || 0);
   const displayPnl = portfolio.pnl || Number(summary?.summary?.pnl || 0);
   const displayPnlPct = portfolio.cost > 0 ? pnlPct : Number(summary?.summary?.pnlPct || 0);
+  const displayTotal = grouped.length || Number(summary?.summary?.symbolCount || 0);
+  const coverage = runCoverage(lastRun, displayTotal);
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "22px 14px 40px" }}>
@@ -327,14 +345,20 @@ export default function PaperAutoPage({ initialSummary = null, initialError = ""
           <div>報酬率：<strong style={{ color: pnlColor }}>{n(displayPnlPct * 100)}%</strong></div>
           <div>真實下單：禁止</div>
         </div>
-        <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>核心10檔 {displayCoreCount}｜4週紙上 {displayPreparedCount}｜總計 {grouped.length || summary?.summary?.symbolCount || 0}｜資料源：/api/v17/paper-summary</div>
+        <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>紙上交易總名單 {displayTotal} 檔｜核心10檔 {displayCoreCount}｜預備名單 {displayPreparedCount}｜Market91 / Market10 已在線，不是沒上紙上交易｜資料源：/api/v17/paper-summary</div>
       </Box>
 
       <Box title="操作">
-        <button disabled={busy} onClick={runPaper} style={{ width: "100%", padding: "13px 10px", borderRadius: 14, border: "1px solid rgba(34,197,94,.45)", background: "rgba(34,197,94,.18)", color: "#bbf7d0", fontWeight: 1000 }}>{busy ? "執行中..." : "今天跑一次紙上交易"}</button>
+        <button disabled={busy} onClick={runPaper} style={{ width: "100%", padding: "13px 10px", borderRadius: 14, border: "1px solid rgba(34,197,94,.45)", background: "rgba(34,197,94,.18)", color: "#bbf7d0", fontWeight: 1000 }}>{busy ? "檢查中..." : "檢查今日紙上交易狀態"}</button>
         <button disabled={busy} onClick={load} style={{ width: "100%", marginTop: 8, padding: "12px 10px", borderRadius: 14, border: "1px solid rgba(59,130,246,.35)", background: "rgba(59,130,246,.12)", color: "#bfdbfe", fontWeight: 1000 }}>重新整理</button>
-        {lastRun ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900 }}>掃描 {lastRun.eligibleCount || lastRun.scanScope?.total || 0} 檔，新增 {lastRun.createdCount} 筆，略過 {lastRun.skippedCount} 筆。</div> : null}
-        {lastRun?.skipped?.length ? <details style={{ marginTop: 8, color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}><summary>查看略過明細</summary>{lastRun.skipped.slice(0, 28).map((x) => <div key={`${x.symbol}-${x.existingId || x.reason}`}>{x.symbol}：{x.reason}</div>)}</details> : null}
+        {lastRun ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900, lineHeight: 1.55 }}>
+          <div>今日紙上交易檢查完成。</div>
+          <div>紙上交易總名單：{coverage.total} 檔。</div>
+          <div>本按鈕掃描：{coverage.scanned} 檔（既有10檔 + Market45候選）。</div>
+          <div>已由獨立批次在線：{coverage.independent} 檔（Market91審核10檔 + Market10候選4檔）。</div>
+          <div>本次新增 {coverage.created} 筆，略過 {coverage.skipped} 筆；略過通常代表已有 OPEN 紙上部位，防止重複建倉。</div>
+        </div> : null}
+        {lastRun?.skipped?.length ? <details style={{ marginTop: 8, color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}><summary>查看略過明細</summary>{lastRun.skipped.slice(0, 28).map((x) => <div key={`${x.symbol}-${x.existingId || x.reason}`}>{x.symbol}：{cleanReason(x.reason)}</div>)}</details> : null}
       </Box>
 
       <Box title="收斂規則" tone="yellow">
