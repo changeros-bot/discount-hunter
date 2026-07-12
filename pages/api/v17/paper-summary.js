@@ -1,5 +1,5 @@
 import { getPaperSummary } from "../../../lib/v17-paper-engine";
-import { fetchYahooStockQuotes, PAPER_STOCK_SYMBOLS } from "../../../lib/v17-paper-stock-quotes";
+import { fetchPaperStockQuotes, PAPER_STOCK_SYMBOLS } from "../../../lib/v17-paper-stock-quotes";
 import { getAllPaperDiscountRules } from "../../../lib/v17-paper-discount-rules";
 
 function buildPaperStockAssetMap() {
@@ -29,7 +29,9 @@ function quoteHealth(quotes = []) {
   const failed = quotes
     .filter((row) => row?.quoteAudit?.status !== "PASS")
     .map((row) => ({ symbol: row.symbol, status: row?.quoteAudit?.status || "UNKNOWN", error: row?.quoteAudit?.error || null }));
-  return { okCount: ok.length, ok, failedCount: failed.length, failed };
+  const binance = quotes.filter((row) => row?.quoteAudit?.provider === "Binance xStocks").map((row) => row.symbol);
+  const fallback = quotes.filter((row) => row?.quoteAudit?.fallbackUsed === true).map((row) => row.symbol);
+  return { okCount: ok.length, ok, failedCount: failed.length, failed, binanceCount: binance.length, binance, fallbackCount: fallback.length, fallback };
 }
 
 export default async function handler(req, res) {
@@ -40,12 +42,13 @@ export default async function handler(req, res) {
     }
     const body = req.method === "POST" ? (req.body || {}) : {};
     const persistMetrics = String(req.query?.persistMetrics || body.persistMetrics || "").toLowerCase() === "true";
-    const quotes = await fetchYahooStockQuotes(PAPER_STOCK_SYMBOLS, buildPaperStockAssetMap());
+    const quotes = await fetchPaperStockQuotes(PAPER_STOCK_SYMBOLS, buildPaperStockAssetMap());
     const quoteMarkets = marketMapFromQuotes(quotes);
     const result = await getPaperSummary({ markets: { ...quoteMarkets, ...(body.markets || {}) }, persistMetrics });
     return res.status(200).json({
       ...result,
-      quoteSource: "Yahoo Finance chart",
+      quoteSource: "Binance xStocks first / Yahoo fallback only",
+      quotePolicy: "paper symbols prefer Binance tradable xStock token price; Yahoo only when Binance xStock is unavailable",
       quoteHealth: quoteHealth(quotes),
       placeholderFallbackDisabled: true,
     });
