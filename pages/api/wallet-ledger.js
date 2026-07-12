@@ -1,12 +1,14 @@
-// DCA Discount Hunter V15.6 - Wallet Ledger
+// DCA Discount Hunter V15.7 - Wallet Ledger / V17 Real Holdings Mirror
 // Source priority: Moralis -> MegaNode -> Legacy fallback.
-// Reconstructs cost basis from wallet-wide BEP-20 transfers and enriches positions with live Binance xStocks prices.
+// Reconstructs cost basis from wallet-wide BEP-20 transfers, enriches positions with live Binance xStocks prices,
+// and mirrors V17 real holdings by merging Binance exchange read-only holdings such as BTC.
 
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../lib/xstocks/costBasis");
 const { fetchTokenPrices } = require("../../lib/xstocks/prices");
 const { WATCHLIST, STABLECOINS, toLower } = require("../../lib/xstocks/constants");
 const { XSTOCK_CONTRACTS } = require("../../lib/xstocks/contracts");
+const { getBinanceRestUrl, fetchBinanceExchangePositions, requiredEnv } = require("../../lib/v17/binance-exchange-provider");
 
 function isEvmAddress(value) {
   return /^0x[a-fA-F0-9]{40}$/.test(String(value || ""));
@@ -23,6 +25,10 @@ function upper(value) {
 function safeNumber(value) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function holdingValue(holding) {
+  return safeNumber(holding?.currentValue || holding?.marketValue || holding?.positionValue || holding?.rawCurrentValue || 0);
 }
 
 function uniqueByHashContractDirection(transfers) {
@@ -118,6 +124,43 @@ function enrichHoldingsWithMarket(holdings, prices) {
   });
 }
 
+function mergeHoldingsBySymbol(...groups) {
+  const map = new Map();
+  for (const group of groups || []) {
+    for (const holding of group || []) {
+      const symbol = upper(holding?.symbol);
+      if (symbol && safeNumber(holding.quantity) > 0) map.set(symbol, { ...holding, symbol });
+    }
+  }
+  return [...map.values()];
+}
+
+async function fetchBtcMarketPrice() {
+  try {
+    const baseUrl = getBinanceRestUrl();
+    const response = await fetch(`${baseUrl}/api/v3/ticker/price?symbol=BTCUSDT`, { cache: "no-store" });
+    const json = await response.json();
+    return safeNumber(json?.price);
+  } catch {
+    return 0;
+  }
+}
+
+async function fetchExchangeHoldings() {
+  const env = requiredEnv();
+  if (!env.configured) {
+    return { ok: false, configured: false, holdings: [], diagnostics: { envConfigured: false } };
+  }
+  try {
+    const btcPrice = await fetchBtcMarketPrice();
+    const marketPrices = btcPrice > 0 ? { BTC: { price: btcPrice } } : {};
+    const result = await fetchBinanceExchangePositions({ marketPrices });
+    return { ...result, diagnostics: { envConfigured: true, btcMarketPrice: btcPrice } };
+  } catch (error) {
+    return { ok: false, configured: true, holdings: [], error: error.message || "binance_exchange_sync_failed" };
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
@@ -133,7 +176,11 @@ export default async function handler(req, res) {
       });
     }
 
-    const rawTransfers = await fetchWalletTokenTransfers(walletAddress);
+    const [rawTransfers, exchangeData] = await Promise.all([
+      fetchWalletTokenTransfers(walletAddress),
+      fetchExchangeHoldings(),
+    ]);
+
     const transfers = uniqueByHashContractDirection(rawTransfers);
     const buyRecords = buildBuyRecordsFromTransfers(transfers, walletAddress);
     const baseHoldings = calculateHoldings(buyRecords);
@@ -147,27 +194,31 @@ export default async function handler(req, res) {
       priceError = error.message;
     }
 
-    const holdings = enrichHoldingsWithMarket(baseHoldings, livePrices);
+    const walletHoldings = enrichHoldingsWithMarket(baseHoldings, livePrices);
+    const exchangeHoldings = Array.isArray(exchangeData?.holdings) ? exchangeData.holdings : [];
+    const holdings = mergeHoldingsBySymbol(walletHoldings, exchangeHoldings);
     const onlyBuys = buyRecords.filter((r) => r.type === "BUY");
     const transferIns = buyRecords.filter((r) => r.type === "TRANSFER_IN");
     const totalCost = holdings.reduce((sum, h) => sum + safeNumber(h.totalCost), 0);
-    const marketValue = holdings.reduce((sum, h) => sum + safeNumber(h.marketValue), 0);
+    const marketValue = holdings.reduce((sum, h) => sum + holdingValue(h), 0);
     const unrealizedPnL = marketValue - totalCost;
     const returnPct = totalCost > 0 ? unrealizedPnL / totalCost : 0;
-    const priceSources = Array.from(new Set(holdings.map((h) => h.priceSource).filter(Boolean))).sort();
+    const priceSources = Array.from(new Set([...walletHoldings, ...exchangeHoldings].map((h) => h.priceSource || h.source).filter(Boolean))).sort();
+    const now = new Date().toISOString();
 
     res.status(200).json({
       ok: true,
-      version: "15.6-wallet-ledger-market-pnl-compatible",
+      version: "15.7-wallet-ledger-v17-real-holdings-mirror",
       walletAddress,
-      updatedAt: new Date().toISOString(),
-      checkedAt: new Date().toISOString(),
-      lastSyncTime: new Date().toISOString(),
-      source: hasMoralisKey() ? "Moralis wallet token transfers" : hasMegaNodeKey() ? "MegaNode / NodeReal wallet transfers" : "Legacy fallback",
+      updatedAt: now,
+      checkedAt: now,
+      lastSyncTime: now,
+      source: "V17 real holdings mirror: wallet transfers + binance exchange read-only",
       configured: {
         moralis: hasMoralisKey(),
         megaNode: hasMegaNodeKey(),
         legacyBscScan: Boolean(process.env.BSCSCAN_API_KEY),
+        binanceExchange: Boolean(exchangeData?.configured || exchangeData?.ok),
       },
       watchlist: WATCHLIST,
       stablecoins: STABLECOINS,
@@ -178,6 +229,8 @@ export default async function handler(req, res) {
       buyCount: onlyBuys.length,
       transferInCount: transferIns.length,
       holdingCount: holdings.length,
+      walletHoldingCount: walletHoldings.length,
+      exchangeHoldingCount: exchangeHoldings.length,
       priceCount: Object.keys(livePrices || {}).length,
       priceError,
       totalCost,
@@ -186,23 +239,28 @@ export default async function handler(req, res) {
       unrealizedPnL,
       returnPct,
       returnPctDisplay: returnPct * 100,
-      // Backward-compatible field names consumed by pages/index.js WalletSyncSection.
       actualTotalInvested: totalCost,
       portfolioTotalCost: totalCost,
       portfolioMarketValue: marketValue,
       portfolioUnrealizedPnL: unrealizedPnL,
       portfolioPnLPct: returnPct,
-      priceSource: priceSources.join("、") || "binance_xstocks_live",
-      referencePriceSource: "binance_stock_reference_live",
+      priceSource: priceSources.join("、") || "wallet_and_exchange_live",
+      referencePriceSource: "v17_real_holdings_mirror",
+      mirrorOf: "pages/v17.js PortfolioSummaryCard walletSummary(totalValue)",
+      binanceExchange: exchangeData,
       debugCounts: {
         totalTransfers: transfers.length,
         buyRecordsCount: buyRecords.length,
         holdingsCount: holdings.length,
+        walletHoldingSymbols: walletHoldings.map((h) => h.symbol),
+        exchangeHoldingSymbols: exchangeHoldings.map((h) => h.symbol),
+        mergedHoldingSymbols: holdings.map((h) => h.symbol),
         tokenPriceSymbols: Object.keys(livePrices || {}).sort(),
         tokenPriceSources: priceSources,
-        holdingSymbols: holdings.map((h) => h.symbol),
       },
       holdings,
+      walletHoldings,
+      exchangeHoldings,
       buyRecords,
       sampleTransfers: transfers.slice(0, Number(req.query.sample || 20)),
     });
