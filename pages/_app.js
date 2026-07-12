@@ -136,6 +136,35 @@ function addV17PaperLinks() {
   autoCard.appendChild(row);
 }
 
+function normalizePaperAutoLabels() {
+  if (typeof document === "undefined") return;
+  if (!location.pathname.startsWith("/paper-auto")) return;
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const value = node.nodeValue || "";
+    let next = value
+      .replaceAll("M45紙上", "預備名單")
+      .replaceAll("M91紙上", "預備名單")
+      .replaceAll("M10紙上", "預備名單")
+      .replaceAll("產業紙上", "預備名單")
+      .replaceAll("Market45紙上測試", "預備名單")
+      .replaceAll("Market91審核紙上測試", "預備名單")
+      .replaceAll("Market10折價候選", "預備名單")
+      .replaceAll("紙上候選：", "預備名單：")
+      .replaceAll("4週紙上驗證區", "預備名單 4週紙上驗證區")
+      .replaceAll("核心10檔 10｜4週紙上 18｜M45 0｜M91 0｜M10 0｜產業 0", "核心10檔 10｜預備名單 18")
+      .replaceAll("已有 7 天內 OPEN 紙上測試；防重複建倉", "已有 OPEN 紙上部位；防重複建倉");
+    if (/核心10檔 \d+｜4週紙上 \d+｜M45 \d+｜M91 \d+｜M10 \d+｜產業 \d+/.test(next)) {
+      const core = next.match(/核心10檔 (\d+)/)?.[1] || "10";
+      const prepared = next.match(/4週紙上 (\d+)/)?.[1] || "18";
+      next = `核心10檔 ${core}｜預備名單 ${prepared}`;
+    }
+    if (next !== value) node.nodeValue = next;
+  }
+}
+
 function addPaperApprovalGate() {
   if (typeof document === "undefined") return;
   if (!location.pathname.startsWith("/paper-auto")) return;
@@ -192,6 +221,7 @@ function localizeNode(root) {
   hideTransitionalCards(root.nodeType === 1 ? root : document.body);
   addV17PaperLinks();
   addPaperApprovalGate();
+  normalizePaperAutoLabels();
 }
 
 export default function App({ Component, pageProps }) {
@@ -210,6 +240,7 @@ export default function App({ Component, pageProps }) {
       hideTransitionalCards(document.body);
       addV17PaperLinks();
       addPaperApprovalGate();
+      normalizePaperAutoLabels();
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
