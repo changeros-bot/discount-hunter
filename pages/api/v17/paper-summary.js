@@ -1,6 +1,7 @@
 import { getPaperSummary } from "../../../lib/v17-paper-engine";
 import { fetchPaperStockQuotes, PAPER_STOCK_SYMBOLS } from "../../../lib/v17-paper-stock-quotes";
 import { getAllPaperDiscountRules } from "../../../lib/v17-paper-discount-rules";
+import { countPaperLegacyText, sanitizePaperObject } from "../../../lib/v17-paper-text-sanitizer";
 
 function buildPaperStockAssetMap() {
   const rules = getAllPaperDiscountRules();
@@ -44,13 +45,23 @@ export default async function handler(req, res) {
     const persistMetrics = String(req.query?.persistMetrics || body.persistMetrics || "").toLowerCase() === "true";
     const quotes = await fetchPaperStockQuotes(PAPER_STOCK_SYMBOLS, buildPaperStockAssetMap());
     const quoteMarkets = marketMapFromQuotes(quotes);
-    const result = await getPaperSummary({ markets: { ...quoteMarkets, ...(body.markets || {}) }, persistMetrics });
+    const rawResult = await getPaperSummary({ markets: { ...quoteMarkets, ...(body.markets || {}) }, persistMetrics });
+    const beforeHits = countPaperLegacyText(rawResult);
+    const result = sanitizePaperObject(rawResult);
+    const afterHits = countPaperLegacyText(result);
     return res.status(200).json({
       ...result,
       quoteSource: "Binance xStocks first / Yahoo fallback only",
       quotePolicy: "paper symbols prefer Binance tradable xStock token price; Yahoo only when Binance xStock is unavailable",
       quoteHealth: quoteHealth(quotes),
       placeholderFallbackDisabled: true,
+      paperTextSanitizer: {
+        enabled: true,
+        scope: "summary_response_display_layer",
+        beforeLegacyHitCount: beforeHits.length,
+        afterLegacyHitCount: afterHits.length,
+        afterLegacyHits: afterHits.slice(0, 20),
+      },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "paper_summary_failed" });
