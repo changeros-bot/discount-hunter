@@ -165,6 +165,67 @@ function normalizePaperAutoLabels() {
   }
 }
 
+function formatDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function setNativeInputValue(input, value) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function addFinancialDateShortcuts() {
+  if (typeof document === "undefined") return;
+  if (!location.pathname.startsWith("/financial-os")) return;
+  if (document.querySelector("[data-financial-date-shortcuts='true']")) return;
+
+  const section = [...document.querySelectorAll("section")].find((card) => (card.textContent || "").includes("日期篩選"));
+  if (!section) return;
+  const inputs = [...section.querySelectorAll("input[type='date']")];
+  if (inputs.length < 2) return;
+
+  const row = document.createElement("div");
+  row.setAttribute("data-financial-date-shortcuts", "true");
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "repeat(3, 1fr)";
+  row.style.gap = "7px";
+  row.style.marginTop = "10px";
+
+  const today = new Date();
+  const makeRange = {
+    "今日": () => [today, today],
+    "本月": () => [new Date(today.getFullYear(), today.getMonth(), 1), today],
+    "上月": () => [new Date(today.getFullYear(), today.getMonth() - 1, 1), new Date(today.getFullYear(), today.getMonth(), 0)],
+    "近7天": () => [new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6), today],
+    "近30天": () => [new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29), today],
+    "今年": () => [new Date(today.getFullYear(), 0, 1), today],
+  };
+
+  for (const label of Object.keys(makeRange)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.style.border = "1px solid rgba(212,175,55,.58)";
+    btn.style.borderRadius = "12px";
+    btn.style.padding = "9px 6px";
+    btn.style.background = "linear-gradient(180deg,rgba(250,204,21,.22),rgba(92,64,16,.60))";
+    btn.style.color = "#fff7bd";
+    btn.style.fontWeight = "1000";
+    btn.style.fontSize = "12px";
+    btn.onclick = () => {
+      const [start, end] = makeRange[label]();
+      setNativeInputValue(inputs[0], formatDate(start));
+      setNativeInputValue(inputs[1], formatDate(end));
+    };
+    row.appendChild(btn);
+  }
+
+  const anchor = inputs[1].parentElement || section;
+  anchor.insertAdjacentElement("afterend", row);
+}
+
 function addPaperApprovalGate() {
   if (typeof document === "undefined") return;
   if (!location.pathname.startsWith("/paper-auto")) return;
@@ -222,6 +283,7 @@ function localizeNode(root) {
   addV17PaperLinks();
   addPaperApprovalGate();
   normalizePaperAutoLabels();
+  addFinancialDateShortcuts();
 }
 
 export default function App({ Component, pageProps }) {
@@ -241,6 +303,7 @@ export default function App({ Component, pageProps }) {
       addV17PaperLinks();
       addPaperApprovalGate();
       normalizePaperAutoLabels();
+      addFinancialDateShortcuts();
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
