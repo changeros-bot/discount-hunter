@@ -195,30 +195,10 @@ async function getBtcMarket(asset) {
     const cycleHigh = firstNumber(asset.cycleHigh);
     const discountRaw = cycleHigh > 0 && price > 0 ? ((price - cycleHigh) / cycleHigh) * 100 : null;
     const discount = discountRaw === null ? null : Number(discountRaw.toFixed(1));
-    return {
-      ...asset,
-      price,
-      rawTokenPrice: price,
-      tokenPrice: price,
-      stockPrice: price,
-      high: cycleHigh,
-      high52w: cycleHigh,
-      cycleHigh,
-      low: 0,
-      marketCap: 0,
-      volume: 0,
-      sharesMultiplier: 1,
-      highType: "BTC Cycle High",
-      lowType: "N/A",
-      priceSource: "Binance Web BTCUSDT",
-      discount,
-      discountRaw,
-      signal: discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts),
-      binanceAudit: { status: price > 0 && cycleHigh > 0 ? "PASS" : "MISSING_BTC_DATA", checkedAt: new Date().toISOString(), latencyMs: priceResult.latencyMs || 0 },
-    };
+    return { ...asset, price, rawTokenPrice: price, tokenPrice: price, stockPrice: price, high: cycleHigh, high52w: cycleHigh, cycleHigh, low: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "BTC Cycle High", lowType: "N/A", priceSource: "Binance Web BTCUSDT", discount, discountRaw, signal: discount === null ? { text: "資料未就緒", amount: "0U", level: 0 } : getSignal(discount, asset.rules, asset.amounts), binanceAudit: { status: price > 0 && cycleHigh > 0 ? "PASS" : "MISSING_BTC_DATA", checkedAt: new Date().toISOString(), latencyMs: priceResult.latencyMs || 0 } };
   } catch (error) {
     const cycleHigh = firstNumber(asset.cycleHigh);
-    return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: cycleHigh, high52w: cycleHigh, low: 0, priceSource: "Binance Web BTCUSDT", discount: null, discountRaw: null, signal: { text: "BTC 資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "BTC_PROVIDER_ERROR", checkedAt: new Date().toISOString(), error: error.message } };
+    return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: cycleHigh, high52w: cycleHigh, low: 0, priceSource: "Binance Web BTCUSDT", discount: null, discountRaw: null, signal: { text: "BTC 資料未就緒", amount: "0U" , level: 0 }, binanceAudit: { status: "BTC_PROVIDER_ERROR", checkedAt: new Date().toISOString(), error: error.message } };
   }
 }
 
@@ -226,19 +206,7 @@ function buildPaperStockAssetMap() {
   const discountRules = getAllPaperDiscountRules();
   return Object.fromEntries(PAPER_STOCK_SYMBOLS.map((symbol) => {
     const rule = discountRules[symbol] || {};
-    return [symbol, {
-      symbol,
-      name: symbol,
-      assetType: "paper_stock",
-      engine: "paper_test",
-      strategy: "paper_discount_quote",
-      rules: rule.rules || [],
-      amounts: rule.amounts || [],
-      discountModel: "paper_stock_yahoo_quote_v1",
-      referenceMode: "52w_high_or_fallback",
-      profile: rule.profile || "paper_stock",
-      ruleNote: rule.note || "Market paper stock quote",
-    }];
+    return [symbol, { symbol, name: symbol, assetType: "paper_stock", engine: "paper_test", strategy: "paper_discount_quote", rules: rule.rules || [], amounts: rule.amounts || [], discountModel: "paper_stock_yahoo_quote_v1", referenceMode: "52w_high_or_fallback", profile: rule.profile || "paper_stock", ruleNote: rule.note || "Market paper stock quote" }];
   }));
 }
 
@@ -252,27 +220,31 @@ function dedupeBySymbol(rows = []) {
   return [...map.values()];
 }
 
+function wantsPaperQuotes(req) {
+  const value = String(req.query?.includePaper || req.query?.paper || req.query?.scope || "").toLowerCase();
+  return value === "1" || value === "true" || value === "paper" || value === "all";
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   try {
+    const includePaper = wantsPaperQuotes(req);
     const watchlist = getWatchlist();
     const cryptoWatchlist = getCryptoWatchlist();
-    const paperStockAssetMap = buildPaperStockAssetMap();
+    const paperStockAssetMap = includePaper ? buildPaperStockAssetMap() : {};
 
     const [tokenListResult, paperStockData] = await Promise.all([
       getBinanceTokenList(),
-      fetchYahooStockQuotes(PAPER_STOCK_SYMBOLS, paperStockAssetMap),
+      includePaper ? fetchYahooStockQuotes(PAPER_STOCK_SYMBOLS, paperStockAssetMap) : Promise.resolve([]),
     ]);
 
     const tokenList = tokenListResult.list;
     const bySymbol = new Map(tokenList.map((item) => [getSymbol(item), item]).filter(([symbol]) => symbol));
     const xstockData = await Promise.all(watchlist.map(async (asset) => {
       const tokenMeta = bySymbol.get(asset.symbol);
-      if (!tokenMeta) {
-        return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: 0, low: 0, high52w: 0, low52w: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "Binance 52週高點", lowType: "Binance 52週低點", priceSource: "Binance tokenInfo.price / sharesMultiplier", discount: null, discountRaw: null, signal: { text: "資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() } };
-      }
+      if (!tokenMeta) return { ...asset, price: 0, rawTokenPrice: 0, tokenPrice: 0, stockPrice: 0, high: 0, low: 0, high52w: 0, low52w: 0, marketCap: 0, volume: 0, sharesMultiplier: 1, highType: "Binance 52週高點", lowType: "Binance 52週低點", priceSource: "Binance tokenInfo.price / sharesMultiplier", discount: null, discountRaw: null, signal: { text: "資料未就緒", amount: "0U", level: 0 }, binanceAudit: { status: "MISSING_TOKEN", checkedAt: new Date().toISOString() } };
       const dynamic = await getBinanceDynamic(tokenMeta);
       return normalize(asset, tokenMeta, dynamic);
     }));
@@ -285,12 +257,14 @@ export default async function handler(req, res) {
     }, {});
     res.status(200).json({
       updatedAt: new Date().toISOString(),
-      source: "Binance xStocks + Binance Web BTCUSDT + Yahoo Finance paper stock quotes",
-      sourceOfTruth: "lib/v17-asset-registry.js + lib/v17-paper-stock-quotes.js",
+      source: includePaper ? "Binance xStocks + Binance Web BTCUSDT + Yahoo Finance paper stock quotes" : "Binance xStocks + Binance Web BTCUSDT",
+      sourceOfTruth: includePaper ? "lib/v17-asset-registry.js + lib/v17-paper-stock-quotes.js" : "lib/v17-asset-registry.js",
       count: data.length,
       cachePolicy: "no-store",
+      includePaper,
+      formalOnlyDefault: !includePaper,
       binanceHealth: { ok: true, listStatus: tokenListResult.status, listLatencyMs: tokenListResult.latencyMs, auditSummary },
-      paperQuoteHealth: { symbols: PAPER_STOCK_SYMBOLS.length, auditSummary },
+      paperQuoteHealth: includePaper ? { symbols: PAPER_STOCK_SYMBOLS.length, auditSummary } : { symbols: 0, skipped: true, reason: "default_prices_api_excludes_paper_stocks" },
       data,
     });
   } catch (error) {
