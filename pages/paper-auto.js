@@ -138,7 +138,7 @@ function sumRows(rows = []) {
 }
 
 function daysSince(row = {}) {
-  const raw = row.repairedAt || row.createdAt || row.dateKey;
+  const raw = row.repairedAt || row.baselineResetAt || row.createdAt || row.dateKey;
   const t = Date.parse(raw);
   if (!Number.isFinite(t)) return 0;
   return Math.max(0, Math.floor((Date.now() - t) / 86400000));
@@ -150,16 +150,90 @@ function validationText(row = {}) {
   return remain > 0 ? `4週驗證中｜已 ${d} 天｜剩 ${remain} 天` : "已滿4週，可進下一階段覆核";
 }
 
+function getRules(row = {}) {
+  return Array.isArray(row.rules) && row.rules.length ? row.rules.map(Number).filter(Number.isFinite) : [];
+}
+
+function getAmounts(row = {}) {
+  const rules = getRules(row);
+  const amounts = Array.isArray(row.amounts) ? row.amounts.map(Number) : [];
+  return rules.map((_, i) => Number.isFinite(amounts[i]) ? amounts[i] : Number(row.amountUSDT || 5));
+}
+
+function tierName(index) {
+  return `D${index + 1}`;
+}
+
+function tierStatus(row = {}) {
+  const rules = getRules(row);
+  const currentDiscount = Math.abs(Number(row.discountFromHighPct ?? row.discount ?? 0));
+  if (!rules.length) return { label: "觀察中", left: "52W", right: "D1", pct: Math.max(0, Math.min(100, Number(row.highProgress?.progressPct || 0))), activeIndex: -1, completedIndex: -1 };
+  const absRules = rules.map((r) => Math.abs(r));
+  let completedIndex = -1;
+  for (let i = 0; i < absRules.length; i += 1) {
+    if (currentDiscount >= absRules[i]) completedIndex = i;
+  }
+  const nextIndex = Math.min(completedIndex + 1, absRules.length - 1);
+  const leftIndex = Math.max(0, completedIndex);
+  const prev = completedIndex >= 0 ? absRules[completedIndex] : 0;
+  const next = completedIndex + 1 < absRules.length ? absRules[completedIndex + 1] : absRules[completedIndex] || absRules[0];
+  const segment = next > prev ? ((currentDiscount - prev) / (next - prev)) * 100 : 100;
+  const pct = completedIndex >= absRules.length - 1 ? 100 : Math.max(2, Math.min(98, segment));
+  return {
+    label: completedIndex >= 0 ? `已完成：${tierName(completedIndex)}` : `未達：${tierName(0)}`,
+    left: completedIndex >= 0 ? tierName(completedIndex) : "52W",
+    right: completedIndex + 1 < absRules.length ? tierName(completedIndex + 1) : tierName(absRules.length - 1),
+    pct,
+    activeIndex: completedIndex >= 0 ? completedIndex : 0,
+    completedIndex,
+    currentDiscount,
+  };
+}
+
+function isNewListingWatch(row = {}) {
+  return /NEW|新上市|manual|人工|觀察/i.test(`${row.quality || ""} ${row.bucket || ""} ${row.group || ""} ${row.playbook?.riskRule || ""}`) && /SOFI|ACN|CEG|NOW|CRWV/i.test(String(row.symbol || "")) === false ? false : /CRWV|SPCX/i.test(String(row.symbol || ""));
+}
+
+function cardTone(row = {}) {
+  if (isNewListingWatch(row)) return { border: "rgba(245,158,11,.55)", bg: "linear-gradient(180deg,rgba(69,26,3,.42),rgba(2,6,23,.72))", accent: "#fde68a", soft: "rgba(245,158,11,.13)", label: "新上市觀察" };
+  const tier = tierStatus(row);
+  if (tier.completedIndex >= 0) return { border: "rgba(34,197,94,.42)", bg: "linear-gradient(180deg,rgba(6,78,59,.36),rgba(2,6,23,.72))", accent: "#bbf7d0", soft: "rgba(34,197,94,.12)", label: "通過" };
+  return { border: "rgba(59,130,246,.38)", bg: "linear-gradient(180deg,rgba(8,47,73,.36),rgba(2,6,23,.72))", accent: "#67e8f9", soft: "rgba(6,182,212,.12)", label: "觀察中" };
+}
+
+function StatusCapsule({ row }) {
+  const tier = tierStatus(row);
+  const tone = cardTone(row);
+  return <div style={{ padding: "13px 16px", borderRadius: 18, background: tone.soft, border: `1px solid ${tone.border}`, color: tone.accent, fontSize: 22, fontWeight: 1000, letterSpacing: 1 }}>
+    {tier.label}
+  </div>;
+}
+
+function TierProgressBar({ row }) {
+  const tier = tierStatus(row);
+  const tone = cardTone(row);
+  return <div style={{ marginTop: 12, borderRadius: 20, border: "1px solid rgba(6,182,212,.18)", background: "rgba(2,6,23,.50)", padding: 14 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", color: "#e2e8f0", fontSize: 15, fontWeight: 1000 }}>
+      <span>{tier.left}</span><span>{tier.right}</span>
+    </div>
+    <div style={{ position: "relative", height: 12, borderRadius: 999, background: "rgba(8,47,73,.90)", marginTop: 14, overflow: "visible" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${tier.pct}%`, borderRadius: 999, background: "linear-gradient(90deg,#00ffa3,#00e5ff,#facc15)" }} />
+      <div style={{ position: "absolute", left: `calc(${tier.pct}% - 13px)`, top: -8, width: 28, height: 28, borderRadius: 999, background: "#00e5ff", boxShadow: "0 0 24px rgba(34,211,238,.85)" }} />
+    </div>
+    <div style={{ marginTop: 14, color: "#22d3ee", fontWeight: 1000, fontSize: 18 }}>{n(tier.pct, 0)}%</div>
+    <div style={{ marginTop: 5, color: "#94a3b8", fontWeight: 850, fontSize: 11 }}>D層進度：目前折價約 {n(tier.currentDiscount, 1)}%，在 {tier.left} → {tier.right} 區間。</div>
+  </div>;
+}
+
 function HighProgressBar({ row }) {
   const hp = row?.highProgress;
   if (!hp?.enabled) return null;
   const pct = Math.max(0, Math.min(100, Number(hp.progressPct || 0)));
-  return <div style={{ marginTop: 9, padding: 9, borderRadius: 13, background: "rgba(15,23,42,.72)", border: "1px solid rgba(59,130,246,.18)" }}>
+  return <div style={{ marginTop: 10, padding: 10, borderRadius: 15, background: "rgba(15,23,42,.62)", border: "1px solid rgba(59,130,246,.18)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#bfdbfe", fontSize: 11, fontWeight: 1000 }}>
-      <span>52週高點絕對值進度</span>
-      <span>{n(hp.progressPct, 1)}%</span>
+      <span>52週高點絕對值</span><span>{n(hp.progressPct, 1)}%</span>
     </div>
-    <div style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(30,41,59,.95)", marginTop: 6 }}>
+    <div style={{ height: 7, borderRadius: 999, overflow: "hidden", background: "rgba(30,41,59,.95)", marginTop: 6 }}>
       <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#22c55e,#eab308,#f97316)" }} />
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 7 }}>
@@ -167,64 +241,108 @@ function HighProgressBar({ row }) {
       <MiniStat label="52週高" value={`$${n(hp.high52w)}`} />
       <MiniStat label="差距" value={`$${n(hp.gapToHigh)}`} color={hp.gapToHigh <= 0 ? "#bbf7d0" : "#fde68a"} />
     </div>
-    <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 850, marginTop: 5 }}>距高點 {n(hp.discountFromHighPct, 1)}%｜絕對值 = 現價 ÷ 52週高點</div>
   </div>;
 }
 
-function PlaybookBlock({ row }) {
-  const playbook = row?.playbook;
-  if (!playbook) return null;
-  const entry = playbook.buyPointRule || playbook.entryRule;
-  const rows = [
-    ["買點", entry],
-    ["資金", playbook.sizing],
-    ["風控", playbook.riskRule],
-    ["檢查", playbook.exitRule],
-    ["不上真倉", playbook.whyNotReal],
-  ];
-  return <details style={{ marginTop: 8, borderTop: "1px solid rgba(148,163,184,.12)", paddingTop: 7 }}>
-    <summary style={{ cursor: "pointer", color: "#93c5fd", fontWeight: 1000, fontSize: 12 }}>📘 Playbook / 買點規則</summary>
-    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
-      {rows.map(([label, value]) => <div key={label} style={{ padding: 8, borderRadius: 10, background: "rgba(15,23,42,.70)", border: "1px solid rgba(148,163,184,.10)" }}>
-        <div style={{ color: "#fde68a", fontSize: 10, fontWeight: 1000 }}>{label}</div>
-        <div style={{ color: "#cbd5e1", fontSize: 11, lineHeight: 1.5, fontWeight: 800 }}>{value || "—"}</div>
-      </div>)}
+function QualityPanel({ row }) {
+  const tone = cardTone(row);
+  const label = isNewListingWatch(row) ? "新上市觀察" : tone.label;
+  const semi = /manual|人工|watch/i.test(`${row.quality || ""} ${row.tier || ""}`) ? "人工確認" : "可靠稿";
+  const dca = isNewListingWatch(row) ? "DCA 5U｜逢低人工" : "DCA 可｜逢低可";
+  return <div style={{ marginTop: 12, padding: 14, borderRadius: 18, border: `1px solid ${tone.border}`, background: tone.soft }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+      <div style={{ color: tone.accent, fontSize: 17, fontWeight: 1000 }}>Quality</div>
+      <div style={{ color: tone.accent, fontSize: 16, fontWeight: 1000 }}>{label}</div>
     </div>
-  </details>;
+    <div style={{ marginTop: 10, color: "#e2e8f0", fontSize: 15, lineHeight: 1.65, fontWeight: 950 }}>
+      <div>半自動：{semi}</div>
+      <div>{dca}</div>
+    </div>
+  </div>;
+}
+
+function StrategyPanel({ row }) {
+  const tone = cardTone(row);
+  const strategyTitle = isNewListingWatch(row) ? "新上市觀察" : `${row.symbol} 週期核心`;
+  const fixed = Number(row.amountUSDT || 5) === 3 ? "固定 DCA：每月 3U" : "固定 DCA：每月 5U";
+  const dip = isNewListingWatch(row) ? "逢低買進：需人工確認" : "逢低買進：照 D 層";
+  return <div style={{ marginTop: 10, padding: 14, borderRadius: 18, border: `1px solid ${tone.border}`, background: tone.soft }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+      <div style={{ color: tone.accent, fontSize: 17, fontWeight: 1000 }}>{strategyTitle}</div>
+      <div style={{ color: "#e2e8f0", fontSize: 15, fontWeight: 1000 }}>策略</div>
+    </div>
+    <div style={{ marginTop: 10, color: tone.accent, fontSize: 15, lineHeight: 1.65, fontWeight: 950 }}>
+      <div>{fixed}</div>
+      <div>{dip}</div>
+    </div>
+  </div>;
+}
+
+function TierRules({ row }) {
+  const rules = getRules(row);
+  const amounts = getAmounts(row);
+  const tier = tierStatus(row);
+  const hp = row.highProgress || {};
+  if (!rules.length) return null;
+  return <div style={{ marginTop: 12 }}>
+    <div style={{ color: "#22d3ee", fontSize: 18, fontWeight: 1000, marginBottom: 8 }}>層級規則</div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+      {rules.map((rule, i) => {
+        const active = i === tier.completedIndex || (tier.completedIndex < 0 && i === 0);
+        return <div key={`${row.symbol}-${i}`} style={{ minHeight: 86, borderRadius: 15, padding: 9, textAlign: "center", border: active ? "1px solid rgba(34,211,238,.70)" : "1px solid rgba(148,163,184,.18)", background: active ? "rgba(6,182,212,.16)" : "rgba(15,23,42,.58)", color: active ? "#22d3ee" : "#94a3b8", boxShadow: active ? "0 0 18px rgba(34,211,238,.18)" : "none" }}>
+          <div style={{ fontSize: 20, fontWeight: 1000 }}>{tierName(i)}</div>
+          <div style={{ fontSize: 13, fontWeight: 1000 }}>{rule}%</div>
+          <div style={{ fontSize: 13, fontWeight: 1000 }}>{amounts[i]}U</div>
+          <div style={{ marginTop: 4, fontSize: 11, color: active ? "#e2e8f0" : "#64748b", fontWeight: 900 }}>${n(Number(hp.high52w || 0) * (1 + Number(rule) / 100), 0)}</div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+function MiniStat({ label, value, color = "#cbd5e1" }) {
+  return <div style={{ minWidth: 0 }}>
+    <div style={{ color: "#64748b", fontSize: 9, fontWeight: 1000 }}>{label}</div>
+    <div style={{ color, fontSize: 11, fontWeight: 1000, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+  </div>;
 }
 
 function CompactPositionCard({ row, paperOnly = false }) {
   const pnl = Number(row.pnl || 0);
   const pnlColor = pnl >= 0 ? "#bbf7d0" : "#fecaca";
   const score = row.score || row.totalScore;
-  return <div style={{ padding: 11, borderRadius: 16, background: "rgba(2,6,23,.50)", border: "1px solid rgba(34,197,94,.15)" }}>
+  const tone = cardTone(row);
+  return <div style={{ padding: 13, borderRadius: 24, background: tone.bg, border: `1px solid ${tone.border}`, boxShadow: "0 18px 40px rgba(0,0,0,.20)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 1000, lineHeight: 1.05 }}>{row.symbol}</div>
-        <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 2 }}>{row.name || row.bucket || "—"}</div>
+        <div style={{ color: "#f8fafc", fontSize: 22, fontWeight: 1000, lineHeight: 1.05 }}>{row.symbol}</div>
+        <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850, marginTop: 3 }}>{row.name || row.bucket || "—"}</div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ color: "#fde68a", fontSize: 11, fontWeight: 1000 }}>{paperOnly ? "紙上驗證" : "測試中"}</div>
+        <div style={{ color: tone.accent, fontSize: 11, fontWeight: 1000 }}>{compactSource(row)}</div>
         <div style={{ color: pnlColor, fontSize: 13, fontWeight: 1000 }}>{n((row.pnlPct || 0) * 100)}%</div>
       </div>
     </div>
 
-    {paperOnly ? <div style={{ marginTop: 8, padding: "7px 9px", borderRadius: 12, background: "rgba(245,158,11,.12)", color: "#fde68a", fontSize: 11, fontWeight: 1000, lineHeight: 1.45 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 9 }}>
+      <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.lotCount || 1}筆</span>
+      {row.tier ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.10)", padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.tier}</span> : null}
+      {row.quality ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.10)", padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.quality}</span> : null}
+      {score ? <span style={{ color: "#fde68a", background: "rgba(245,158,11,.12)", padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{score}分</span> : null}
+      {row.bucket ? <span style={{ color: "#ddd6fe", background: "rgba(168,85,247,.12)", padding: "4px 8px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.bucket}</span> : null}
+    </div>
+
+    {paperOnly ? <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 14, background: "rgba(245,158,11,.12)", color: "#fde68a", fontSize: 12, fontWeight: 1000, lineHeight: 1.45 }}>
       {validationText(row)}｜未滿 4 週不得進折扣獵人觀察區
     </div> : null}
 
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-      <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{compactSource(row)}</span>
-      <span style={{ color: "#fde68a", background: "rgba(245,158,11,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.lotCount || 1}筆</span>
-      {row.tier ? <span style={{ color: "#bfdbfe", background: "rgba(59,130,246,.10)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.tier}</span> : null}
-      {row.quality ? <span style={{ color: "#bbf7d0", background: "rgba(34,197,94,.10)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.quality}</span> : null}
-      {score ? <span style={{ color: "#fde68a", background: "rgba(245,158,11,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{score}分</span> : null}
-      {row.bucket ? <span style={{ color: "#ddd6fe", background: "rgba(168,85,247,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.bucket}</span> : null}
-    </div>
-
+    <StatusCapsule row={row} />
+    <TierProgressBar row={row} />
+    <QualityPanel row={row} />
+    <StrategyPanel row={row} />
     <HighProgressBar row={row} />
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 9, color: "#cbd5e1" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 10, color: "#cbd5e1" }}>
       <MiniStat label="總成本" value={`$${n(row.amountUSDT)}`} />
       <MiniStat label="市值" value={`$${n(row.currentValue)}`} />
       <MiniStat label="損益" value={`$${n(row.pnl)}`} color={pnlColor} />
@@ -235,14 +353,7 @@ function CompactPositionCard({ row, paperOnly = false }) {
       <MiniStat label="真倉" value="禁止" />
     </div>
 
-    <PlaybookBlock row={row} />
-  </div>;
-}
-
-function MiniStat({ label, value, color = "#cbd5e1" }) {
-  return <div style={{ minWidth: 0 }}>
-    <div style={{ color: "#64748b", fontSize: 9, fontWeight: 1000 }}>{label}</div>
-    <div style={{ color, fontSize: 11, fontWeight: 1000, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+    <TierRules row={row} />
   </div>;
 }
 
@@ -260,7 +371,7 @@ function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true, 
     </div> : null}
     <details open={defaultOpen}>
       <summary style={{ cursor: "pointer", color: "#bfdbfe", fontWeight: 1000, fontSize: 13 }}>展開 / 收合卡片</summary>
-      <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+      <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
         {rows.map((row) => <CompactPositionCard key={row.symbol} row={row} paperOnly={paperOnly} />)}
       </div>
     </details>
@@ -366,7 +477,7 @@ export default function PaperAutoPage() {
           核心10檔 {corePositions.length}｜4週紙上 {paperValidationPositions.length}｜M45 {sourceCounts["M45紙上"] || 0}｜M91 {sourceCounts["M91紙上"] || 0}｜M10 {sourceCounts["M10紙上"] || 0}｜產業 {sourceCounts["產業紙上"] || 0}
         </div>
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 8, lineHeight: 1.5 }}>
-          計算：總成本 = 各 lot 金額加總；市值 = 總股數 × 現價；損益 = 市值 - 成本；報酬率 = 損益 ÷ 成本。52週高點進度 = 現價 ÷ 52週高點。
+          新版卡片：D層進度 = 目前折價在兩個買點層級間的位置；52週高點絕對值 = 現價 ÷ 52週高點。
         </div>
       </Box>
 
