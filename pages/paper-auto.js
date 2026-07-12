@@ -65,6 +65,10 @@ function betterMeta(a = {}, b = {}) {
   return playbookScore(b) >= playbookScore(a) ? b : a;
 }
 
+function bestHighProgress(existing = {}, row = {}) {
+  return row.highProgress?.enabled ? row.highProgress : existing.highProgress?.enabled ? existing.highProgress : null;
+}
+
 function aggregatePositionsBySymbol(rows = []) {
   const map = new Map();
   for (const row of rows || []) {
@@ -81,6 +85,7 @@ function aggregatePositionsBySymbol(rows = []) {
     const meta = betterMeta(existing, row);
     const amountUSDT = Number(existing.amountUSDT || 0) + cost;
     const quantity = Number(existing.quantity || 0) + qty;
+    const highProgress = bestHighProgress(existing, row);
     map.set(key, {
       ...existing,
       ...meta,
@@ -100,6 +105,11 @@ function aggregatePositionsBySymbol(rows = []) {
       rules: meta.rules || existing.rules || row.rules,
       amounts: meta.amounts || existing.amounts || row.amounts,
       ruleNote: meta.ruleNote || existing.ruleNote || row.ruleNote,
+      highProgress,
+      high52w: highProgress?.high52w || existing.high52w || row.high52w,
+      gapToHigh: highProgress?.gapToHigh ?? existing.gapToHigh ?? row.gapToHigh,
+      discountFromHighPct: highProgress?.discountFromHighPct ?? existing.discountFromHighPct ?? row.discountFromHighPct,
+      absoluteProgressPct: highProgress?.progressPct ?? existing.absoluteProgressPct ?? row.absoluteProgressPct,
       lots: [...(existing.lots || []), row],
       lotCount: Number(existing.lotCount || 1) + 1,
       amountUSDT,
@@ -138,6 +148,27 @@ function validationText(row = {}) {
   const d = daysSince(row);
   const remain = Math.max(0, 28 - d);
   return remain > 0 ? `4週驗證中｜已 ${d} 天｜剩 ${remain} 天` : "已滿4週，可進下一階段覆核";
+}
+
+function HighProgressBar({ row }) {
+  const hp = row?.highProgress;
+  if (!hp?.enabled) return null;
+  const pct = Math.max(0, Math.min(100, Number(hp.progressPct || 0)));
+  return <div style={{ marginTop: 9, padding: 9, borderRadius: 13, background: "rgba(15,23,42,.72)", border: "1px solid rgba(59,130,246,.18)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#bfdbfe", fontSize: 11, fontWeight: 1000 }}>
+      <span>52週高點絕對值進度</span>
+      <span>{n(hp.progressPct, 1)}%</span>
+    </div>
+    <div style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(30,41,59,.95)", marginTop: 6 }}>
+      <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#22c55e,#eab308,#f97316)" }} />
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 7 }}>
+      <MiniStat label="現價" value={`$${n(hp.currentPrice)}`} />
+      <MiniStat label="52週高" value={`$${n(hp.high52w)}`} />
+      <MiniStat label="差距" value={`$${n(hp.gapToHigh)}`} color={hp.gapToHigh <= 0 ? "#bbf7d0" : "#fde68a"} />
+    </div>
+    <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 850, marginTop: 5 }}>距高點 {n(hp.discountFromHighPct, 1)}%｜絕對值 = 現價 ÷ 52週高點</div>
+  </div>;
 }
 
 function PlaybookBlock({ row }) {
@@ -191,6 +222,8 @@ function CompactPositionCard({ row, paperOnly = false }) {
       {row.bucket ? <span style={{ color: "#ddd6fe", background: "rgba(168,85,247,.12)", padding: "3px 7px", borderRadius: 999, fontSize: 10, fontWeight: 1000 }}>{row.bucket}</span> : null}
     </div>
 
+    <HighProgressBar row={row} />
+
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 9, color: "#cbd5e1" }}>
       <MiniStat label="總成本" value={`$${n(row.amountUSDT)}`} />
       <MiniStat label="市值" value={`$${n(row.currentValue)}`} />
@@ -217,12 +250,13 @@ function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true, 
   if (!rows.length) return null;
   const sums = sumRows(rows);
   const pnlPct = sums.cost > 0 ? sums.pnl / sums.cost : 0;
+  const progressCount = rows.filter((row) => row.highProgress?.enabled).length;
   return <Box title={`${title}（${rows.length}檔 / ${sums.lots}筆）`} tone={tone}>
     <div style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
       成本 ${n(sums.cost)}｜市值 ${n(sums.value)}｜損益 ${n(sums.pnl)}｜報酬 {n(pnlPct * 100)}%
     </div>
     {paperOnly ? <div style={{ marginBottom: 8, color: "#fde68a", background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.22)", borderRadius: 12, padding: 9, fontSize: 12, fontWeight: 950, lineHeight: 1.5 }}>
-      本區只放未滿 4 週的測試標的；不得顯示在折扣獵人觀察區，不得成為真實買入或自動交易名單。
+      本區只放未滿 4 週的測試標的；不得顯示在折扣獵人觀察區，不得成為真實買入或自動交易名單。52週高點進度條：{progressCount}/{rows.length} 檔已啟用。
     </div> : null}
     <details open={defaultOpen}>
       <summary style={{ cursor: "pointer", color: "#bfdbfe", fontWeight: 1000, fontSize: 13 }}>展開 / 收合卡片</summary>
@@ -296,6 +330,7 @@ export default function PaperAutoPage() {
   const pnlColor = Number(portfolio.pnl || 0) >= 0 ? "#bbf7d0" : "#fecaca";
   const portfolioPnlPct = portfolio.cost > 0 ? portfolio.pnl / portfolio.cost : 0;
   const rawLotCount = summary?.summary?.openTrades || portfolio.lots || 0;
+  const highProgressCount = paperValidationPositions.filter((row) => row.highProgress?.enabled).length;
   const sourceCounts = useMemo(() => paperValidationPositions.reduce((acc, row) => {
     const key = compactSource(row);
     acc[key] = (acc[key] || 0) + 1;
@@ -320,6 +355,7 @@ export default function PaperAutoPage() {
           <div>核心正式：{corePositions.length} 檔</div>
           <div>紙上候選：{paperValidationPositions.length} 檔</div>
           <div>紙上批次：{rawLotCount} 筆</div>
+          <div>進度條：{highProgressCount}/{paperValidationPositions.length}</div>
           <div>投入成本：${n(portfolio.cost)}</div>
           <div>目前市值：${n(portfolio.value)}</div>
           <div>損益：<strong style={{ color: pnlColor }}>${n(portfolio.pnl)}</strong></div>
@@ -330,7 +366,7 @@ export default function PaperAutoPage() {
           核心10檔 {corePositions.length}｜4週紙上 {paperValidationPositions.length}｜M45 {sourceCounts["M45紙上"] || 0}｜M91 {sourceCounts["M91紙上"] || 0}｜M10 {sourceCounts["M10紙上"] || 0}｜產業 {sourceCounts["產業紙上"] || 0}
         </div>
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 850, marginTop: 8, lineHeight: 1.5 }}>
-          計算：總成本 = 各 lot 金額加總；市值 = 總股數 × 現價；損益 = 市值 - 成本；報酬率 = 損益 ÷ 成本。
+          計算：總成本 = 各 lot 金額加總；市值 = 總股數 × 現價；損益 = 市值 - 成本；報酬率 = 損益 ÷ 成本。52週高點進度 = 現價 ÷ 52週高點。
         </div>
       </Box>
 
