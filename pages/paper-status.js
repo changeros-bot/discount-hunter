@@ -89,10 +89,13 @@ function V17CardSkin({ rows = [] }) {
       const rules = row.rules || [];
       const amounts = row.amounts || [];
       const hp = row.highProgress || {};
+      const high52w = Number(hp.high52w || row.high52w || 0);
       const tierCards = rules.map((rule, i) => {
         const executed = e.executedIndex === i;
         const reached = p.idx >= i;
-        return `<div style="flex:1;min-width:0;padding:9px 4px;border-radius:13px;text-align:center;border:1px solid ${executed ? "rgba(250,204,21,.75)" : reached ? "rgba(34,211,238,.42)" : "rgba(148,163,184,.18)"};background:${executed ? "rgba(120,53,15,.28)" : reached ? "rgba(8,145,178,.15)" : "rgba(2,6,23,.35)"};box-shadow:${executed ? "0 0 18px rgba(250,204,21,.22)" : "none"}"><div style="font-weight:1000;color:${executed ? "#fde68a" : reached ? "#67e8f9" : "#cbd5e1"}">D${i + 1}</div><div style="font-size:11px;color:#94a3b8">${esc(rule)}%</div><div style="font-size:10px;color:#fde68a">${esc(amounts[i] ?? 5)}U</div><div style="margin-top:3px;font-size:9px;color:${executed ? "#fde68a" : reached ? "#67e8f9" : "#64748b"}">${executed ? "已投入" : reached ? "價格觸及" : "未觸及"}</div></div>`;
+        const discountPct = Math.abs(Number(rule || 0));
+        const targetPrice = high52w > 0 ? high52w * (1 - discountPct / 100) : 0;
+        return `<div style="flex:1;min-width:0;padding:9px 4px;border-radius:13px;text-align:center;border:1px solid ${executed ? "rgba(250,204,21,.75)" : reached ? "rgba(34,211,238,.42)" : "rgba(148,163,184,.18)"};background:${executed ? "rgba(120,53,15,.28)" : reached ? "rgba(8,145,178,.15)" : "rgba(2,6,23,.35)"};box-shadow:${executed ? "0 0 18px rgba(250,204,21,.22)" : "none"}"><div style="font-weight:1000;color:${executed ? "#fde68a" : reached ? "#67e8f9" : "#cbd5e1"}">D${i + 1}</div><div style="font-size:11px;color:#94a3b8">-${esc(discountPct)}%</div><div style="margin-top:2px;font-size:11px;color:#e2e8f0;font-weight:900">${targetPrice > 0 ? `$${n(targetPrice)}` : "價格待更新"}</div><div style="font-size:10px;color:#fde68a">${esc(amounts[i] ?? 5)}U</div><div style="margin-top:3px;font-size:9px;color:${executed ? "#fde68a" : reached ? "#67e8f9" : "#64748b"}">${executed ? `已投入 $${n(e.entryPrice)}` : reached ? `價格觸及 $${n(targetPrice)}` : `未觸及 $${n(targetPrice)}`}</div></div>`;
       }).join("");
       card.style.padding = "13px";
       card.style.borderRadius = "22px";
