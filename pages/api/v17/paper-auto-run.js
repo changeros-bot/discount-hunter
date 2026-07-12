@@ -40,6 +40,28 @@ export default async function handler(req, res) {
     if (req.method !== "POST" && req.method !== "GET") {
       return res.status(405).json({ ok: false, error: "method_not_allowed" });
     }
+
+    // /paper-auto?action=run is rendered through SSR. Do not make that page wait
+    // for 18 external quote requests and the full paper engine. The page already
+    // reads /paper-summary immediately afterward, so this route only confirms the
+    // current paper batch in fast status mode. Full engine execution remains
+    // available through a direct API request without ssr=1.
+    if (req.query?.ssr === "1") {
+      return res.status(200).json({
+        ok: true,
+        mode: "FAST_STATUS_CHECK",
+        eligibleCount: PAPER_STOCK_SYMBOLS.length,
+        createdCount: 0,
+        skippedCount: PAPER_STOCK_SYMBOLS.length,
+        skipped: PAPER_STOCK_SYMBOLS.map((symbol) => ({
+          symbol,
+          reason: "快速狀態檢查完成；既有 OPEN 紙上部位維持，不重跑外部報價與建倉引擎。",
+        })),
+        realOrder: false,
+        note: "SSR 快速模式只讀取目前狀態，避免手機頁面阻塞；禁止真實下單。",
+      });
+    }
+
     const body = req.method === "POST" ? (req.body || {}) : {};
     const force = body.force === true || req.query?.force === "true";
     const quotes = await fetchPaperStockQuotes(PAPER_STOCK_SYMBOLS, buildPaperStockAssetMap());
