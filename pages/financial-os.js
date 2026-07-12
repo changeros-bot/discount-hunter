@@ -1,43 +1,206 @@
-import {useEffect,useState} from 'react';
-const TX_KEY='josh-financial-os-v36-db',OLD_TX_KEY='josh-financial-os-v32-tx',BUDGET_KEY='josh-financial-os-v38-budgets',ASSET_KEY='josh-ledger-v42-assets';
-const RATE=32.5,INVEST_DAY=12,MONTHLY_INVEST_TWD=2000+60*RATE;
-const food=['早餐','午餐','晚餐','飲料','咖啡','菸','點心/宵夜'],fixed=['手機月租費','ChatGPT','Google One'];
-const cats=['飲食','家用','教育','服飾','交通','娛樂','醫療','金融','固定支出','生活用品','生活費','薪水','退稅','早餐','午餐','晚餐','飲料','咖啡','菸','點心/宵夜','機車','醫療健康','其他','富邦DCA'];
-const assetTypes=['現金','銀行','投資','家用','教育','其他'];
-const defaultBudgets=[{id:'b-living',name:'生活費',category:'生活費',amount:8000},{id:'b-invest',name:'富邦DCA',category:'富邦DCA',amount:MONTHLY_INVEST_TWD}];
-const defaultAssets=[{id:'a1',name:'合作金庫（自用）',amount:76,type:'銀行',note:'自用'},{id:'a2',name:'富邦銀行（投資）',amount:3299,type:'投資',note:'約當台幣'},{id:'a3',name:'郵局存款（家用）',amount:17152,type:'家用',note:'手動輸入'},{id:'a4',name:'現金',amount:0,type:'現金',note:'手動輸入'}];
-const sample=[{id:'income-salary-202606',date:'2026-06-30',type:'收入',amount:50350,account:'自用',category:'薪水',note:'薪水'}];
-const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const today=()=>fmt(new Date()),monthStart=()=>today().slice(0,7)+'-01',parseDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
-const monthRange=(o=0)=>{const d=new Date(),f=new Date(d.getFullYear(),d.getMonth()+o,1),l=new Date(d.getFullYear(),d.getMonth()+o+1,0);return{start:fmt(f),end:fmt(o===0?d:l)}};
-const juneRange=()=>({start:'2026-06-01',end:'2026-06-30'});
-const payrollStart=()=>{const d=new Date();return fmt(new Date(d.getFullYear(),d.getDate()>=10?d.getMonth():d.getMonth()-1,10))};
-const nt=n=>'$'+Number(n||0).toLocaleString('zh-TW',{maximumFractionDigits:0});
-const usd=n=>'USD '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-const sortTx=rows=>[...rows].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||String(b.id||'').localeCompare(String(a.id||'')));
-const cleanDb=rows=>Array.isArray(rows)?rows.filter(t=>t&&t.id&&!(t.id==='income-tax-202606'||(t.date==='2026-06-30'&&t.type==='收入'&&t.category==='退稅'&&Number(t.amount)===1300))):[];
-const cleanAssets=rows=>Array.isArray(rows)?rows.filter(a=>a&&a.id&&a.name).map(a=>({...a,amount:Number(a.amount||0),type:a.type||'其他'})):defaultAssets;
-function autoCat(note){if(/家用/.test(note))return'生活費';if(/學費|空大|學校|教育|書|筆電|筆記本|課程|補習/.test(note))return'教育';if(/Chat/i.test(note))return'ChatGPT';if(/Google/i.test(note))return'Google One';if(/電信|手機/.test(note))return'手機月租費';if(/加油|停車|機車|罰單/.test(note))return'機車';if(/耳|鼻|醫|看耳朵|洗鼻器/.test(note))return'醫療健康';if(/富邦/.test(note))return'金融';if(/Badoo|足球/.test(note))return'娛樂';if(/雨衣/.test(note))return'服飾';if(/早餐/.test(note))return'早餐';if(/午餐|中餐/.test(note))return'午餐';if(/晚餐/.test(note))return'晚餐';if(/咖啡|冰美式|冰拿|熟拿|黑咖啡/.test(note))return'咖啡';if(/菸|芬/.test(note))return'菸';if(/飲料/.test(note))return'飲料';if(/豆|酥|麵包|挫冰|雞排|冰/.test(note))return'點心/宵夜';return'其他'}
-const isHouse=t=>/家用/.test(t.note||'')||t.account==='家用';
-function groupTx(t){const c=t.category;if(isHouse(t))return'家用';if(c==='教育')return'教育';if(food.includes(c))return'飲食';if(c==='機車')return'交通';if(c==='醫療健康')return'醫療';if(fixed.includes(c))return'固定支出';if(['服飾','娛樂','金融','生活用品','交通','醫療'].includes(c))return c;return'其他'}
-const isLiving=c=>food.includes(c)||['生活用品','機車','生活費'].includes(c);
-function investmentRows(r){let rows=[],d=new Date(parseDate(r.start).getFullYear(),parseDate(r.start).getMonth(),1),end=parseDate(r.end);while(d<=end){const due=new Date(d.getFullYear(),d.getMonth(),INVEST_DAY),ds=fmt(due);if(ds>=r.start&&ds<=r.end)rows.push({id:'invest-'+ds,date:ds,type:'投資扣款',amount:MONTHLY_INVEST_TWD,account:'投資',category:'富邦DCA',note:'富邦DCA：0050 2000 + VOO 30USD + QQQM 30USD'});d=new Date(d.getFullYear(),d.getMonth()+1,1)}return rows}
-function stat(txs,r){const tx=txs.filter(t=>t.date>=r.start&&t.date<=r.end),ex=tx.filter(t=>t.type==='支出'),inc=tx.filter(t=>t.type==='收入'),invRows=investmentRows(r),sum=a=>a.reduce((s,x)=>s+Number(x.amount||0),0);const income=sum(inc),expense=sum(ex),invest=sum(invRows),lifeRows=ex.filter(t=>isLiving(t.category)&&!isHouse(t)),fixedRows=ex.filter(t=>fixed.includes(t.category));const groups=['飲食','家用','教育','服飾','交通','娛樂','醫療','金融','固定支出','生活用品','其他'].map(name=>({name,amount:sum(ex.filter(t=>groupTx(t)===name)),rows:ex.filter(t=>groupTx(t)===name)})).filter(x=>x.amount>0);const foods=food.map(name=>({name,amount:sum(ex.filter(t=>t.category===name)),rows:ex.filter(t=>t.category===name)})).filter(x=>x.amount>0);return{tx,ex,inc,invRows,income,expense,invest,balance:income-expense-invest,life:sum(lifeRows),fix:sum(fixedRows),lifeRows,fixedRows,groups,foods}}
-function spentForBudget(b,s){if(b.category==='生活費')return s.life;if(b.category==='固定支出')return s.fix;if(b.category==='富邦DCA')return s.invest;return s.ex.filter(t=>groupTx(t)===b.category||t.category===b.category).reduce((a,b)=>a+Number(b.amount||0),0)}
-function Card(p){return <section onClick={p.onClick} style={{background:'linear-gradient(160deg,rgba(17,24,39,.96),rgba(15,23,42,.96))',border:'1px solid rgba(34,197,94,.36)',borderRadius:22,padding:16,marginBottom:12,boxShadow:'0 18px 46px rgba(34,197,94,.13),0 12px 34px rgba(0,0,0,.28)',cursor:p.onClick?'pointer':'default',...p.style}}>{p.children}</section>}
-const Title=({t,r})=><div style={{display:'flex',justifyContent:'space-between',gap:10,marginBottom:12}}><h2 style={{margin:0,fontSize:18,fontWeight:950}}>{t}</h2>{r&&<b style={{color:'#86efac',fontSize:12}}>{r}</b>}</div>;
-const input=()=>({width:'100%',background:'rgba(15,23,42,.88)',border:'1px solid rgba(34,197,94,.28)',color:'#f8fafc',borderRadius:14,padding:12,fontSize:15,outline:'none'});
-function Btn(p){return <button onClick={p.onClick} style={{border:'1px solid rgba(212,175,55,.78)',borderRadius:14,padding:'10px 8px',background:'linear-gradient(180deg,rgba(250,204,21,.28),rgba(92,64,16,.75))',color:'#fff7bd',fontWeight:1000,boxShadow:'inset 0 1px 0 rgba(255,255,255,.35)',...p.style}}>{p.children}</button>}
-const DangerBtn=p=><button onClick={p.onClick} style={{border:'1px solid rgba(248,113,113,.45)',borderRadius:14,padding:'10px 8px',background:'rgba(127,29,29,.3)',color:'#fca5a5',fontWeight:1000}}>{p.children}</button>;
-const GhostBtn=p=><button onClick={p.onClick} style={{border:'1px solid rgba(148,163,184,.28)',borderRadius:14,padding:'10px 8px',background:'rgba(15,23,42,.55)',color:'#cbd5e1',fontWeight:1000}}>{p.children}</button>;
-function Metric({label,value,sub,good,bad,onClick}){return <Card onClick={onClick} style={{marginBottom:0,padding:14,borderColor:bad?'rgba(255,82,82,.55)':good?'rgba(34,197,94,.6)':undefined}}><div style={{color:'#94a3b8',fontSize:12,fontWeight:800}}>{label}</div><div style={{fontSize:24,fontWeight:1000,color:bad?'#ff5252':good?'#86efac':'#fff'}}>{value}</div>{sub&&<div style={{color:bad?'#ff5252':'#94a3b8',fontSize:12,marginTop:6}}>{sub}</div>}</Card>}
-function Bar({amount,total,danger}){const w=total>0?Math.min(100,Math.max(1,amount/total*100)):0;return <div style={{height:12,borderRadius:99,background:'#243044',overflow:'hidden'}}><div style={{height:'100%',width:w+'%',borderRadius:99,background:danger?'linear-gradient(90deg,#f59e0b,#ef4444)':'linear-gradient(90deg,#38bdf8,#22c55e)'}}/></div>}
-function TxList({rows}){return <div style={{marginTop:8,borderTop:'1px solid rgba(148,163,184,.12)'}}>{sortTx(rows).map(t=><div key={t.id} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,padding:'10px 0',borderBottom:'1px solid rgba(148,163,184,.12)'}}><div><b>{t.note}</b><div style={{color:'#94a3b8',fontSize:12,marginTop:3}}>{t.date}｜{t.category}｜{t.account}｜{t.type}</div></div><b style={{color:t.type==='收入'?'#86efac':t.type==='投資扣款'?'#facc15':'#fca5a5'}}>{nt(t.amount)}</b></div>)}</div>}
-const CollapseButton=({onClick})=><button onClick={e=>{e.stopPropagation();onClick();}} style={{width:'100%',marginTop:10,border:'1px solid rgba(34,197,94,.5)',borderRadius:12,padding:'10px',background:'rgba(34,197,94,.12)',color:'#bbf7d0',fontWeight:1000}}>收合此明細</button>;
-function Chart({rows,total,openKey,setOpenKey,prefix}){const base=Math.max(1,total||rows.reduce((s,x)=>s+x.amount,0));return <div style={{display:'grid',gap:12}}>{rows.map(x=>{const key=prefix+x.name,open=openKey===key;return <div key={x.name} style={{borderBottom:open?'1px solid rgba(34,197,94,.22)':'none',paddingBottom:open?10:0}}><div onClick={()=>setOpenKey(open?'':key)} style={{display:'grid',gridTemplateColumns:'70px 1fr 76px',gap:10,alignItems:'center',cursor:'pointer',padding:'2px 0'}}><b>{x.name}</b><Bar amount={x.amount} total={base} danger={x.name==='菸'}/><b style={{textAlign:'right'}}>{nt(x.amount)}</b><span style={{gridColumn:'2 / 3',color:open?'#86efac':'#94a3b8',fontSize:10,marginTop:-8}}>{(x.amount/base*100).toFixed(1)}%｜{open?'收合':'展開'}</span></div>{open&&<><TxList rows={x.rows}/><CollapseButton onClick={()=>setOpenKey('')}/></>}</div>})}</div>}
-const DetailCard=({title,right,rows,onClose})=><Card><Title t={title} r={right||'可收合'}/><TxList rows={rows}/><CollapseButton onClick={onClose}/></Card>;
-function Dashboard({txs}){const [r,setR]=useState({start:monthStart(),end:today()}),[openKey,setOpenKey]=useState('');const s=stat(txs,r),remain=8000-s.life,foodTotal=s.foods.reduce((a,b)=>a+b.amount,0),period=`${r.start.replaceAll('-','/')} - ${r.end.replaceAll('-','/')}`;const [showBalance,setShowBalance]=useState(false),[showIncome,setShowIncome]=useState(false),[showExpense,setShowExpense]=useState(false),[showInvest,setShowInvest]=useState(false),[showLife,setShowLife]=useState(false);function setRange(next){setR(next);setOpenKey('');setShowBalance(false);setShowIncome(false);setShowExpense(false);setShowInvest(false);setShowLife(false)}return <><Card><Title t='日期篩選' r='Date Range'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><input type='date' value={r.start} onChange={e=>setRange({...r,start:e.target.value})} style={input()}/><input type='date' value={r.end} onChange={e=>setRange({...r,end:e.target.value})} style={input()}/></div><div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:10}}><Btn onClick={()=>setRange(monthRange(0))}>七月當月</Btn><Btn onClick={()=>setRange(juneRange())}>上個月六月</Btn><Btn onClick={()=>setRange({start:payrollStart(),end:today()})}>發薪後</Btn></div><p style={{color:'#94a3b8',fontWeight:800}}>Local DB｜統計區間：{period}</p></Card><Card onClick={()=>setShowBalance(!showBalance)} style={{padding:20,borderColor:s.balance>=0?'rgba(34,197,94,.7)':'rgba(255,82,82,.6)'}}><Title t='可用結餘' r={showBalance?'收合明細':'展開明細'}/><div style={{fontSize:42,fontWeight:1000,color:s.balance>=0?'#86efac':'#ff5252'}}>{nt(s.balance)}</div><p style={{color:'#94a3b8'}}>收入 {nt(s.income)} - 支出 {nt(s.expense)} - 投資 {nt(s.invest)}</p></Card>{showBalance&&<DetailCard title='可用結餘明細' rows={[...s.inc,...s.ex,...s.invRows]} onClose={()=>setShowBalance(false)}/>}<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}><Metric onClick={()=>setShowIncome(!showIncome)} label='區間收入' value={nt(s.income)} sub={`${s.inc.length} 筆收入｜${showIncome?'收合':'展開'}`} good={s.income>0}/><Metric onClick={()=>setShowExpense(!showExpense)} label='區間支出' value={nt(s.expense)} sub={`${s.ex.length} 筆支出｜${showExpense?'收合':'展開'}`}/><Metric onClick={()=>setShowInvest(!showInvest)} label='投資扣款' value={nt(s.invest)} sub={`${s.invRows.length} 筆｜每月12號｜${showInvest?'收合':'展開'}`}/><Metric onClick={()=>setShowLife(!showLife)} label='生活費' value={nt(s.life)} sub={`${remain<0?'超支 '+nt(Math.abs(remain)):'剩餘 '+nt(remain)}｜${showLife?'收合':'展開'}`} bad={remain<0}/></div>{showIncome&&<DetailCard title='收入明細' rows={s.inc} onClose={()=>setShowIncome(false)}/>} {showExpense&&<DetailCard title='支出明細' rows={s.ex} onClose={()=>setShowExpense(false)}/>} {showInvest&&<DetailCard title='投資扣款明細' right='12號DCA' rows={s.invRows} onClose={()=>setShowInvest(false)}/>} {showLife&&<DetailCard title='生活費明細' right='排除家用' rows={s.lifeRows} onClose={()=>setShowLife(false)}/>}<Card><Title t='區間大類支出' r={openKey.startsWith('g-')?'可收合':'可展開'}/><Chart rows={s.groups} total={s.expense} openKey={openKey} setOpenKey={setOpenKey} prefix='g-'/></Card><Card><Title t='飲食細項' r={openKey.startsWith('f-')?'可收合':'可展開'}/><Chart rows={s.foods} total={foodTotal} openKey={openKey} setOpenKey={setOpenKey} prefix='f-'/></Card><Card><details><summary style={{cursor:'pointer',fontWeight:900}}>區間交易紀錄：{s.tx.length} 筆｜新到舊｜可展開</summary><TxList rows={s.tx}/></details></Card></>}
-function Entry({txs,setTxs,resetDb,exportDb}){const [f,setF]=useState({date:today(),type:'支出',amount:'',account:'自用',category:'飲食',note:''});function save(){const amount=Number(f.amount||0);if(!amount)return;const c=f.type==='收入'?f.category:(f.category==='飲食'?autoCat(f.note):f.category);setTxs([{id:'m'+Date.now(),...f,amount,category:c,note:f.note||c},...txs]);setF({...f,amount:'',note:''})}return <><Card><Title t='快速記帳' r='Local DB'/><div style={{display:'grid',gap:10}}><input value={f.amount} onChange={e=>setF({...f,amount:e.target.value})} style={{...input(),fontSize:22,fontWeight:900}} placeholder='金額' inputMode='numeric'/><input value={f.note} onChange={e=>setF({...f,note:e.target.value})} style={input()} placeholder='備註：早餐 / 薪水 / 加油 / 家用 / 教育'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><input type='date' value={f.date} onChange={e=>setF({...f,date:e.target.value})} style={input()}/><select value={f.type} onChange={e=>setF({...f,type:e.target.value})} style={input()}>{['支出','收入'].map(x=><option key={x}>{x}</option>)}</select></div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><select value={f.account} onChange={e=>setF({...f,account:e.target.value})} style={input()}>{['家用','自用','投資'].map(x=><option key={x}>{x}</option>)}</select><select value={f.category} onChange={e=>setF({...f,category:e.target.value})} style={input()}>{cats.map(x=><option key={x}>{x}</option>)}</select></div><Btn onClick={save}>儲存這筆</Btn></div></Card><Card><Title t='資料庫操作' r='備份 / 重置'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><Btn onClick={exportDb}>匯出 JSON</Btn><Btn onClick={resetDb}>重置範例</Btn></div></Card><Card><Title t='交易清單' r={`${txs.length} 筆｜新到舊`}/>{sortTx(txs).map(t=><div key={t.id} style={{display:'grid',gridTemplateColumns:'1fr auto auto',gap:10,padding:'10px 0',borderBottom:'1px solid rgba(148,163,184,.12)'}}><div><b>{t.note}</b><div style={{color:'#94a3b8',fontSize:12}}>{t.date}｜{t.category}｜{t.type}</div></div><b>{nt(t.amount)}</b><button onClick={()=>setTxs(txs.filter(x=>x.id!==t.id))} style={{background:'transparent',color:'#fca5a5',border:'1px solid rgba(248,113,113,.3)',borderRadius:10}}>刪</button></div>)}</Card></>}
-function Budget({txs,budgets,setBudgets}){const [form,setForm]=useState({name:'',category:'生活費',amount:''}),[editing,setEditing]=useState(null);const s=stat(txs,{start:monthStart(),end:today()});function addBudget(){const amount=Number(form.amount||0);if(!amount)return;setBudgets([{id:'b'+Date.now(),name:form.name||form.category,category:form.category,amount},...budgets]);setForm({name:'',category:'生活費',amount:''})}function saveEdit(){const amount=Number(editing?.amount||0);if(!editing||!amount)return;setBudgets(budgets.map(b=>b.id===editing.id?{...b,name:editing.name||editing.category,category:editing.category,amount}:b));setEditing(null)}function deleteEdit(){if(editing&&confirm(`確定刪除預算「${editing.name}」？`)){setBudgets(budgets.filter(b=>b.id!==editing.id));setEditing(null)}}return <><Card><Title t='新增預算' r='Local DB'/><div style={{display:'grid',gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={input()} placeholder='預算名稱，例如：二手筆記本電腦'/><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} style={input()}>{cats.filter(x=>!['薪水','退稅'].includes(x)).map(x=><option key={x}>{x}</option>)}</select><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} style={input()} placeholder='預算金額' inputMode='numeric'/><Btn onClick={addBudget}>新增預算</Btn></div></Card>{budgets.map(b=>{const spent=spentForBudget(b,s),remain=Number(b.amount||0)-spent,rate=b.amount?Math.round(spent/b.amount*100):0,isEdit=editing?.id===b.id;return <Card key={b.id}><Title t={b.name} r={isEdit?'編輯中':'本月'}/><Metric label={b.category} value={nt(spent)} sub={`${remain<0?'超支 '+nt(Math.abs(remain)):'剩餘 '+nt(remain)}｜預算 ${nt(b.amount)}｜${rate}%`} bad={remain<0}/>{isEdit?<div style={{display:'grid',gap:10,marginTop:12}}><input value={editing.name} onChange={e=>setEditing({...editing,name:e.target.value})} style={input()} placeholder='預算名稱'/><select value={editing.category} onChange={e=>setEditing({...editing,category:e.target.value})} style={input()}>{cats.filter(x=>!['薪水','退稅'].includes(x)).map(x=><option key={x}>{x}</option>)}</select><input value={editing.amount} onChange={e=>setEditing({...editing,amount:e.target.value})} style={input()} placeholder='預算金額' inputMode='numeric'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><Btn onClick={saveEdit}>儲存修改</Btn><GhostBtn onClick={()=>setEditing(null)}>取消</GhostBtn></div><DangerBtn onClick={deleteEdit}>刪除預算</DangerBtn></div>:<Btn onClick={()=>setEditing({...b,amount:String(b.amount)})} style={{marginTop:12,width:'100%'}}>編輯</Btn>}</Card>})}</>}
-function Assets({assets,setAssets}){const hunter={total:94.37};const [form,setForm]=useState({name:'',type:'現金',amount:'',note:''}),[editing,setEditing]=useState(null);const total=assets.reduce((s,a)=>s+Number(a.amount||0),0),grand=total+hunter.total*RATE;function addAsset(){const amount=Number(form.amount||0);if(!form.name||!Number.isFinite(amount))return;setAssets([{id:'asset-'+Date.now(),name:form.name,type:form.type,amount,note:form.note||'手動輸入'},...assets]);setForm({name:'',type:'現金',amount:'',note:''})}function saveAsset(){const amount=Number(editing?.amount||0);if(!editing||!editing.name||!Number.isFinite(amount))return;setAssets(assets.map(a=>a.id===editing.id?{...a,name:editing.name,type:editing.type,amount,note:editing.note||'手動輸入'}:a));setEditing(null)}function deleteAsset(){if(editing&&confirm(`確定刪除資產「${editing.name}」？`)){setAssets(assets.filter(a=>a.id!==editing.id));setEditing(null)}}return <><Card><Title t='綜合總資產' r='TWD 估算'/><div style={{fontSize:42,fontWeight:1000}}>{nt(grand)}</div><p style={{color:'#94a3b8'}}>手動資產 {nt(total)} + 獵人投資 {usd(hunter.total)} × 匯率 {RATE}</p></Card><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}><Metric label='手動資產' value={nt(total)} sub='銀行約當台幣'/><Metric label='獵人投資市值' value={usd(hunter.total)} sub='BTC + xStocks'/></div><Card><Title t='新增手動資產' r='Local DB'/><div style={{display:'grid',gap:10}}><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={input()} placeholder='資產名稱，例如：富邦銀行 / 教育基金'/><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} style={input()}>{assetTypes.map(x=><option key={x}>{x}</option>)}</select><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} style={input()} placeholder='金額' inputMode='numeric'/><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} style={input()} placeholder='備註，例如：手動輸入 / 約當台幣'/><Btn onClick={addAsset}>新增資產</Btn></div></Card><Card><Title t='手動資產清單' r={`${assets.length} 筆`}/>{assets.map(a=>{const isEdit=editing?.id===a.id;return <div key={a.id} style={{padding:'12px 0',borderBottom:'1px solid rgba(148,163,184,.12)'}}>{isEdit?<div style={{display:'grid',gap:10}}><input value={editing.name} onChange={e=>setEditing({...editing,name:e.target.value})} style={input()} placeholder='資產名稱'/><select value={editing.type} onChange={e=>setEditing({...editing,type:e.target.value})} style={input()}>{assetTypes.map(x=><option key={x}>{x}</option>)}</select><input value={editing.amount} onChange={e=>setEditing({...editing,amount:e.target.value})} style={input()} placeholder='金額' inputMode='numeric'/><input value={editing.note} onChange={e=>setEditing({...editing,note:e.target.value})} style={input()} placeholder='備註'/><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><Btn onClick={saveAsset}>儲存修改</Btn><GhostBtn onClick={()=>setEditing(null)}>取消</GhostBtn></div><DangerBtn onClick={deleteAsset}>刪除資產</DangerBtn></div>:<div style={{display:'grid',gridTemplateColumns:'1fr auto auto',gap:10,alignItems:'center'}}><div><b>{a.name}</b><div style={{color:'#94a3b8',fontSize:12}}>{a.type}｜{a.note}</div></div><b style={{color:'#86efac'}}>{nt(a.amount)}</b><Btn onClick={()=>setEditing({...a,amount:String(a.amount)})}>編輯</Btn></div>}</div>})}</Card></>}
-export default function LedgerPage(){const [tab,setTab]=useState('dashboard'),[txs,setTxs]=useState([]),[budgets,setBudgets]=useState(defaultBudgets),[assets,setAssets]=useState(defaultAssets),[loaded,setLoaded]=useState(false);useEffect(()=>{try{const raw=localStorage.getItem(TX_KEY)||localStorage.getItem(OLD_TX_KEY);setTxs(raw?cleanDb(JSON.parse(raw)):sample)}catch{setTxs(sample)}try{const b=JSON.parse(localStorage.getItem(BUDGET_KEY)||'null');if(Array.isArray(b))setBudgets(b)}catch{}try{const a=JSON.parse(localStorage.getItem(ASSET_KEY)||'null');if(Array.isArray(a))setAssets(cleanAssets(a))}catch{}setLoaded(true)},[]);useEffect(()=>{if(loaded)localStorage.setItem(TX_KEY,JSON.stringify(cleanDb(txs)))},[txs,loaded]);useEffect(()=>{if(loaded)localStorage.setItem(BUDGET_KEY,JSON.stringify(budgets))},[budgets,loaded]);useEffect(()=>{if(loaded)localStorage.setItem(ASSET_KEY,JSON.stringify(cleanAssets(assets)))},[assets,loaded]);function resetDb(){if(confirm('確定重置為範例資料？這會覆蓋目前本機交易資料。'))setTxs(sample)}function exportDb(){const blob=new Blob([JSON.stringify({version:'ledger-v4.4',exportedAt:new Date().toISOString(),transactions:txs,budgets,assets,investment:{day:INVEST_DAY,monthlyTwd:MONTHLY_INVEST_TWD,rate:RATE}},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`josh-ledger-${today()}.json`;a.click();URL.revokeObjectURL(url)}const tabs=[['dashboard','總覽'],['entry','記帳'],['budget','預算'],['assets','資產']];return <main style={{minHeight:'100vh',color:'#f8fafc',background:'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif"}}><div style={{maxWidth:430,margin:'0 auto',padding:'18px 14px 130px'}}><section style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,marginBottom:14}}><div><div style={{fontSize:22,fontWeight:1000}}>Josh 多元記帳本</div><div style={{color:'#94a3b8',fontSize:12,fontWeight:800,marginTop:5}}>多元記帳本 V4.4｜資產編輯｜安全刪除</div></div><a href='/josh-os' style={{color:'#bbf7d0',textDecoration:'none',border:'1px solid rgba(34,197,94,.42)',borderRadius:999,padding:'7px 10px',fontSize:12,fontWeight:950}}>四合一</a></section>{tab==='dashboard'&&<Dashboard txs={txs}/>} {tab==='entry'&&<Entry txs={txs} setTxs={setTxs} resetDb={resetDb} exportDb={exportDb}/>} {tab==='budget'&&<Budget txs={txs} budgets={budgets} setBudgets={setBudgets}/>} {tab==='assets'&&<Assets assets={assets} setAssets={setAssets}/>}</div><nav style={{position:'fixed',left:0,right:0,bottom:0,background:'rgba(2,6,23,.92)',backdropFilter:'blur(16px)',borderTop:'1px solid rgba(34,197,94,.24)',padding:'8px 10px 10px'}}><div style={{maxWidth:430,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>{tabs.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{border:'1px solid rgba(212,175,55,.65)',borderRadius:13,padding:'9px 4px',background:tab===k?'linear-gradient(180deg,rgba(250,204,21,.32),rgba(92,64,16,.78))':'rgba(92,64,16,.45)',color:'#fff7bd',fontSize:11,fontWeight:1000}}>{l}</button>)}</div></nav></main>}
+import { useEffect, useMemo, useState } from 'react';
+
+const TX_KEY = 'josh-financial-os-v36-db';
+const OLD_TX_KEY = 'josh-financial-os-v32-tx';
+const BUDGET_KEY = 'josh-financial-os-v38-budgets';
+const ASSET_KEY = 'josh-ledger-v42-assets';
+const RATE = 32.5;
+const INVEST_DAY = 12;
+const MONTHLY_INVEST_TWD = 2000 + 60 * RATE;
+
+const food = ['早餐', '午餐', '晚餐', '飲料', '咖啡', '菸', '點心/宵夜'];
+const fixed = ['手機月租費', 'ChatGPT', 'Google One'];
+const cats = ['飲食', '家用', '教育', '服飾', '交通', '娛樂', '醫療', '金融', '固定支出', '生活用品', '生活費', '薪水', '退稅', '早餐', '午餐', '晚餐', '飲料', '咖啡', '菸', '點心/宵夜', '機車', '醫療健康', '其他', '富邦DCA'];
+const assetTypes = ['現金', '銀行', '投資', '家用', '教育', '其他'];
+const defaultBudgets = [
+  { id: 'b-living', name: '生活費', category: '生活費', amount: 8000 },
+  { id: 'b-invest', name: '富邦DCA', category: '富邦DCA', amount: MONTHLY_INVEST_TWD },
+];
+const defaultAssets = [
+  { id: 'a1', name: '合作金庫（自用）', amount: 76, type: '銀行', note: '自用' },
+  { id: 'a2', name: '富邦銀行（投資）', amount: 3299, type: '投資', note: '約當台幣' },
+  { id: 'a3', name: '郵局存款（家用）', amount: 17152, type: '家用', note: '手動輸入' },
+  { id: 'a4', name: '現金', amount: 0, type: '現金', note: '手動輸入' },
+];
+const sample = [{ id: 'income-salary-202606', date: '2026-06-30', type: '收入', amount: 50350, account: '自用', category: '薪水', note: '薪水' }];
+
+const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const today = () => fmt(new Date());
+const monthStart = () => today().slice(0, 7) + '-01';
+const parseDate = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+const nt = (n) => '$' + Number(n || 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+const usd = (n) => 'USD ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sortTx = (rows) => [...rows].sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(b.id || '').localeCompare(String(a.id || '')));
+const cleanDb = (rows) => Array.isArray(rows) ? rows.filter((t) => t && t.id && !(t.id === 'income-tax-202606' || (t.date === '2026-06-30' && t.type === '收入' && t.category === '退稅' && Number(t.amount) === 1300))) : [];
+const cleanAssets = (rows) => Array.isArray(rows) ? rows.filter((a) => a && a.id && a.name).map((a) => ({ ...a, amount: Number(a.amount || 0), type: a.type || '其他' })) : defaultAssets;
+const isHouse = (t) => /家用/.test(t.note || '') || t.account === '家用';
+const isLiving = (c) => food.includes(c) || ['生活用品', '機車', '生活費'].includes(c);
+
+function autoCat(note) {
+  if (/家用/.test(note)) return '生活費';
+  if (/學費|空大|學校|教育|書|筆電|筆記本|課程|補習/.test(note)) return '教育';
+  if (/Chat/i.test(note)) return 'ChatGPT';
+  if (/Google/i.test(note)) return 'Google One';
+  if (/電信|手機/.test(note)) return '手機月租費';
+  if (/加油|停車|機車|罰單/.test(note)) return '機車';
+  if (/耳|鼻|醫|看耳朵|洗鼻器/.test(note)) return '醫療健康';
+  if (/富邦/.test(note)) return '金融';
+  if (/Badoo|足球/.test(note)) return '娛樂';
+  if (/雨衣/.test(note)) return '服飾';
+  if (/早餐/.test(note)) return '早餐';
+  if (/午餐|中餐/.test(note)) return '午餐';
+  if (/晚餐/.test(note)) return '晚餐';
+  if (/咖啡|冰美式|冰拿|熟拿|黑咖啡/.test(note)) return '咖啡';
+  if (/菸|芬/.test(note)) return '菸';
+  if (/飲料/.test(note)) return '飲料';
+  if (/豆|酥|麵包|挫冰|雞排|冰/.test(note)) return '點心/宵夜';
+  return '其他';
+}
+function groupTx(t) {
+  const c = t.category;
+  if (isHouse(t)) return '家用';
+  if (c === '教育') return '教育';
+  if (food.includes(c)) return '飲食';
+  if (c === '機車') return '交通';
+  if (c === '醫療健康') return '醫療';
+  if (fixed.includes(c)) return '固定支出';
+  if (['服飾', '娛樂', '金融', '生活用品', '交通', '醫療'].includes(c)) return c;
+  return '其他';
+}
+function investmentRows(r) {
+  const rows = [];
+  let d = new Date(parseDate(r.start).getFullYear(), parseDate(r.start).getMonth(), 1);
+  const end = parseDate(r.end);
+  while (d <= end) {
+    const due = new Date(d.getFullYear(), d.getMonth(), INVEST_DAY);
+    const ds = fmt(due);
+    if (ds >= r.start && ds <= r.end) rows.push({ id: 'invest-' + ds, date: ds, type: '投資扣款', amount: MONTHLY_INVEST_TWD, account: '投資', category: '富邦DCA', note: '富邦DCA：0050 2000 + VOO 30USD + QQQM 30USD' });
+    d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  }
+  return rows;
+}
+function stat(txs, r) {
+  const tx = txs.filter((t) => t.date >= r.start && t.date <= r.end);
+  const ex = tx.filter((t) => t.type === '支出');
+  const inc = tx.filter((t) => t.type === '收入');
+  const invRows = investmentRows(r);
+  const sum = (a) => a.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const income = sum(inc);
+  const expense = sum(ex);
+  const invest = sum(invRows);
+  const lifeRows = ex.filter((t) => isLiving(t.category) && !isHouse(t));
+  const fixedRows = ex.filter((t) => fixed.includes(t.category));
+  const groups = ['飲食', '家用', '教育', '服飾', '交通', '娛樂', '醫療', '金融', '固定支出', '生活用品', '其他'].map((name) => ({ name, amount: sum(ex.filter((t) => groupTx(t) === name)), rows: ex.filter((t) => groupTx(t) === name) })).filter((x) => x.amount > 0);
+  return { tx, ex, inc, invRows, income, expense, invest, balance: income - expense - invest, life: sum(lifeRows), fix: sum(fixedRows), lifeRows, fixedRows, groups };
+}
+
+function Card(p) { return <section onClick={p.onClick} style={{ background: 'linear-gradient(160deg,rgba(17,24,39,.96),rgba(15,23,42,.96))', border: '1px solid rgba(34,197,94,.36)', borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: '0 18px 46px rgba(34,197,94,.13),0 12px 34px rgba(0,0,0,.28)', cursor: p.onClick ? 'pointer' : 'default', ...p.style }}>{p.children}</section>; }
+const Title = ({ t, r }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{t}</h2>{r && <b style={{ color: '#86efac', fontSize: 12 }}>{r}</b>}</div>;
+const input = () => ({ width: '100%', background: 'rgba(15,23,42,.88)', border: '1px solid rgba(34,197,94,.28)', color: '#f8fafc', borderRadius: 14, padding: 12, fontSize: 15, outline: 'none' });
+function Btn(p) { return <button onClick={p.onClick} style={{ border: '1px solid rgba(212,175,55,.78)', borderRadius: 14, padding: '10px 8px', background: 'linear-gradient(180deg,rgba(250,204,21,.28),rgba(92,64,16,.75))', color: '#fff7bd', fontWeight: 1000, boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35)', ...p.style }}>{p.children}</button>; }
+function Metric({ label, value, sub, good, bad, onClick }) { return <Card onClick={onClick} style={{ marginBottom: 0, padding: 14, borderColor: bad ? 'rgba(255,82,82,.55)' : good ? 'rgba(34,197,94,.6)' : undefined }}><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800 }}>{label}</div><div style={{ fontSize: 24, fontWeight: 1000, color: bad ? '#ff5252' : good ? '#86efac' : '#fff' }}>{value}</div>{sub && <div style={{ color: bad ? '#ff5252' : '#94a3b8', fontSize: 12, marginTop: 6 }}>{sub}</div>}</Card>; }
+function TxList({ rows }) { return <div style={{ marginTop: 8, borderTop: '1px solid rgba(148,163,184,.12)' }}>{sortTx(rows).map((t) => <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><div><b>{t.note}</b><div style={{ color: '#94a3b8', fontSize: 12, marginTop: 3 }}>{t.date}｜{t.category}｜{t.account}｜{t.type}</div></div><b style={{ color: t.type === '收入' ? '#86efac' : t.type === '投資扣款' ? '#facc15' : '#fca5a5' }}>{nt(t.amount)}</b></div>)}</div>; }
+
+function Dashboard({ txs }) {
+  const [r, setR] = useState({ start: monthStart(), end: today() });
+  const s = stat(txs, r);
+  const remain = 8000 - s.life;
+  return <>
+    <Card><Title t="日期篩選" r="Date Range" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input type="date" value={r.start} onChange={(e) => setR({ ...r, start: e.target.value })} style={input()} /><input type="date" value={r.end} onChange={(e) => setR({ ...r, end: e.target.value })} style={input()} /></div></Card>
+    <Card><Title t="可用結餘" r="Local DB" /><div style={{ fontSize: 42, fontWeight: 1000, color: s.balance >= 0 ? '#86efac' : '#ff5252' }}>{nt(s.balance)}</div><p style={{ color: '#94a3b8' }}>收入 {nt(s.income)} - 支出 {nt(s.expense)} - 投資 {nt(s.invest)}</p></Card>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}><Metric label="區間收入" value={nt(s.income)} good={s.income > 0} /><Metric label="區間支出" value={nt(s.expense)} /><Metric label="投資扣款" value={nt(s.invest)} /><Metric label="生活費" value={nt(s.life)} sub={remain < 0 ? `超支 ${nt(Math.abs(remain))}` : `剩餘 ${nt(remain)}`} bad={remain < 0} /></div>
+    <Card><Title t="區間大類支出" r={`${s.groups.length} 類`} />{s.groups.map((g) => <div key={g.name} style={{ display: 'grid', gridTemplateColumns: '70px 1fr auto', gap: 10, padding: '7px 0' }}><b>{g.name}</b><div style={{ height: 12, borderRadius: 99, background: '#243044', overflow: 'hidden', marginTop: 4 }}><div style={{ height: '100%', width: Math.min(100, Math.max(1, g.amount / Math.max(1, s.expense) * 100)) + '%', background: 'linear-gradient(90deg,#38bdf8,#22c55e)' }} /></div><b>{nt(g.amount)}</b></div>)}</Card>
+  </>;
+}
+
+function Entry({ txs, setTxs }) {
+  const [form, setForm] = useState({ date: today(), type: '支出', amount: '', account: '自用', category: '飲食', note: '' });
+  function save() {
+    const amount = Number(form.amount || 0);
+    if (!amount) return;
+    const category = form.type === '收入' ? form.category : form.category === '飲食' ? autoCat(form.note) : form.category;
+    setTxs([{ id: 'm' + Date.now(), ...form, amount, category, note: form.note || category }, ...txs]);
+    setForm({ ...form, amount: '', note: '' });
+  }
+  return <>
+    <Card><Title t="快速記帳" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={{ ...input(), fontSize: 22, fontWeight: 900 }} placeholder="金額" inputMode="numeric" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={input()} placeholder="備註：早餐 / 薪水 / 加油 / 家用 / 教育" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={input()} /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={input()}>{['支出', '收入'].map((x) => <option key={x}>{x}</option>)}</select></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} style={input()}>{['家用', '自用', '投資'].map((x) => <option key={x}>{x}</option>)}</select><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select></div><Btn onClick={save}>儲存這筆</Btn></div></Card>
+    <Card><Title t="交易清單" r={`${txs.length} 筆`} /><TxList rows={txs} /></Card>
+  </>;
+}
+
+function Budget({ txs, budgets, setBudgets }) {
+  const [form, setForm] = useState({ name: '', category: '生活費', amount: '' });
+  const s = stat(txs, { start: monthStart(), end: today() });
+  function spent(b) { if (b.category === '生活費') return s.life; if (b.category === '固定支出') return s.fix; if (b.category === '富邦DCA') return s.invest; return s.ex.filter((t) => groupTx(t) === b.category || t.category === b.category).reduce((a, b) => a + Number(b.amount || 0), 0); }
+  return <>
+    <Card><Title t="新增預算" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{cats.filter((x) => !['薪水', '退稅'].includes(x)).map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="預算金額" inputMode="numeric" /><Btn onClick={() => { const amount = Number(form.amount || 0); if (amount) { setBudgets([{ id: 'b' + Date.now(), name: form.name || form.category, category: form.category, amount }, ...budgets]); setForm({ name: '', category: '生活費', amount: '' }); } }}>新增預算</Btn></div></Card>
+    {budgets.map((b) => { const used = spent(b); const remain = Number(b.amount || 0) - used; return <Card key={b.id}><Title t={b.name} r="本月" /><Metric label={b.category} value={nt(used)} sub={`${remain < 0 ? '超支 ' + nt(Math.abs(remain)) : '剩餘 ' + nt(remain)}｜預算 ${nt(b.amount)}`} bad={remain < 0} /><button onClick={() => setBudgets(budgets.filter((x) => x.id !== b.id))} style={{ marginTop: 10, border: '1px solid rgba(248,113,113,.45)', borderRadius: 12, padding: 9, background: 'rgba(127,29,29,.25)', color: '#fca5a5', fontWeight: 900 }}>刪除</button></Card>; })}
+  </>;
+}
+
+function AssetPage({ assets, setAssets }) {
+  const [form, setForm] = useState({ name: '', type: '現金', amount: '', note: '' });
+  const [ledger, setLedger] = useState({ loading: true, error: '', marketValue: 0, lastSyncTime: '', source: '' });
+  const manualTwd = useMemo(() => assets.reduce((sum, item) => sum + Number(item.amount || 0), 0), [assets]);
+  const hunterUsd = Number(ledger.marketValue || 0);
+  const hunterTwd = hunterUsd * RATE;
+  const totalTwd = manualTwd + hunterTwd;
+
+  async function loadWalletLedger() {
+    setLedger((x) => ({ ...x, loading: true, error: '' }));
+    try {
+      const res = await fetch('/api/wallet-ledger?t=' + Date.now(), { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || json.ok === false) throw new Error(json.message || json.error || 'wallet-ledger failed');
+      const marketValue = Number(json.portfolioMarketValue ?? json.currentValue ?? json.marketValue ?? 0);
+      setLedger({ loading: false, error: '', marketValue, lastSyncTime: json.lastSyncTime || json.updatedAt || json.checkedAt || '', source: json.priceSource || json.source || '' });
+    } catch (error) {
+      setLedger({ loading: false, error: error.message || '同步失敗', marketValue: 0, lastSyncTime: '', source: '' });
+    }
+  }
+
+  useEffect(() => { loadWalletLedger(); }, []);
+
+  function addAsset() {
+    const amount = Number(form.amount || 0);
+    if (!form.name || !Number.isFinite(amount)) return;
+    setAssets([{ id: 'asset-' + Date.now(), name: form.name, type: form.type, amount, note: form.note || '手動輸入' }, ...assets]);
+    setForm({ name: '', type: '現金', amount: '', note: '' });
+  }
+
+  return <>
+    <Card><Title t="綜合總資產" r="TWD 估算" /><div style={{ fontSize: 42, fontWeight: 1000 }}>{nt(totalTwd)}</div><p style={{ color: '#94a3b8', lineHeight: 1.55 }}>手動資產 {nt(manualTwd)} + 獵人投資 {usd(hunterUsd)} × 匯率 {RATE}</p><div style={{ color: ledger.error ? '#fca5a5' : '#86efac', fontSize: 12, fontWeight: 900 }}>資料源：/api/wallet-ledger｜{ledger.loading ? '同步中' : ledger.error ? ledger.error : '已同步'}</div>{ledger.lastSyncTime && <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 5 }}>Last Sync：{ledger.lastSyncTime}</div>}</Card>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}><Metric label="手動資產" value={nt(manualTwd)} sub="銀行約當台幣" /><Metric label="獵人投資市值" value={usd(hunterUsd)} sub="鏡像真實持倉" good={!ledger.error && hunterUsd > 0} /></div>
+    <Card><Title t="新增手動資產" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="資產名稱，例如：富邦銀行 / 教育基金" /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={input()}>{assetTypes.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="金額" inputMode="numeric" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={input()} placeholder="備註，例如：手動輸入 / 約當台幣" /><Btn onClick={addAsset}>新增資產</Btn><button onClick={loadWalletLedger} style={{ border: '1px solid rgba(34,197,94,.5)', borderRadius: 14, padding: 10, background: 'rgba(34,197,94,.12)', color: '#bbf7d0', fontWeight: 1000 }}>重新同步獵人投資</button></div></Card>
+    <Card><Title t="手動資產清單" r={`${assets.length} 筆`} />{assets.map((a) => <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><div><b>{a.name}</b><div style={{ color: '#94a3b8', fontSize: 12 }}>{a.type}｜{a.note}</div></div><b style={{ color: '#86efac' }}>{nt(a.amount)}</b><button onClick={() => setAssets(assets.filter((x) => x.id !== a.id))} style={{ background: 'transparent', color: '#fca5a5', border: '1px solid rgba(248,113,113,.3)', borderRadius: 10, padding: '7px 9px' }}>刪</button></div>)}</Card>
+  </>;
+}
+
+export default function FinancialOS() {
+  const [tab, setTab] = useState('dashboard');
+  const [txs, setTxs] = useState([]);
+  const [budgets, setBudgets] = useState(defaultBudgets);
+  const [assets, setAssets] = useState(defaultAssets);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    try { const raw = localStorage.getItem(TX_KEY) || localStorage.getItem(OLD_TX_KEY); setTxs(raw ? cleanDb(JSON.parse(raw)) : sample); } catch { setTxs(sample); }
+    try { const raw = JSON.parse(localStorage.getItem(BUDGET_KEY) || 'null'); if (Array.isArray(raw)) setBudgets(raw); } catch {}
+    try { const raw = JSON.parse(localStorage.getItem(ASSET_KEY) || 'null'); if (Array.isArray(raw)) setAssets(cleanAssets(raw)); } catch {}
+    setReady(true);
+  }, []);
+  useEffect(() => { if (ready) localStorage.setItem(TX_KEY, JSON.stringify(cleanDb(txs))); }, [txs, ready]);
+  useEffect(() => { if (ready) localStorage.setItem(BUDGET_KEY, JSON.stringify(budgets)); }, [budgets, ready]);
+  useEffect(() => { if (ready) localStorage.setItem(ASSET_KEY, JSON.stringify(cleanAssets(assets))); }, [assets, ready]);
+
+  return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
+    <div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}>
+      <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V4.5｜資產同步｜安全刪除</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section>
+      {tab === 'dashboard' && <Dashboard txs={txs} />}
+      {tab === 'entry' && <Entry txs={txs} setTxs={setTxs} />}
+      {tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} />}
+      {tab === 'assets' && <AssetPage assets={assets} setAssets={setAssets} />}
+    </div>
+    <nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,.92)', backdropFilter: 'blur(16px)', borderTop: '1px solid rgba(34,197,94,.24)', padding: '8px 10px 10px' }}><div style={{ maxWidth: 430, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>{[['dashboard', '總覽'], ['entry', '記帳'], ['budget', '預算'], ['assets', '資產']].map(([key, label]) => <button key={key} onClick={() => setTab(key)} style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 4px', background: tab === key ? 'linear-gradient(180deg,rgba(250,204,21,.32),rgba(92,64,16,.78))' : 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000 }}>{label}</button>)}</div></nav>
+  </main>;
+}
