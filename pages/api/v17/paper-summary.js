@@ -2,6 +2,7 @@ import { getPaperSummary } from "../../../lib/v17-paper-engine";
 import { fetchPaperStockQuotes, PAPER_STOCK_SYMBOLS } from "../../../lib/v17-paper-stock-quotes";
 import { getAllPaperDiscountRules } from "../../../lib/v17-paper-discount-rules";
 import { countPaperLegacyText, sanitizePaperObject } from "../../../lib/v17-paper-text-sanitizer";
+import { enrichPaperHighProgress, highProgressHealth } from "../../../lib/v17-paper-high-progress";
 
 function buildPaperStockAssetMap() {
   const rules = getAllPaperDiscountRules();
@@ -47,13 +48,15 @@ export default async function handler(req, res) {
     const quoteMarkets = marketMapFromQuotes(quotes);
     const rawResult = await getPaperSummary({ markets: { ...quoteMarkets, ...(body.markets || {}) }, persistMetrics });
     const beforeHits = countPaperLegacyText(rawResult);
-    const result = sanitizePaperObject(rawResult);
+    const sanitized = sanitizePaperObject(rawResult);
+    const result = enrichPaperHighProgress(sanitized, quotes);
     const afterHits = countPaperLegacyText(result);
     return res.status(200).json({
       ...result,
       quoteSource: "Binance xStocks first / Yahoo fallback only",
       quotePolicy: "paper symbols prefer Binance tradable xStock token price; Yahoo only when Binance xStock is unavailable",
       quoteHealth: quoteHealth(quotes),
+      highProgressHealth: highProgressHealth((result.positions || []).filter((row) => row.sourceType !== "existing_ten")),
       placeholderFallbackDisabled: true,
       paperTextSanitizer: {
         enabled: true,
