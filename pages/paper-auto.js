@@ -6,16 +6,37 @@ function n(value, digits = 2) {
 }
 
 async function fetchJson(url, options = {}) {
-  const res = await fetch(url, { cache: "no-store", ...options });
-  const text = await res.text();
-  let json = {};
-  try { json = text ? JSON.parse(text) : {}; } catch { throw new Error(`API 回傳不是 JSON：${url}`); }
-  if (!res.ok || json.ok === false) throw new Error(json.error || json.message || `讀取失敗：${url}`);
-  return json;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 20000);
+  try {
+    const { timeoutMs, ...fetchOptions } = options;
+    const res = await fetch(url, { cache: "no-store", ...fetchOptions, signal: controller.signal });
+    const text = await res.text();
+    let json = {};
+    try { json = text ? JSON.parse(text) : {}; } catch { throw new Error(`API 回傳不是 JSON：${url}`); }
+    if (!res.ok || json.ok === false) throw new Error(json.error || json.message || `讀取失敗：${url}`);
+    return json;
+  } catch (err) {
+    if (err?.name === "AbortError") throw new Error(`讀取逾時：${url}`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function key(symbol) {
   return String(symbol || "").toUpperCase().replace(/ON$/, "");
+}
+
+function getOpenRows(summary = {}) {
+  const rows = Array.isArray(summary?.positions)
+    ? summary.positions
+    : Array.isArray(summary?.openPositions)
+      ? summary.openPositions
+      : Array.isArray(summary?.trades)
+        ? summary.trades
+        : [];
+  return rows.filter((row) => String(row?.status || "OPEN").toUpperCase() === "OPEN");
 }
 
 function isCore(row = {}) {
@@ -45,7 +66,7 @@ function aggregatePositions(rows = []) {
     const current = map.get(k);
     const amountUSDT = Number(row.amountUSDT || 0);
     const quantity = Number(row.quantity || 0);
-    const currentPrice = Number(row.currentPrice || row.price || 0);
+    const currentPrice = Number(row.currentPrice || row.tokenPrice || row.stockPrice || row.price || 0);
     if (!current) {
       map.set(k, { ...row, id: `AGG-${k}`, lotCount: 1, amountUSDT, quantity, currentPrice, price: quantity > 0 ? amountUSDT / quantity : Number(row.price || 0) });
       continue;
@@ -74,8 +95,8 @@ function aggregatePositions(rows = []) {
   return [...map.values()].map((row) => {
     const currentValue = Number(row.currentPrice || 0) * Number(row.quantity || 0);
     const cost = Number(row.amountUSDT || 0);
-    const pnl = currentValue - cost;
-    return { ...row, currentValue, pnl, pnlPct: cost > 0 ? pnl / cost : 0 };
+    const pnl = Number.isFinite(currentValue) && currentValue > 0 ? currentValue - cost : Number(row.pnl || 0);
+    return { ...row, currentValue: currentValue || Number(row.currentValue || 0), pnl, pnlPct: cost > 0 ? pnl / cost : 0 };
   });
 }
 
@@ -206,11 +227,28 @@ function PositionSection({ title, rows = [], tone = "blue", defaultOpen = true, 
   </Box>;
 }
 
-export default function PaperAutoPage() {
-  const [summary, setSummary] = useState(null);
+export async function getServerSideProps({ req }) {
+  const host = req?.headers?.host || process.env.VERCEL_URL || "discount-hunter-sigma.vercel.app";
+  const proto = host.includes("localhost") ? "http" : "https";
+  try {
+    const res = await fetch(`${proto}://${host}/api/v17/paper-summary?ssr=1`, { headers: { "cache-control": "no-store" } });
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    if (!res.ok || json?.ok === false || !json) {
+      return { props: { initialSummary: null, initialError: json?.error || json?.message || `SSR讀取失敗 ${res.status}` } };
+    }
+    return { props: { initialSummary: json, initialError: "" } };
+  } catch (err) {
+    return { props: { initialSummary: null, initialError: `SSR資料讀取失敗：${err?.message || "unknown"}` } };
+  }
+}
+
+export default function PaperAutoPage({ initialSummary = null, initialError = "" }) {
+  const [summary, setSummary] = useState(initialSummary);
   const [lastRun, setLastRun] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError || "");
 
   async function load() {
     setBusy(true);
@@ -229,9 +267,10 @@ export default function PaperAutoPage() {
     setBusy(true);
     setError("");
     try {
-      const result = await fetchJson(`/api/v17/paper-auto-run?t=${Date.now()}`);
+      const result = await fetchJson(`/api/v17/paper-auto-run?t=${Date.now()}`, { timeoutMs: 25000 });
       setLastRun(result);
-      await load();
+      const paper = await fetchJson(`/api/v17/paper-summary?t=${Date.now()}`);
+      setSummary(paper);
     } catch (err) {
       setError(err.message || "執行失敗");
     } finally {
@@ -239,16 +278,28 @@ export default function PaperAutoPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!summary) load();
+  }, []);
 
-  const grouped = useMemo(() => aggregatePositions(summary?.positions || []), [summary?.positions]);
+  const openRows = useMemo(() => getOpenRows(summary), [summary]);
+  const grouped = useMemo(() => aggregatePositions(openRows), [openRows]);
   const core = useMemo(() => grouped.filter(isCore), [grouped]);
   const prepared = useMemo(() => grouped.filter((row) => !isCore(row)), [grouped]);
   const portfolio = useMemo(() => sumRows(grouped), [grouped]);
   const pnlColor = Number(portfolio.pnl || 0) >= 0 ? "#bbf7d0" : "#fecaca";
   const pnlPct = portfolio.cost > 0 ? portfolio.pnl / portfolio.cost : 0;
-  const rawLotCount = summary?.summary?.openTrades || portfolio.lots || 0;
-  const progressCount = prepared.filter((row) => row.highProgress?.enabled).length;
+  const apiGroups = summary?.summary?.groups || {};
+  const apiCoreCount = Number(apiGroups?.["既有V17十檔"]?.symbolCount ?? summary?.summary?.existingTenCount ?? 0);
+  const apiPreparedCount = Number(apiGroups?.["預備名單"]?.symbolCount ?? summary?.summary?.preparedListCount ?? 0);
+  const displayCoreCount = core.length || apiCoreCount;
+  const displayPreparedCount = prepared.length || apiPreparedCount;
+  const rawLotCount = Number(summary?.summary?.openTrades || portfolio.lots || 0);
+  const progressCount = prepared.filter((row) => row.highProgress?.enabled).length || Number(summary?.highProgressHealth?.enabledCount || 0);
+  const displayCost = portfolio.cost || Number(summary?.summary?.cost || 0);
+  const displayValue = portfolio.value || Number(summary?.summary?.value || 0);
+  const displayPnl = portfolio.pnl || Number(summary?.summary?.pnl || 0);
+  const displayPnlPct = portfolio.cost > 0 ? pnlPct : Number(summary?.summary?.pnlPct || 0);
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "linear-gradient(180deg,#020617 0%,#07111f 55%,#0f172a 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "22px 14px 40px" }}>
@@ -266,17 +317,17 @@ export default function PaperAutoPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850, fontSize: 13 }}>
           <div>模式：{summary?.settings?.mode || "AUTO_PAPER"}</div>
           <div>驗證期：4 週</div>
-          <div>核心正式：{core.length} 檔</div>
-          <div>預備名單：{prepared.length} 檔</div>
+          <div>核心正式：{displayCoreCount} 檔</div>
+          <div>預備名單：{displayPreparedCount} 檔</div>
           <div>紙上批次：{rawLotCount} 筆</div>
-          <div>進度條：{progressCount}/{prepared.length}</div>
-          <div>投入成本：${n(portfolio.cost)}</div>
-          <div>目前市值：${n(portfolio.value)}</div>
-          <div>損益：<strong style={{ color: pnlColor }}>${n(portfolio.pnl)}</strong></div>
-          <div>報酬率：<strong style={{ color: pnlColor }}>{n(pnlPct * 100)}%</strong></div>
+          <div>進度條：{progressCount}/{displayPreparedCount}</div>
+          <div>投入成本：${n(displayCost)}</div>
+          <div>目前市值：${n(displayValue)}</div>
+          <div>損益：<strong style={{ color: pnlColor }}>${n(displayPnl)}</strong></div>
+          <div>報酬率：<strong style={{ color: pnlColor }}>{n(displayPnlPct * 100)}%</strong></div>
           <div>真實下單：禁止</div>
         </div>
-        <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>核心10檔 {core.length}｜預備名單 {prepared.length}｜總計 {grouped.length}</div>
+        <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>核心10檔 {displayCoreCount}｜4週紙上 {displayPreparedCount}｜總計 {grouped.length || summary?.summary?.symbolCount || 0}｜資料源：/api/v17/paper-summary</div>
       </Box>
 
       <Box title="操作">
