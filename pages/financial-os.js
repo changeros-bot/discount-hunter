@@ -132,12 +132,59 @@ function Entry({ txs, setTxs }) {
 }
 
 function Budget({ txs, budgets, setBudgets }) {
-  const [form, setForm] = useState({ name: '', category: '生活費', amount: '' });
+  const emptyBudget = { name: '', category: '生活費', amount: '' };
+  const [form, setForm] = useState(emptyBudget);
+  const [editingId, setEditingId] = useState('');
+  const [editForm, setEditForm] = useState(emptyBudget);
   const s = stat(txs, { start: monthStart(), end: today() });
-  function spent(b) { if (b.category === '生活費') return s.life; if (b.category === '固定支出') return s.fix; if (b.category === '富邦DCA') return s.invest; return s.ex.filter((t) => groupTx(t) === b.category || t.category === b.category).reduce((a, b) => a + Number(b.amount || 0), 0); }
+
+  function spent(b) {
+    if (b.category === '生活費') return s.life;
+    if (b.category === '固定支出') return s.fix;
+    if (b.category === '富邦DCA') return s.invest;
+    return s.ex.filter((t) => groupTx(t) === b.category || t.category === b.category).reduce((a, b) => a + Number(b.amount || 0), 0);
+  }
+
+  function addBudget() {
+    const amount = Number(form.amount || 0);
+    if (!amount) return;
+    setBudgets([{ id: 'b' + Date.now(), name: form.name.trim() || form.category, category: form.category, amount }, ...budgets]);
+    setForm(emptyBudget);
+  }
+
+  function startEdit(budget) {
+    setEditingId(budget.id);
+    setEditForm({ name: budget.name, category: budget.category, amount: String(budget.amount ?? 0) });
+  }
+
+  function cancelEdit() {
+    setEditingId('');
+    setEditForm(emptyBudget);
+  }
+
+  function saveEdit(id) {
+    const amount = Number(editForm.amount);
+    if (!editForm.name.trim() || !Number.isFinite(amount) || amount < 0) return;
+    setBudgets(budgets.map((budget) => budget.id === id ? { ...budget, name: editForm.name.trim(), category: editForm.category, amount } : budget));
+    cancelEdit();
+  }
+
+  function deleteBudget(id) {
+    setBudgets(budgets.filter((budget) => budget.id !== id));
+    if (editingId === id) cancelEdit();
+  }
+
+  const smallButton = { borderRadius: 10, padding: '8px 10px', fontWeight: 900 };
+  const budgetCategories = cats.filter((x) => !['薪水', '薪轉', '退稅'].includes(x));
+
   return <>
-    <Card><Title t="新增預算" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{cats.filter((x) => !['薪水', '薪轉', '退稅'].includes(x)).map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="預算金額" inputMode="numeric" /><Btn onClick={() => { const amount = Number(form.amount || 0); if (amount) { setBudgets([{ id: 'b' + Date.now(), name: form.name || form.category, category: form.category, amount }, ...budgets]); setForm({ name: '', category: '生活費', amount: '' }); } }}>新增預算</Btn></div></Card>
-    {budgets.map((b) => { const used = spent(b); const remain = Number(b.amount || 0) - used; return <Card key={b.id}><Title t={b.name} r="本月" /><Metric label={b.category} value={nt(used)} sub={`${remain < 0 ? '超支 ' + nt(Math.abs(remain)) : '剩餘 ' + nt(remain)}｜預算 ${nt(b.amount)}`} bad={remain < 0} /><button onClick={() => setBudgets(budgets.filter((x) => x.id !== b.id))} style={{ marginTop: 10, border: '1px solid rgba(248,113,113,.45)', borderRadius: 12, padding: 9, background: 'rgba(127,29,29,.25)', color: '#fca5a5', fontWeight: 900 }}>刪除</button></Card>; })}
+    <Card><Title t="新增預算" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{budgetCategories.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="預算金額" inputMode="decimal" /><Btn onClick={addBudget}>新增預算</Btn></div></Card>
+    {budgets.map((b) => {
+      const used = spent(b);
+      const remain = Number(b.amount || 0) - used;
+      if (editingId === b.id) return <Card key={b.id}><Title t="編輯預算" r="本月" /><div style={{ display: 'grid', gap: 10 }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} style={input()}>{budgetCategories.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={{ ...input(), fontSize: 20, fontWeight: 900 }} placeholder="預算金額" inputMode="decimal" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><button onClick={() => saveEdit(b.id)} style={{ ...smallButton, color: '#bbf7d0', border: '1px solid rgba(34,197,94,.5)', background: 'rgba(34,197,94,.12)' }}>儲存</button><button onClick={cancelEdit} style={{ ...smallButton, color: '#cbd5e1', border: '1px solid rgba(148,163,184,.35)', background: 'transparent' }}>取消</button><button onClick={() => deleteBudget(b.id)} style={{ ...smallButton, color: '#fca5a5', border: '1px solid rgba(248,113,113,.35)', background: 'rgba(127,29,29,.18)' }}>刪除</button></div></div></Card>;
+      return <Card key={b.id}><Title t={b.name} r="本月" /><Metric label={b.category} value={nt(used)} sub={`${remain < 0 ? '超支 ' + nt(Math.abs(remain)) : '剩餘 ' + nt(remain)}｜預算 ${nt(b.amount)}`} bad={remain < 0} /><button onClick={() => startEdit(b)} style={{ marginTop: 10, border: '1px solid rgba(212,175,55,.65)', borderRadius: 12, padding: 9, background: 'rgba(92,64,16,.45)', color: '#fff7bd', fontWeight: 900 }}>編輯</button></Card>;
+    })}
   </>;
 }
 
@@ -225,7 +272,7 @@ export default function FinancialOS() {
 
   return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}>
-      <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V4.7｜薪轉帳戶｜資產同步｜資產編輯</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section>
+      <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V4.8｜預算編輯｜資產編輯</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section>
       {tab === 'dashboard' && <Dashboard txs={txs} />}
       {tab === 'entry' && <Entry txs={txs} setTxs={setTxs} />}
       {tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} />}
