@@ -1,6 +1,8 @@
 import { fetchPaperStockQuotes } from "../../../lib/v17-paper-stock-quotes";
 import { CANDIDATE_LAB_ASSETS, CANDIDATE_LAB_STARTED_AT, candidateAssetMap } from "../../../lib/v17-candidate-lab";
 
+const HARD_LOCKED_TICKERS = new Set(["SKHY", "DRAMB"]);
+
 function statusFor(row) {
   const quoteOk = row?.quoteAudit?.status === "PASS" && Number(row?.price || 0) > 0;
   const hasHigh = Number(row?.high52w || row?.high || 0) > 0;
@@ -19,13 +21,19 @@ export default async function handler(req, res) {
     const rows = quotes.map((row) => {
       const asset = assetMap[row.symbol] || {};
       const labStatus = statusFor(row);
-      const stage2Gate = asset.stage2Eligible && labStatus === "PASS" ? "OPEN" : "BLOCKED";
+      const tickerHardLocked = HARD_LOCKED_TICKERS.has(row.symbol);
+      const stage2Gate = tickerHardLocked
+        ? "CLOSED"
+        : asset.stage2Eligible && labStatus === "PASS"
+          ? "OPEN"
+          : "BLOCKED";
       return {
         ...asset,
         ...row,
         labStatus,
         stage2Gate,
-        stage2WriteAllowed: stage2Gate === "OPEN",
+        blockCode: tickerHardLocked ? "TICKER_UNCONFIRMED" : null,
+        stage2WriteAllowed: tickerHardLocked ? false : stage2Gate === "OPEN",
         realOrder: false,
         autoTrade: false,
         paperPositionCreated: false,
@@ -39,6 +47,7 @@ export default async function handler(req, res) {
       acc.classes[row.maturityClass] = (acc.classes[row.maturityClass] || 0) + 1;
       if (row.stage2WriteAllowed) acc.stage2Eligible += 1;
       if (row.reviewStatus === "ARCHITECTURE_INCOMPATIBLE") acc.architectureIncompatible += 1;
+      if (row.blockCode === "TICKER_UNCONFIRMED") acc.tickerUnconfirmed += 1;
       if (row.quoteAudit?.provider === "Binance xStocks") acc.binance += 1;
       if (row.quoteAudit?.fallbackUsed) acc.fallback += 1;
       return acc;
@@ -51,6 +60,7 @@ export default async function handler(req, res) {
       fallback: 0,
       stage2Eligible: 0,
       architectureIncompatible: 0,
+      tickerUnconfirmed: 0,
       classes: { A: 0, B: 0, C: 0, D: 0 },
     });
 
@@ -67,6 +77,7 @@ export default async function handler(req, res) {
         autoTrade: false,
         createsPaperPositions: false,
         neonWriteRequiresStage2GateOpen: true,
+        unconfirmedTickersHardLocked: ["SKHY", "DRAMB"],
       },
     });
   } catch (error) {
