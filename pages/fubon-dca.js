@@ -47,7 +47,7 @@ function AssetCard({ asset }) {
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ color: asset.ladderEnabled ? (active ? "#86efac" : "#bae6fd") : "#cbd5e1", fontSize: 14, fontWeight: 1000 }}>{asset.ladderEnabled ? (asset.level?.label || "資料未就緒") : "僅固定 DCA"}</div>
-          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 5, fontWeight: 850 }}>{asset.ladderEnabled ? (active ? `加碼 ${money(asset.level.buyAmount, asset.currency)}` : `下一層 ${asset.level?.nextRule}%`) : "富邦零股不做臨時加碼"}</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 5, fontWeight: 850 }}>{asset.ladderEnabled ? (active ? `加碼 ${money(asset.level.buyAmount, asset.currency)}` : `下一層 ${asset.level?.nextRule}%`) : "未啟用分層買點"}</div>
         </div>
       </div>
     </div>
@@ -75,7 +75,7 @@ function AssetCard({ asset }) {
       })}
     </div>}
 
-    <div style={{ color: "#64748b", fontSize: 11, lineHeight: 1.5, marginTop: 10, fontWeight: 750 }}>每月 12 日固定 DCA：{money(asset.monthlyAmount, asset.currency)}。</div>
+    <div style={{ color: "#64748b", fontSize: 11, lineHeight: 1.5, marginTop: 10, fontWeight: 750 }}>每月 12 日固定 DCA：{money(asset.monthlyAmount, asset.currency)}。分層加碼不取代固定扣款。</div>
   </Card>;
 }
 
@@ -135,7 +135,7 @@ export default function FubonDcaPage() {
 
       <Card>
         <div style={{ fontSize: 16, fontWeight: 1000, marginBottom: 8 }}>執行規則</div>
-        <div style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 13, fontWeight: 800 }}>固定 DCA 永不中斷。0050 保留 -10/-20/-30/-40% 分層加碼；VOO 與 QQQM 因富邦臨時零股交易限制，目前只做每月定期定額。價格資料可能延遲，不自動下單。</div>
+        <div style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 13, fontWeight: 800 }}>固定 DCA 永不中斷，三檔皆保留回撤分層加碼。0050、VOO：-10/-20/-30/-40%；QQQM：-15/-25/-35/-45%。分層買點只提供加碼決策，不自動下單。</div>
       </Card>
     </div>
   </main>;
