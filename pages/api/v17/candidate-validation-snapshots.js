@@ -37,8 +37,8 @@ export default async function handler(req, res) {
       const limit = Math.min(Math.max(Number(req.query.limit || 500), 1), 2000);
       const symbol = String(req.query.symbol || "").trim().toUpperCase();
       const rows = symbol
-        ? await sql("select * from public.candidate_validation_snapshots where symbol = $1 order by captured_at desc limit $2", [symbol, limit])
-        : await sql("select * from public.candidate_validation_snapshots order by captured_at desc limit $1", [limit]);
+        ? await sql.query("select * from public.candidate_validation_snapshots where symbol = $1 order by captured_at desc limit $2", [symbol, limit])
+        : await sql.query("select * from public.candidate_validation_snapshots order by captured_at desc limit $1", [limit]);
       return res.status(200).json({ ok: true, storage: "neon_postgres", rows });
     }
 
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
       const inserted = [];
       for (const row of rows) {
-        const result = await sql(
+        const result = await sql.query(
           `insert into public.candidate_validation_snapshots
           (symbol, captured_at, price, high_52w, low_52w, discount_pct, provider, token_symbol, shares_multiplier, signal_level, validation_status, anomaly_flags, triggered_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)
