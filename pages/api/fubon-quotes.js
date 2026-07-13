@@ -7,6 +7,16 @@ const ASSETS = [
     monthlyAmount: 2000,
     rules: [-10, -20, -30, -40],
     amounts: [2000, 4000, 6000, 8000],
+    ladderEnabled: true,
+    holding: {
+      shares: 37,
+      cost: 3867,
+      brokerMarketValue: 3899,
+      averageCost: 104.51,
+      brokerPnl: 32,
+      brokerPnlPct: 0.83,
+      snapshotAt: "2026-07-14T07:28:00+08:00",
+    },
   },
   {
     symbol: "VOO",
@@ -14,8 +24,21 @@ const ASSETS = [
     name: "Vanguard S&P 500 ETF",
     currency: "USD",
     monthlyAmount: 30,
-    rules: [-10, -20, -30, -40],
-    amounts: [30, 60, 90, 120],
+    rules: [],
+    amounts: [],
+    ladderEnabled: false,
+    holding: {
+      shares: 0.04411,
+      cost: 30.09,
+      brokerMarketValue: 30.61,
+      averageCost: 682.15824,
+      brokerPnl: 0.52,
+      brokerPnlPct: 1.73,
+      fxRate: 32.2775,
+      marketValueTwd: 988,
+      pnlTwd: 17,
+      snapshotAt: "2026-07-14T07:29:00+08:00",
+    },
   },
   {
     symbol: "QQQM",
@@ -23,8 +46,18 @@ const ASSETS = [
     name: "Invesco NASDAQ 100 ETF",
     currency: "USD",
     monthlyAmount: 30,
-    rules: [-15, -25, -35, -45],
-    amounts: [30, 60, 90, 120],
+    rules: [],
+    amounts: [],
+    ladderEnabled: false,
+    holding: {
+      shares: 0,
+      cost: 0,
+      brokerMarketValue: 0,
+      averageCost: 0,
+      brokerPnl: 0,
+      brokerPnlPct: 0,
+      snapshotAt: "2026-07-14T07:29:00+08:00",
+    },
   },
 ];
 
@@ -54,6 +87,7 @@ function lastPositive(values = []) {
 }
 
 function getLevel(discount, rules, amounts, currency) {
+  if (!rules.length) return null;
   let active = 0;
   for (let i = 0; i < rules.length; i += 1) {
     if (discount <= rules[i]) active = i + 1;
@@ -93,6 +127,9 @@ async function fetchQuote(asset) {
   const low52w = number(meta.fiftyTwoWeekLow) || minPositive(lows);
   const discountRaw = price > 0 && high52w > 0 ? ((price - high52w) / high52w) * 100 : null;
   const discount = discountRaw === null ? null : Number(discountRaw.toFixed(2));
+  const liveMarketValue = asset.holding.shares > 0 ? Number((price * asset.holding.shares).toFixed(2)) : 0;
+  const livePnl = asset.holding.shares > 0 ? Number((liveMarketValue - asset.holding.cost).toFixed(2)) : 0;
+  const livePnlPct = asset.holding.cost > 0 ? Number(((livePnl / asset.holding.cost) * 100).toFixed(2)) : 0;
 
   return {
     ...asset,
@@ -100,7 +137,12 @@ async function fetchQuote(asset) {
     high52w,
     low52w,
     discount,
-    level: discount === null ? null : getLevel(discount, asset.rules, asset.amounts, asset.currency),
+    level: asset.ladderEnabled && discount !== null ? getLevel(discount, asset.rules, asset.amounts, asset.currency) : null,
+    liveHolding: {
+      marketValue: liveMarketValue,
+      pnl: livePnl,
+      pnlPct: livePnlPct,
+    },
     marketTime: meta.regularMarketTime || null,
     exchange: meta.fullExchangeName || meta.exchangeName || null,
     source: "Yahoo Finance 1Y daily chart",
@@ -116,7 +158,7 @@ export default async function handler(req, res) {
       try {
         return await fetchQuote(asset);
       } catch (error) {
-        return { ...asset, price: 0, high52w: 0, low52w: 0, discount: null, level: null, status: "ERROR", error: error.message };
+        return { ...asset, price: 0, high52w: 0, low52w: 0, discount: null, level: null, liveHolding: null, status: "ERROR", error: error.message };
       }
     })
   );
