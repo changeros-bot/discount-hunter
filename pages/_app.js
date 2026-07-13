@@ -148,11 +148,7 @@ function addFinancialDateShortcuts() {
     const start = new Date(now.getFullYear(), now.getDate() >= 10 ? now.getMonth() : now.getMonth() - 1, 10);
     return [start, now];
   };
-  const makeRange = {
-    "本月": () => monthRange(0),
-    "上月": () => monthRange(-1),
-    "發薪後": payrollRange,
-  };
+  const makeRange = { "本月": () => monthRange(0), "上月": () => monthRange(-1), "發薪後": payrollRange };
   for (const label of Object.keys(makeRange)) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -208,6 +204,62 @@ function addPaperApprovalGate() {
   header.insertAdjacentElement("afterend", gate);
 }
 
+function clarifyV17Holdings() {
+  if (typeof document === "undefined") return;
+  if (!location.pathname.startsWith("/v17")) return;
+
+  const sections = [...document.querySelectorAll("section")];
+  const holdings = sections.find((section) => {
+    const text = section.textContent || "";
+    return text.includes("真實持倉") && text.includes("總投入") && text.includes("目前市值");
+  });
+  if (holdings && !holdings.querySelector("[data-v17-holdings-scope='true']")) {
+    const note = document.createElement("div");
+    note.setAttribute("data-v17-holdings-scope", "true");
+    note.style.marginTop = "10px";
+    note.style.padding = "10px";
+    note.style.borderRadius = "12px";
+    note.style.background = "rgba(14,165,233,.10)";
+    note.style.border = "1px solid rgba(14,165,233,.24)";
+    note.style.color = "#bae6fd";
+    note.style.fontSize = "11px";
+    note.style.fontWeight = "850";
+    note.style.lineHeight = "1.55";
+    note.textContent = "口徑說明：此卡是折價獵人策略持倉＝Web3 xStocks＋交易所 BTC；不含 Web3 錢包內作為 gas／現金的 BNB。Binance 錢包首頁總額則包含 BNB、但不包含交易所 BTC，因此兩個總額不能直接互相比對。";
+    holdings.appendChild(note);
+  }
+
+  const chart = sections.find((section) => {
+    const text = section.textContent || "";
+    return text.includes("真實持倉總市值（USD）") && text.includes("每分鐘保存一次");
+  });
+  if (chart) {
+    const walker = document.createTreeWalker(chart, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const value = node.nodeValue || "";
+      if (value.includes("真實持倉總市值（USD）")) node.nodeValue = value.replace("真實持倉總市值（USD）", "策略持倉市值歷史（USD）");
+      if (value.includes("每分鐘保存一次真實持倉總市值")) node.nodeValue = value.replace("每分鐘保存一次真實持倉總市值", "每分鐘保存一次策略持倉總市值；加碼、減碼與轉入都會造成曲線跳動");
+    }
+    if (!chart.querySelector("[data-v17-chart-warning='true']")) {
+      const warning = document.createElement("div");
+      warning.setAttribute("data-v17-chart-warning", "true");
+      warning.style.marginTop = "9px";
+      warning.style.padding = "9px";
+      warning.style.borderRadius = "11px";
+      warning.style.background = "rgba(245,158,11,.10)";
+      warning.style.border = "1px solid rgba(245,158,11,.24)";
+      warning.style.color = "#fde68a";
+      warning.style.fontSize = "10px";
+      warning.style.fontWeight = "850";
+      warning.style.lineHeight = "1.5";
+      warning.textContent = "注意：這條線是總市值，不是績效曲線。新增 MRVL 10U 會讓市值跳升；點選舊時間點時，圖上金額也會和上方即時市值不同。區間變動不可直接當作投資報酬。";
+      chart.appendChild(warning);
+    }
+  }
+}
+
 function localizeNode(root) {
   if (typeof document === "undefined" || !root) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -230,6 +282,7 @@ function localizeNode(root) {
   addPaperApprovalGate();
   normalizePaperAutoLabels();
   addFinancialDateShortcuts();
+  clarifyV17Holdings();
 }
 
 export default function App({ Component, pageProps }) {
@@ -248,6 +301,7 @@ export default function App({ Component, pageProps }) {
       addPaperApprovalGate();
       normalizePaperAutoLabels();
       addFinancialDateShortcuts();
+      clarifyV17Holdings();
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
