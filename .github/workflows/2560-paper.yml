@@ -25,6 +25,9 @@ concurrency:
 jobs:
   paper:
     runs-on: ubuntu-latest
+    env:
+      INGEST_TOKEN_2560: ${{ secrets.INGEST_TOKEN_2560 }}
+      CANONICAL_BASE_URL_2560: ${{ vars.CANONICAL_BASE_URL_2560 || 'https://discount-hunter-sigma.vercel.app' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,11 +42,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance
 
-      - name: Run unified 2560 paper universe
+      - name: Run unified 2560 paper universe and publish KV snapshot
         run: |
           python scripts/run_2560_universe.py --source ${{ github.event.inputs.source || 'yfinance' }}
 
-      - name: Commit paper reports
+      - name: Commit paper reports as audit backup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
