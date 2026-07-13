@@ -3,7 +3,7 @@ import { neon } from "@neondatabase/serverless";
 const ALLOWED_TRIGGERED_BY = new Set(["manual", "scheduled", "github_actions"]);
 
 function connectionString() {
-  return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || "";
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || process.env.STORAGE_URL || "";
 }
 
 function normalizeRow(row, triggeredBy) {
