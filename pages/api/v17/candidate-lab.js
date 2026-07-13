@@ -13,27 +13,50 @@ function statusFor(row) {
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   try {
+    const assetMap = candidateAssetMap();
     const symbols = CANDIDATE_LAB_ASSETS.map((asset) => asset.symbol);
-    const quotes = await fetchPaperStockQuotes(symbols, candidateAssetMap());
-    const rows = quotes.map((row) => ({
-      ...row,
-      labStatus: statusFor(row),
-      realOrder: false,
-      autoTrade: false,
-      paperPositionCreated: false,
-      validationStage: "STAGE_1_QUOTE_AND_METADATA",
-    }));
+    const quotes = await fetchPaperStockQuotes(symbols, assetMap);
+    const rows = quotes.map((row) => {
+      const asset = assetMap[row.symbol] || {};
+      const labStatus = statusFor(row);
+      const stage2Gate = asset.stage2Eligible && labStatus === "PASS" ? "OPEN" : "BLOCKED";
+      return {
+        ...asset,
+        ...row,
+        labStatus,
+        stage2Gate,
+        stage2WriteAllowed: stage2Gate === "OPEN",
+        realOrder: false,
+        autoTrade: false,
+        paperPositionCreated: false,
+        validationStage: "STAGE_1_AND_MANUAL_REVIEW_GATE",
+      };
+    });
+
     const summary = rows.reduce((acc, row) => {
       acc.total += 1;
       acc[row.labStatus.toLowerCase()] += 1;
+      acc.classes[row.maturityClass] = (acc.classes[row.maturityClass] || 0) + 1;
+      if (row.stage2WriteAllowed) acc.stage2Eligible += 1;
+      if (row.reviewStatus === "ARCHITECTURE_INCOMPATIBLE") acc.architectureIncompatible += 1;
       if (row.quoteAudit?.provider === "Binance xStocks") acc.binance += 1;
       if (row.quoteAudit?.fallbackUsed) acc.fallback += 1;
       return acc;
-    }, { total: 0, pass: 0, check: 0, fail: 0, binance: 0, fallback: 0 });
+    }, {
+      total: 0,
+      pass: 0,
+      check: 0,
+      fail: 0,
+      binance: 0,
+      fallback: 0,
+      stage2Eligible: 0,
+      architectureIncompatible: 0,
+      classes: { A: 0, B: 0, C: 0, D: 0 },
+    });
 
     return res.status(200).json({
       ok: true,
-      mode: "CANDIDATE_LAB_STAGE_1",
+      mode: "CANDIDATE_LAB_REVIEW_GATE",
       startedAt: CANDIDATE_LAB_STARTED_AT,
       summary,
       rows,
@@ -43,6 +66,7 @@ export default async function handler(req, res) {
         realOrder: false,
         autoTrade: false,
         createsPaperPositions: false,
+        neonWriteRequiresStage2GateOpen: true,
       },
     });
   } catch (error) {
