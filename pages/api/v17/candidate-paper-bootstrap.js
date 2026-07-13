@@ -2,7 +2,6 @@ import { neon } from "@neondatabase/serverless";
 
 const SYMBOLS = ["AAPL","AMZN","KO","BAC","AXP","CVX","XOM","LIN","NOC","UNH","MU","SNDK","WDC","STX","SKHY","DRAM","OXY","PBR"];
 const TOKEN_MAP = { AAPL:"AAPLon", AMZN:"AMZNon", KO:"KOon", BAC:"BACon", AXP:"AXPon", CVX:"CVXon", XOM:"XOMon", LIN:"LINon", NOC:"NOCon", UNH:"UNHon", MU:"MUon", SNDK:"SNDKon", WDC:"WDCon", STX:"STXon", SKHY:"SKHYon", DRAM:"DRAMon", OXY:"OXYon", PBR:"PBRon" };
-const ONE_TIME_BOOTSTRAP = "paper18-7c4f9a2d6e31";
 
 function connectionString() {
   return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || process.env.STORAGE_URL || "";
@@ -52,11 +51,9 @@ export default async function handler(req, res) {
   if (!url) return res.status(503).json({ ok:false, error:"neon_not_configured" });
   const sql = neon(url);
 
-  const oneTimeGet = req.method === "GET" && String(req.query.bootstrap || "") === ONE_TIME_BOOTSTRAP;
-  const securePost = req.method === "POST" && authorized(req);
-
   try {
-    if (oneTimeGet || securePost) {
+    if (req.method === "POST") {
+      if (!authorized(req)) return res.status(401).json({ ok:false, error:"unauthorized" });
       const result = await bootstrap(req, sql);
       if (result.conflict) return res.status(409).json({ ok:false, error:"missing_prices", missing:result.missing });
       const positions = await readPositions(sql);
@@ -67,7 +64,6 @@ export default async function handler(req, res) {
       const positions = await readPositions(sql);
       return res.status(200).json({ ok:true, mode:"CANDIDATE_PAPER_ONLY", count:positions.length, investedUsd:positions.reduce((sum,row)=>sum+Number(row.invested_usd||0),0), positions, safeguards:{paperOnly:true, realOrders:false, modifiesExistingPaper28:false} });
     }
-    if (req.method === "POST") return res.status(401).json({ ok:false, error:"unauthorized" });
     return res.status(405).json({ ok:false, error:"method_not_allowed" });
   } catch (error) {
     return res.status(500).json({ ok:false, error:error?.message || "candidate_paper_bootstrap_failed" });
