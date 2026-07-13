@@ -6,9 +6,13 @@ export function middleware(request) {
     url.pathname = "/paper-status";
     return NextResponse.redirect(url, 307);
   }
+  if (url.pathname === "/v17") {
+    url.pathname = "/v17-with-chart";
+    return NextResponse.rewrite(url);
+  }
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/paper-auto"],
+  matcher: ["/paper-auto", "/v17"],
 };
