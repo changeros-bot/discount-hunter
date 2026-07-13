@@ -336,7 +336,9 @@ def run(args):
     for i, trade in ledger.iterrows():
         try:
             ticker = trade.ticker
-            prices = price_cache.get(ticker) or load_price(ticker, args)
+            prices = price_cache.get(ticker)
+            if prices is None:
+                prices = load_price(ticker, args)
             last = prices.iloc[-1]
             status = str(trade.status)
 
@@ -378,7 +380,7 @@ def run(args):
                     reason = "paper_target_15pct"
                 elif hold_days >= MAX_HOLD_DAYS:
                     reason = "expired_30d"
-                elif current_signal["risk_status"] in {"EXTENDED", "TOO_DEEP"}:
+                elif current_signal["risk_status"] == "TOO_DEEP":
                     reason = "risk_state_exit"
 
                 ledger.loc[i, [
