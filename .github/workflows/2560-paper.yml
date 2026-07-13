@@ -39,9 +39,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance
 
-      - name: Run 2560 paper bot
+      - name: Run unified 2560 paper universe
         run: |
-          python scripts/paper_2560_bot.py --source ${{ github.event.inputs.source || 'yfinance' }}
+          python scripts/run_2560_universe.py --source ${{ github.event.inputs.source || 'yfinance' }}
 
       - name: Commit paper reports
         run: |
