@@ -9,6 +9,13 @@ const money = (value, currency) => {
   }).format(Number(value));
 };
 
+const targetPrice = (high52w, rule) => {
+  const high = Number(high52w);
+  const drop = Number(rule);
+  if (!Number.isFinite(high) || high <= 0 || !Number.isFinite(drop)) return null;
+  return Number((high * (1 + drop / 100)).toFixed(2));
+};
+
 function Card({ children, style = {} }) {
   return <section style={{ background: "rgba(17,24,39,.94)", border: "1px solid rgba(148,163,184,.18)", borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: "0 12px 34px rgba(0,0,0,.26)", ...style }}>{children}</section>;
 }
@@ -25,6 +32,8 @@ function AssetCard({ asset }) {
   const active = asset.level?.active || 0;
   const pnl = asset.liveHolding?.pnl || 0;
   const hasHolding = asset.holding?.shares > 0;
+  const nextPrice = asset.level?.nextRule == null ? null : targetPrice(asset.high52w, asset.level.nextRule);
+
   return <Card style={{ borderColor: active ? "rgba(34,197,94,.52)" : "rgba(56,189,248,.24)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
       <div>
@@ -47,7 +56,8 @@ function AssetCard({ asset }) {
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ color: asset.ladderEnabled ? (active ? "#86efac" : "#bae6fd") : "#cbd5e1", fontSize: 14, fontWeight: 1000 }}>{asset.ladderEnabled ? (asset.level?.label || "資料未就緒") : "僅固定 DCA"}</div>
-          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 5, fontWeight: 850 }}>{asset.ladderEnabled ? (active ? `加碼 ${money(asset.level.buyAmount, asset.currency)}` : `下一層 ${asset.level?.nextRule}%`) : "未啟用分層買點"}</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 5, fontWeight: 850 }}>{asset.ladderEnabled ? (active ? `本層加碼 ${money(asset.level.buyAmount, asset.currency)}` : `下一層 ${asset.level?.nextRule}%`) : "未啟用分層買點"}</div>
+          {asset.ladderEnabled && nextPrice != null && <div style={{ color: "#f8fafc", fontSize: 13, marginTop: 4, fontWeight: 1000 }}>價格 ≤ {money(nextPrice, asset.currency)}</div>}
         </div>
       </div>
     </div>
@@ -65,17 +75,22 @@ function AssetCard({ asset }) {
     </div>
 
     {asset.ladderEnabled && <div style={{ marginTop: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "36px 54px 1fr 1fr", gap: 6, padding: "0 0 7px", color: "#64748b", fontSize: 10, fontWeight: 900 }}>
+        <div>層級</div><div>回撤</div><div>價格點位</div><div style={{ textAlign: "right" }}>加碼</div>
+      </div>
       {asset.rules.map((rule, index) => {
         const reached = active >= index + 1;
-        return <div key={rule} style={{ display: "grid", gridTemplateColumns: "44px 68px 1fr", gap: 8, alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(148,163,184,.1)", color: reached ? "#86efac" : "#cbd5e1" }}>
+        const pricePoint = targetPrice(asset.high52w, rule);
+        return <div key={rule} style={{ display: "grid", gridTemplateColumns: "36px 54px 1fr 1fr", gap: 6, alignItems: "center", padding: "9px 0", borderBottom: "1px solid rgba(148,163,184,.1)", color: reached ? "#86efac" : "#cbd5e1" }}>
           <div style={{ fontSize: 12, fontWeight: 1000 }}>L{index + 1}</div>
-          <div style={{ fontSize: 13, fontWeight: 1000 }}>{rule}%</div>
-          <div style={{ textAlign: "right", fontSize: 13, fontWeight: 900 }}>{money(asset.amounts[index], asset.currency)}</div>
+          <div style={{ fontSize: 12, fontWeight: 1000 }}>{rule}%</div>
+          <div style={{ fontSize: 12, fontWeight: 1000 }}>{money(pricePoint, asset.currency)}</div>
+          <div style={{ textAlign: "right", fontSize: 12, fontWeight: 900 }}>{money(asset.amounts[index], asset.currency)}</div>
         </div>;
       })}
     </div>}
 
-    <div style={{ color: "#64748b", fontSize: 11, lineHeight: 1.5, marginTop: 10, fontWeight: 750 }}>每月 12 日固定 DCA：{money(asset.monthlyAmount, asset.currency)}。分層加碼不取代固定扣款。</div>
+    <div style={{ color: "#64748b", fontSize: 11, lineHeight: 1.5, marginTop: 10, fontWeight: 750 }}>每月 12 日固定 DCA：{money(asset.monthlyAmount, asset.currency)}。價格點位會隨 52 週高點自動更新，分層加碼不取代固定扣款。</div>
   </Card>;
 }
 
@@ -113,7 +128,7 @@ export default function FubonDcaPage() {
         <div>
           <div style={{ color: "#38bdf8", fontSize: 12, fontWeight: 900, letterSpacing: 1 }}>LIVE PRICE + HOLDINGS</div>
           <h1 style={{ margin: "5px 0 0", fontSize: 28, lineHeight: 1.1, fontWeight: 1000 }}>富邦長期 DCA</h1>
-          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6, fontWeight: 800 }}>0050 / VOO / QQQM｜真實價格、持倉與買點</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6, fontWeight: 800 }}>0050 / VOO / QQQM｜真實價格、持倉與價格買點</div>
         </div>
         <a href="/" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>返回首頁</a>
       </header>
@@ -135,7 +150,7 @@ export default function FubonDcaPage() {
 
       <Card>
         <div style={{ fontSize: 16, fontWeight: 1000, marginBottom: 8 }}>執行規則</div>
-        <div style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 13, fontWeight: 800 }}>固定 DCA 永不中斷，三檔皆保留回撤分層加碼。0050、VOO：-10/-20/-30/-40%；QQQM：-15/-25/-35/-45%。分層買點只提供加碼決策，不自動下單。</div>
+        <div style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 13, fontWeight: 800 }}>固定 DCA 永不中斷，三檔皆保留回撤分層加碼。0050、VOO：-10/-20/-30/-40%；QQQM：-15/-25/-35/-45%。每層價格以最新 52 週高點動態換算，不自動下單。</div>
       </Card>
     </div>
   </main>;
