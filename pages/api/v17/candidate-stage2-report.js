@@ -1,5 +1,8 @@
 import { neon } from "@neondatabase/serverless";
 
+const APPROVED_STAGE2_SYMBOLS = ["AAPL", "AMZN", "KO", "BAC", "AXP", "CVX", "XOM", "LIN", "NOC", "UNH"];
+const UNCONFIRMED_TICKERS = ["SKHY", "DRAMB"];
+
 function connectionString() {
   return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || process.env.STORAGE_URL || "";
 }
@@ -71,6 +74,15 @@ export default async function handler(req, res) {
       from public.candidate_validation_snapshots
     `);
 
+    const writeAudit = await sql.query(
+      `select
+        count(*) filter (where not (symbol = any($1::text[])))::int as unauthorized_writes,
+        count(*) filter (where symbol = any($2::text[]))::int as unconfirmed_ticker_writes,
+        array_agg(distinct symbol) filter (where not (symbol = any($1::text[]))) as unauthorized_symbols
+      from public.candidate_validation_snapshots`,
+      [APPROVED_STAGE2_SYMBOLS, UNCONFIRMED_TICKERS]
+    );
+
     const anomalies = rows.filter((row) =>
       Math.abs(Number(row.price_change_pct || 0)) > 5 ||
       !row.high_stable ||
@@ -80,6 +92,8 @@ export default async function handler(req, res) {
       !row.multiplier_stable ||
       !row.signal_stable
     );
+    const audit = writeAudit[0] || {};
+    const internalPass = rows.length >= 10 && anomalies.length === 0 && Number(audit.unauthorized_writes || 0) === 0 && Number(audit.unconfirmed_ticker_writes || 0) === 0;
 
     return res.status(200).json({
       ok: true,
@@ -88,7 +102,9 @@ export default async function handler(req, res) {
         ...(counts[0] || {}),
         compared_symbols: rows.length,
         anomalies: anomalies.length,
-        internal_test_status: rows.length >= 10 && anomalies.length === 0 ? "PASS" : "INCOMPLETE",
+        unauthorized_writes: Number(audit.unauthorized_writes || 0),
+        unconfirmed_ticker_writes: Number(audit.unconfirmed_ticker_writes || 0),
+        internal_test_status: internalPass ? "PASS" : "FAIL",
         paper_positions: 0,
         real_orders: 0,
       },
@@ -96,8 +112,10 @@ export default async function handler(req, res) {
       safeguards: {
         createsPaperPositions: false,
         realOrder: false,
-        architectureIncompatibleWritten: 0,
-        unconfirmedTickersWritten: 0,
+        approvedStage2Symbols: APPROVED_STAGE2_SYMBOLS,
+        unauthorizedSymbols: audit.unauthorized_symbols || [],
+        architectureIncompatibleWritten: Number(audit.unauthorized_writes || 0),
+        unconfirmedTickersWritten: Number(audit.unconfirmed_ticker_writes || 0),
       },
     });
   } catch (error) {
