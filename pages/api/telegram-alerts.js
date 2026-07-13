@@ -103,7 +103,7 @@ async function handler(req, res) {
 
     const allEvents = buildEvents({ assets: prices?.data || [], ledger, alerts });
     const now = new Date().toISOString();
-    const sendableEvents = allEvents;
+    const sendableEvents = allEvents.filter((event) => !alerts?.[event.key]);
 
     const nextAlerts = { ...(alerts || {}), __layerState: { ...(alerts.__layerState || {}) } };
     for (const asset of prices?.data || []) {
@@ -113,16 +113,16 @@ async function handler(req, res) {
 
     const telegramResults = [];
     for (const event of sendableEvents) {
-      const sent = await sendTelegramMessage(eventMessage(event, prices?.updatedAt));
+      const sent = await sendTelegramMessage(eventMessage(event, prices?.updatedAt), { cooldownKey: event.key, cooldownHours: 24 * 365 });
       telegramResults.push({ key: event.key, ok: sent.ok, skipped: Boolean(sent.skipped) });
       if (!sent.ok) return res.status(500).json({ ok: false, failedEvent: event.key, telegram: sent });
-      nextAlerts[event.key] = { lastAlert: now, type: event.type, symbol: event.symbol, fromLevel: event.fromLevel, toLevel: event.toLevel, threshold: event.threshold || null, repeatMode: "always_while_active" };
+      nextAlerts[event.key] = { lastAlert: now, type: event.type, symbol: event.symbol, fromLevel: event.fromLevel, toLevel: event.toLevel, threshold: event.threshold || null, repeatMode: "state_change_only" };
     }
 
     const storage = await writeAlerts(nextAlerts);
     const view = (event) => ({ type: event.type, symbol: event.symbol, fromLevel: tier(event.fromLevel), toLevel: tier(event.toLevel), threshold: event.threshold || null, key: event.key });
 
-    return res.status(200).json({ ok: true, version: "16.7-always-alert-active-signals", sent: sendableEvents.length > 0, repeatMode: "always_while_active", pricesOk: true, walletOk: true, health, eventCount: allEvents.length, sendableCount: sendableEvents.length, storage: storage.store, telegramResults, events: allEvents.map(view), sentEvents: sendableEvents.map(view) });
+    return res.status(200).json({ ok: true, version: "16.8-state-change-only", sent: sendableEvents.length > 0, repeatMode: "state_change_only", pricesOk: true, walletOk: true, health, eventCount: allEvents.length, sendableCount: sendableEvents.length, suppressedDuplicateCount: allEvents.length - sendableEvents.length, storage: storage.store, telegramResults, events: allEvents.map(view), sentEvents: sendableEvents.map(view) });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "telegram_alert_failed" });
   }
