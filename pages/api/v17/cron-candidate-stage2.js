@@ -3,6 +3,7 @@ import { fetchPaperStockQuotes } from "../../../lib/v17-paper-stock-quotes";
 import { CANDIDATE_LAB_ASSETS, candidateAssetMap } from "../../../lib/v17-candidate-lab";
 
 const HARD_LOCKED_TICKERS = new Set(["SKHY", "DRAMB"]);
+const EXPECTED_CRON_SCHEDULE = "15 2 * * *";
 
 function connectionString() {
   return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || process.env.STORAGE_URL || "";
@@ -17,6 +18,13 @@ function stage1Status(row) {
   return "PASS";
 }
 
+function authorizedCronRequest(req) {
+  const cronSecret = process.env.CRON_SECRET;
+  const secretAuthorized = Boolean(cronSecret) && req.headers.authorization === `Bearer ${cronSecret}`;
+  const scheduleAuthorized = !cronSecret && req.headers["x-vercel-cron-schedule"] === EXPECTED_CRON_SCHEDULE;
+  return { authorized: secretAuthorized || scheduleAuthorized, mode: secretAuthorized ? "cron_secret" : scheduleAuthorized ? "vercel_schedule_header" : "none" };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
 
@@ -25,15 +33,34 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "method_not_allowed" });
   }
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || req.headers.authorization !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
+  const auth = authorizedCronRequest(req);
+  if (!auth.authorized) return res.status(401).json({ ok: false, error: "unauthorized" });
 
   const url = connectionString();
   if (!url) return res.status(503).json({ ok: false, error: "neon_not_configured" });
 
   try {
+    const sql = neon(url);
+    const existing = await sql.query(`
+      select count(*)::int as count
+      from public.candidate_validation_snapshots
+      where triggered_by = 'scheduled'
+        and captured_at >= date_trunc('day', now() at time zone 'utc')
+        and captured_at < date_trunc('day', now() at time zone 'utc') + interval '1 day'
+    `);
+
+    if (Number(existing[0]?.count || 0) > 0) {
+      return res.status(200).json({
+        ok: true,
+        mode: "CANDIDATE_STAGE_2_SCHEDULED",
+        auth_mode: auth.mode,
+        skipped: true,
+        reason: "scheduled_snapshot_already_exists_for_utc_day",
+        inserted: 0,
+        triggered_by: "scheduled",
+      });
+    }
+
     const assetMap = candidateAssetMap();
     const quotes = await fetchPaperStockQuotes(CANDIDATE_LAB_ASSETS.map((asset) => asset.symbol), assetMap);
 
@@ -45,9 +72,7 @@ export default async function handler(req, res) {
         stage1Status(row) === "PASS";
     });
 
-    const sql = neon(url);
     const inserted = [];
-
     for (const row of eligible) {
       const result = await sql.query(
         `insert into public.candidate_validation_snapshots
@@ -76,13 +101,16 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       mode: "CANDIDATE_STAGE_2_SCHEDULED",
+      auth_mode: auth.mode,
       evaluated: quotes.length,
       eligible: eligible.length,
       inserted: inserted.length,
       symbols: inserted.map((row) => row.symbol),
       triggered_by: "scheduled",
       safeguards: {
-        requiresCronSecret: true,
+        prefersCronSecret: true,
+        scheduleHeaderFallbackOnlyWhenSecretMissing: true,
+        oneScheduledBatchPerUtcDay: true,
         requiresMaturityClassA: true,
         requiresStage1Pass: true,
         unconfirmedTickersHardLocked: ["SKHY", "DRAMB"],
