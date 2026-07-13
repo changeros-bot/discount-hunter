@@ -53,13 +53,20 @@ function validationText(row = {}) {
 function tierStatus(row = {}) {
   const rules = Array.isArray(row.rules) ? row.rules.map((x) => Math.abs(Number(x))).filter(Number.isFinite) : [];
   const discount = Math.abs(Number(row.discountFromHighPct ?? row.discount ?? 0));
-  if (!rules.length) return { label: "觀察中", pct: Number(row.highProgress?.progressPct || 0), discount };
+  if (!rules.length) return { label: "觀察中", pct: Number(row.highProgress?.progressPct || 0), discount, completedIndex: -1, nextIndex: 0 };
   let completedIndex = -1;
   for (let i = 0; i < rules.length; i += 1) if (discount >= rules[i]) completedIndex = i;
   const prev = completedIndex >= 0 ? rules[completedIndex] : 0;
-  const next = completedIndex + 1 < rules.length ? rules[completedIndex + 1] : rules[completedIndex] || rules[0];
+  const nextIndex = Math.min(completedIndex + 1, rules.length - 1);
+  const next = rules[nextIndex] || rules[0];
   const pct = completedIndex >= rules.length - 1 ? 100 : Math.max(2, Math.min(98, next > prev ? ((discount - prev) / (next - prev)) * 100 : 100));
-  return { label: completedIndex >= 0 ? `已完成：D${completedIndex + 1}` : "未達：D1", pct, discount };
+  return {
+    label: completedIndex >= 0 ? `已完成：D${completedIndex + 1}` : "未達：D1",
+    pct,
+    discount,
+    completedIndex,
+    nextIndex,
+  };
 }
 
 function aggregatePositions(rows = []) {
@@ -114,6 +121,12 @@ function slimPosition(row = {}) {
     pnlPct: Number(row.pnlPct || 0),
     discountFromHighPct: Number(row.discountFromHighPct ?? row.discount ?? 0),
     rules: Array.isArray(row.rules) ? row.rules.slice(0, 5) : [],
+    amounts: Array.isArray(row.amounts) ? row.amounts.slice(0, 5) : [],
+    description: row.description || "",
+    conviction: row.conviction || (isCore(row) ? "正式" : "Paper"),
+    strategy: row.strategy || "paper_discount",
+    strategyLabel: row.strategyLabel || (isCore(row) ? "折價策略" : "紙上折價驗證"),
+    ruleNote: row.ruleNote || row.description || "",
     highProgress: hp.enabled ? {
       enabled: true,
       progressPct: Number(hp.progressPct || 0),
@@ -159,17 +172,41 @@ function slimRun(json = {}) {
   };
 }
 
+const READY2_META = {
+  AAPL: ["Apple", "全球消費電子與服務平台；品質高，但估值與產品週期仍需折價。"],
+  AMZN: ["Amazon", "雲端、電商與廣告平台；高品質成長股，需避免在高估值時追價。"],
+  KO: ["Coca-Cola", "全球飲料品牌與現金流型防禦資產，適合較淺分層。"],
+  BAC: ["Bank of America", "大型銀行；利率、信用週期與資本要求需納入折價。"],
+  AXP: ["American Express", "高品質支付與信用卡平台，兼具消費與信用週期風險。"],
+  CVX: ["Chevron", "大型能源公司；油價週期與資本支出使其需中深折價。"],
+  XOM: ["Exxon Mobil", "大型綜合能源公司；現金流強，但高度受商品週期影響。"],
+  LIN: ["Linde", "全球工業氣體龍頭，品質高、波動較低，適合較淺折價。"],
+  NOC: ["Northrop Grumman", "國防航太龍頭；訂單可見度高，但估值與政府預算需追蹤。"],
+  UNH: ["UnitedHealth", "醫療保險與服務平台；政策、醫療成本與監管風險需較深折價。"],
+  MU: ["Micron", "AI 記憶體與 HBM 核心供應商；仍具半導體週期與資本支出風險。"],
+  SNDK: ["SanDisk", "NAND 儲存資產；高週期、高波動，需深折價與小倉位。"],
+  WDC: ["Western Digital", "儲存裝置與資料中心曝險；受 NAND、HDD 週期影響。"],
+  STX: ["Seagate", "硬碟與資料儲存供應商；AI 資料需求受惠但週期性高。"],
+  SKHY: ["SK Hynix Token", "SK 海力士單一公司 Token；HBM 純度高，但映射與幣別需持續驗證。"],
+  DRAM: ["DRAM ETF Token", "記憶體產業 ETF Token；分散度較高，需確認 ETF 結構與追蹤品質。"],
+  OXY: ["Occidental Petroleum", "高波動能源股；商品週期與負債風險要求更深買點。"],
+  PBR: ["Petrobras", "巴西能源公司；估值低但政策、匯率與治理風險高。"],
+};
+
 function normalizeReady2(position = {}, labRow = {}) {
   const entryPrice = Number(position.entry_price || 0);
   const currentPrice = Number(labRow.price || entryPrice);
   const high52w = Number(labRow.high52w || labRow.high_52w || labRow.quoteAudit?.high52w || 0);
   const discount = Number(labRow.discountFromHighPct ?? labRow.discount ?? (high52w > 0 ? ((currentPrice / high52w) - 1) * 100 : 0));
-  const rules = Array.isArray(labRow.rules) ? labRow.rules : [-15, -25, -35, -45];
+  const rules = Array.isArray(labRow.rules) ? labRow.rules : [-15, -25, -35, -50];
+  const amounts = Array.isArray(labRow.amounts) ? labRow.amounts : rules.map((_, i) => [5, 5, 10, 15, 20][i] || 20);
   const quantity = Number(position.quantity || 0);
   const cost = Number(position.invested_usd || 0);
+  const meta = READY2_META[position.symbol] || [position.token_symbol || position.symbol, "預備名單2紙上驗證標的；先驗證資料、映射與折價策略。"];
   return {
     symbol: position.symbol,
-    name: position.token_symbol || "",
+    name: labRow.name || meta[0],
+    tokenSymbol: position.token_symbol || "",
     group: "預備名單2",
     sourceType: "prepared_list_2",
     status: position.status || "OPEN",
@@ -182,6 +219,12 @@ function normalizeReady2(position = {}, labRow = {}) {
     pnlPct: cost > 0 ? (currentPrice * quantity - cost) / cost : 0,
     discountFromHighPct: discount,
     rules,
+    amounts,
+    description: labRow.description || labRow.thesis || meta[1],
+    conviction: labRow.conviction || "Paper",
+    strategy: "paper_discount",
+    strategyLabel: "紙上折價驗證策略",
+    ruleNote: labRow.ruleNote || labRow.strategyNote || `${meta[0]}採分層折價紙上測試；未經 Josh 批准不得晉級。`,
     highProgress: high52w > 0 ? {
       enabled: true,
       progressPct: Math.max(0, Math.min(100, (currentPrice / high52w) * 100)),
@@ -215,15 +258,46 @@ function LinkButton({ href, children, tone = "green" }) {
   return <a href={href} style={{ display: "block", width: "100%", boxSizing: "border-box", textAlign: "center", padding: "13px 10px", borderRadius: 14, border: `1px solid ${border}`, background: bg, color, fontWeight: 1000, textDecoration: "none", marginTop: tone === "blue" ? 8 : 0 }}>{children}</a>;
 }
 
+function TierGrid({ row, tier }) {
+  const rules = Array.isArray(row.rules) ? row.rules : [];
+  const amounts = Array.isArray(row.amounts) ? row.amounts : [];
+  const high = Number(row.highProgress?.high52w || 0);
+  if (!rules.length) return null;
+  return <div style={{ marginTop: 12 }}><div style={{ color: "#cbd5e1", fontWeight: 1000, fontSize: 13, marginBottom: 7 }}>層級規則</div><div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(4, rules.length)},1fr)`, gap: 5 }}>
+    {rules.slice(0, 4).map((rule, index) => {
+      const discount = Math.abs(Number(rule));
+      const price = high > 0 ? high * (1 - discount / 100) : 0;
+      const completed = tier.completedIndex >= index;
+      const next = tier.nextIndex === index && !completed;
+      return <div key={`${row.symbol}-D${index + 1}`} style={{ borderRadius: 12, padding: "8px 4px", textAlign: "center", border: `1px solid ${completed ? "rgba(34,197,94,.55)" : next ? "rgba(34,211,238,.55)" : "rgba(59,130,246,.25)"}`, background: completed ? "rgba(34,197,94,.14)" : next ? "rgba(6,182,212,.12)" : "rgba(15,23,42,.70)" }}><div style={{ color: completed ? "#bbf7d0" : "#67e8f9", fontWeight: 1000, fontSize: 15 }}>D{index + 1}</div><div style={{ color: "#cbd5e1", fontSize: 10, fontWeight: 900 }}>-{n(discount, 0)}%</div><div style={{ color: "#f8fafc", fontSize: 10, fontWeight: 1000 }}>${price > 0 ? n(price) : "—"}</div><div style={{ color: "#fde68a", fontSize: 10, fontWeight: 900 }}>{n(amounts[index] || 0, 0)}U</div><div style={{ color: completed ? "#86efac" : "#64748b", fontSize: 9, fontWeight: 900 }}>{completed ? "已觸發" : next ? "下一層" : "未觸發"}</div></div>;
+    })}
+  </div></div>;
+}
+
 function PositionCard({ row, paperOnly = false }) {
   const pnlColor = Number(row.pnl || 0) >= 0 ? "#bbf7d0" : "#fecaca";
   const tier = tierStatus(row);
   const hp = row.highProgress || {};
+  const nextRule = Array.isArray(row.rules) && row.rules[tier.nextIndex] !== undefined ? Math.abs(Number(row.rules[tier.nextIndex])) : null;
+  const actualLayers = Math.max(0, tier.completedIndex + 1);
   return <div style={{ padding: 13, borderRadius: 22, background: "linear-gradient(180deg,rgba(6,78,59,.28),rgba(2,6,23,.72))", border: "1px solid rgba(34,197,94,.28)" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div><div style={{ color: "#f8fafc", fontSize: 22, fontWeight: 1000 }}>{row.symbol}</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>{row.name || "—"}</div></div><div style={{ textAlign: "right" }}><div style={{ color: "#bbf7d0", fontSize: 11, fontWeight: 1000 }}>{groupLabel(row)}</div><div style={{ color: pnlColor, fontSize: 13, fontWeight: 1000 }}>{n((row.pnlPct || 0) * 100)}%</div></div></div>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div><div style={{ color: "#f8fafc", fontSize: 22, fontWeight: 1000 }}>{row.symbol}</div><div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>{row.name || row.tokenSymbol || "—"}</div></div><div style={{ textAlign: "right" }}><div style={{ color: "#fde68a", border: "1px solid rgba(250,204,21,.35)", background: "rgba(245,158,11,.10)", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 1000 }}>{groupLabel(row)}</div><div style={{ color: pnlColor, fontSize: 13, fontWeight: 1000, marginTop: 4 }}>{n((row.pnlPct || 0) * 100)}%</div></div></div>
+
     {paperOnly ? <div style={{ marginTop: 9, padding: "8px 10px", borderRadius: 14, background: "rgba(245,158,11,.12)", color: "#fde68a", fontSize: 12, fontWeight: 1000, lineHeight: 1.45 }}>{validationText(row)}｜進折扣獵人必須 Josh 明確同意</div> : null}
-    <div style={{ marginTop: 10, borderRadius: 17, border: "1px solid rgba(6,182,212,.18)", background: "rgba(2,6,23,.50)", padding: 12 }}><div style={{ padding: "10px 12px", borderRadius: 14, background: "rgba(34,197,94,.10)", border: "1px solid rgba(34,197,94,.24)", color: "#bbf7d0", fontSize: 18, fontWeight: 1000 }}>{tier.label}</div><div style={{ height: 10, borderRadius: 999, background: "rgba(8,47,73,.9)", marginTop: 10, overflow: "hidden" }}><div style={{ width: `${Math.max(0, Math.min(100, Number(tier.pct || 0)))}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#00ffa3,#00e5ff,#facc15)" }} /></div><div style={{ marginTop: 8, color: "#22d3ee", fontWeight: 1000, fontSize: 14 }}>{n(tier.pct, 0)}%｜目前折價 {n(tier.discount, 1)}%</div>{hp?.enabled ? <div style={{ marginTop: 8, color: "#94a3b8", fontWeight: 850, fontSize: 11 }}>52週高點：{n(hp.progressPct, 1)}%｜現價 ${n(hp.currentPrice)}｜高點 ${n(hp.high52w)}</div> : null}</div>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 10, color: "#cbd5e1", fontSize: 11, fontWeight: 900 }}><div>成本<br />${n(row.amountUSDT)}</div><div>市值<br />${n(row.currentValue)}</div><div style={{ color: pnlColor }}>損益<br />${n(row.pnl)}</div><div>現價<br />${n(row.currentPrice)}</div><div>均價<br />${n(row.price)}</div><div>股數<br />{n(row.quantity, 4)}</div><div>批次<br />{row.lotCount || 1}</div><div>真倉<br />禁止</div></div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", marginTop: 10, borderRadius: 16, overflow: "hidden", border: "1px solid rgba(30,64,175,.22)" }}>
+      {[['現價', `$${n(row.currentPrice)}`], ['紙上買入', `$${n(row.price)}`], ['股數', n(row.quantity,4)], ['實際投入', `${n(row.amountUSDT)}U`], ['市值', `$${n(row.currentValue)}`], ['損益', `$${n(row.pnl)}`], ['報酬率', `${n((row.pnlPct || 0) * 100)}%`], ['距52週高點', `${n(Math.abs(Number(row.discountFromHighPct || 0)),1)}%`]].map(([label,value],i) => <div key={`${label}-${i}`} style={{ padding: "9px 10px", borderRight: i % 2 === 0 ? "1px solid rgba(30,64,175,.18)" : 0, borderBottom: i < 6 ? "1px solid rgba(30,64,175,.18)" : 0 }}><div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 900 }}>{label}</div><div style={{ color: label === '損益' || label === '報酬率' ? pnlColor : '#f8fafc', fontSize: 13, fontWeight: 1000 }}>{value}</div></div>)}
+    </div>
+
+    {row.description ? <div style={{ marginTop: 9, padding: "7px 9px", borderRadius: 999, background: "rgba(6,182,212,.12)", border: "1px solid rgba(6,182,212,.18)", color: "#a5f3fc", fontSize: 10, fontWeight: 900, lineHeight: 1.35 }}>{row.description}</div> : null}
+
+    <div style={{ marginTop: 10, borderRadius: 16, background: "rgba(4,47,46,.58)", border: "1px solid rgba(34,197,94,.25)", padding: 11, color: "#d1fae5", fontSize: 11, lineHeight: 1.55, fontWeight: 850 }}><div style={{ fontSize: 13, fontWeight: 1000 }}>價格位置：{tier.completedIndex >= 0 ? `已觸及 D${tier.completedIndex + 1}` : "尚未到 D1"}</div><div>實際紙上投入：{actualLayers || 1} 層 / {n(row.amountUSDT)}U</div><div>買入點位：${n(row.price)}｜已持行層級：基準紙上單</div><div>D層觸發原因：{tier.completedIndex >= 0 ? `目前折價已達 ${n(tier.discount,1)}%` : `目前折價 ${n(tier.discount,1)}%，等待 D1`}</div></div>
+
+    <div style={{ marginTop: 10, borderRadius: 17, border: "1px solid rgba(6,182,212,.18)", background: "rgba(2,6,23,.50)", padding: 12 }}><div style={{ padding: "10px 12px", borderRadius: 14, background: "rgba(34,197,94,.10)", border: "1px solid rgba(34,197,94,.24)", color: "#bbf7d0", fontSize: 18, fontWeight: 1000 }}>{tier.label}</div><div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, color: "#cbd5e1", fontWeight: 900, fontSize: 11 }}><span>價格位置 {tier.completedIndex >= 0 ? `D${tier.completedIndex + 1}` : '起點'}</span><span>{nextRule ? `下一層 D${tier.nextIndex + 1}` : '最深層'}</span></div><div style={{ height: 10, borderRadius: 999, background: "rgba(8,47,73,.9)", marginTop: 7, overflow: "hidden" }}><div style={{ width: `${Math.max(0, Math.min(100, Number(tier.pct || 0)))}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#00ffa3,#00e5ff,#facc15)" }} /></div><div style={{ marginTop: 8, color: "#22d3ee", fontWeight: 1000, fontSize: 14 }}>{n(tier.pct, 0)}%｜目前折價 {n(tier.discount, 1)}%</div>{hp?.enabled ? <div style={{ marginTop: 8, color: "#94a3b8", fontWeight: 850, fontSize: 11 }}>52週高點：{n(hp.progressPct, 1)}%｜現價 ${n(hp.currentPrice)}｜高點 ${n(hp.high52w)}</div> : null}</div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 10 }}><div style={{ borderRadius: 14, padding: 10, background: "rgba(120,53,15,.14)", border: "1px solid rgba(251,146,60,.20)" }}><div style={{ color: "#fde68a", fontWeight: 1000, fontSize: 12 }}>Quality　{row.conviction || 'Paper'}</div><div style={{ color: "#cbd5e1", fontSize: 10, lineHeight: 1.4, marginTop: 5 }}>{row.description || '候選標的體質與風險持續驗證中。'}</div></div><div style={{ borderRadius: 14, padding: 10, background: "rgba(120,53,15,.14)", border: "1px solid rgba(251,146,60,.20)" }}><div style={{ color: "#fde68a", fontWeight: 1000, fontSize: 12 }}>{row.strategyLabel || '紙上折價驗證策略'}</div><div style={{ color: "#cbd5e1", fontSize: 10, lineHeight: 1.4, marginTop: 5 }}>{row.ruleNote || '只做分層紙上驗證，不自動進入正式名單。'}</div></div></div>
+
+    <TierGrid row={row} tier={tier} />
   </div>;
 }
 
@@ -282,7 +356,7 @@ export default function PaperAutoPage({ initialSummary = null, initialReady2 = [
     <header style={{ marginTop: 18, marginBottom: 14 }}><div style={{ color: "#22c55e", letterSpacing: 3, fontWeight: 1000, fontSize: 13 }}>V17 紙上交易自動測試</div><h1 style={{ fontSize: 30, lineHeight: 1.05, margin: "10px 0", fontWeight: 1000 }}>紙上交易總控台</h1><p style={{ color: "#cbd5e1", lineHeight: 1.5, fontWeight: 850, margin: 0 }}>折扣獵人主頁只放正式上線 10 檔；預備名單與預備名單2只能在本頁驗證，升格必須 Josh 明確同意。</p></header>
     {initialError ? <Box title="錯誤" tone="red"><div style={{ color: "#fecaca", fontWeight: 850 }}>{initialError}</div></Box> : null}
     <Box title="總覽" tone="green"><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, color: "#cbd5e1", fontWeight: 850, fontSize: 13 }}><div>模式：{summary?.settings?.mode || "AUTO_PAPER"}</div><div>驗證期：4 週</div><div>核心正式：{core.length} 檔</div><div>預備名單：{prepared.length} 檔</div><div>預備名單2：{ready2.length} 檔</div><div>紙上批次：{rawLotCount} 筆</div><div>進度條1：{progressCount}/{prepared.length}</div><div>進度條2：{ready2ProgressCount}/{ready2.length}</div><div>投入成本：${n(portfolio.cost)}</div><div>目前市值：${n(portfolio.value)}</div><div>損益：<strong style={{ color: pnlColor }}>${n(portfolio.pnl)}</strong></div><div>報酬率：<strong style={{ color: pnlColor }}>{n(displayPnlPct * 100)}%</strong></div><div>真實下單：禁止</div></div><div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: "rgba(2,6,23,.38)", border: "1px solid rgba(148,163,184,.12)", color: "#cbd5e1", fontWeight: 850, fontSize: 12, lineHeight: 1.6 }}>紙上交易總名單 {all.length} 檔｜核心10檔 {core.length}｜預備名單 {prepared.length}｜預備名單2 {ready2.length}</div></Box>
-    <Box title="操作"><LinkButton href={`/paper-auto?action=run&t=${now}`}>檢查今日紙上交易狀態</LinkButton><LinkButton href={`/paper-auto?refresh=${now}`} tone="blue">重新整理</LinkButton><div style={{ marginTop: 9, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>維持原本卡片、折價層級、52週高點與4週驗證顯示。</div>{initialRun ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900, lineHeight: 1.55 }}><div>今日紙上交易檢查完成。</div><div>紙上交易總名單：{coverageTotal} 檔。</div><div>本按鈕掃描：{scanned} 檔。</div><div>已由獨立批次在線：{Math.max(0, coverageTotal - scanned)} 檔。</div><div>本次新增 {initialRun.createdCount} 筆，略過 {initialRun.skippedCount} 筆。</div></div> : null}{initialRun?.skipped?.length ? <details style={{ marginTop: 8, color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}><summary>查看略過明細</summary>{initialRun.skipped.map((x) => <div key={`${x.symbol}-${x.reason}`}>{x.symbol}：{x.reason}</div>)}</details> : null}</Box>
+    <Box title="操作"><LinkButton href={`/paper-auto?action=run&t=${now}`}>檢查今日紙上交易狀態</LinkButton><LinkButton href={`/paper-auto?refresh=${now}`} tone="blue">重新整理</LinkButton><div style={{ marginTop: 9, color: "#94a3b8", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}>完整顯示 Quality、價格位置、策略說明與 D1–D4 層級規則。</div>{initialRun ? <div style={{ marginTop: 10, color: "#bbf7d0", fontWeight: 900, lineHeight: 1.55 }}><div>今日紙上交易檢查完成。</div><div>紙上交易總名單：{coverageTotal} 檔。</div><div>本按鈕掃描：{scanned} 檔。</div><div>已由獨立批次在線：{Math.max(0, coverageTotal - scanned)} 檔。</div><div>本次新增 {initialRun.createdCount} 筆，略過 {initialRun.skippedCount} 筆。</div></div> : null}{initialRun?.skipped?.length ? <details style={{ marginTop: 8, color: "#fde68a", fontSize: 12, fontWeight: 850, lineHeight: 1.45 }}><summary>查看略過明細</summary>{initialRun.skipped.map((x) => <div key={`${x.symbol}-${x.reason}`}>{x.symbol}：{x.reason}</div>)}</details> : null}</Box>
     <Box title="收斂規則" tone="yellow"><div style={{ color: "#cbd5e1", fontWeight: 850, lineHeight: 1.6, fontSize: 13 }}><div>折扣獵人主頁：只放目前正式上線 10 檔。</div><div>預備名單與預備名單2：必須先在本頁跑滿 4 週。</div><div>滿 4 週：只取得提案資格；進折扣獵人必須 Josh 明確同意。</div><div>禁止真實下單、禁止自動交易。</div></div></Box>
     <PositionSection title="核心正式10檔紙上追蹤" rows={core} tone="blue" defaultOpen={false} />
     <PositionSection title="預備名單 4週紙上驗證區" rows={prepared} tone="green" defaultOpen paperOnly />
