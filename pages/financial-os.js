@@ -142,7 +142,10 @@ function Budget({ txs, budgets, setBudgets }) {
 }
 
 function AssetPage({ assets, setAssets }) {
-  const [form, setForm] = useState({ name: '', type: '現金', amount: '', note: '' });
+  const emptyAsset = { name: '', type: '現金', amount: '', note: '' };
+  const [form, setForm] = useState(emptyAsset);
+  const [editingId, setEditingId] = useState('');
+  const [editForm, setEditForm] = useState(emptyAsset);
   const [ledger, setLedger] = useState({ loading: true, error: '', marketValue: 0, lastSyncTime: '', source: '' });
   const manualTwd = useMemo(() => assets.reduce((sum, item) => sum + Number(item.amount || 0), 0), [assets]);
   const hunterUsd = Number(ledger.marketValue || 0);
@@ -166,16 +169,40 @@ function AssetPage({ assets, setAssets }) {
 
   function addAsset() {
     const amount = Number(form.amount || 0);
-    if (!form.name || !Number.isFinite(amount)) return;
-    setAssets([{ id: 'asset-' + Date.now(), name: form.name, type: form.type, amount, note: form.note || '手動輸入' }, ...assets]);
-    setForm({ name: '', type: '現金', amount: '', note: '' });
+    if (!form.name.trim() || !Number.isFinite(amount)) return;
+    setAssets([{ id: 'asset-' + Date.now(), name: form.name.trim(), type: form.type, amount, note: form.note.trim() || '手動輸入' }, ...assets]);
+    setForm(emptyAsset);
   }
+
+  function startEdit(asset) {
+    setEditingId(asset.id);
+    setEditForm({ name: asset.name, type: asset.type, amount: String(asset.amount ?? 0), note: asset.note || '' });
+  }
+
+  function cancelEdit() {
+    setEditingId('');
+    setEditForm(emptyAsset);
+  }
+
+  function saveEdit(id) {
+    const amount = Number(editForm.amount);
+    if (!editForm.name.trim() || !Number.isFinite(amount)) return;
+    setAssets(assets.map((asset) => asset.id === id ? { ...asset, name: editForm.name.trim(), type: editForm.type, amount, note: editForm.note.trim() || '手動輸入' } : asset));
+    cancelEdit();
+  }
+
+  function deleteAsset(id) {
+    setAssets(assets.filter((asset) => asset.id !== id));
+    if (editingId === id) cancelEdit();
+  }
+
+  const smallButton = { borderRadius: 10, padding: '7px 10px', fontWeight: 900, background: 'transparent' };
 
   return <>
     <Card><Title t="綜合總資產" r="TWD 估算" /><div style={{ fontSize: 42, fontWeight: 1000 }}>{nt(totalTwd)}</div><p style={{ color: '#94a3b8', lineHeight: 1.55 }}>手動資產 {nt(manualTwd)} + 獵人投資 {usd(hunterUsd)} × 匯率 {RATE}</p><div style={{ color: ledger.error ? '#fca5a5' : '#86efac', fontSize: 12, fontWeight: 900 }}>資料源：/api/wallet-ledger｜{ledger.loading ? '同步中' : ledger.error ? ledger.error : '已同步'}</div>{ledger.lastSyncTime && <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 5 }}>Last Sync：{ledger.lastSyncTime}</div>}</Card>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}><Metric label="手動資產" value={nt(manualTwd)} sub="銀行約當台幣" /><Metric label="獵人投資市值" value={usd(hunterUsd)} sub="鏡像真實持倉" good={!ledger.error && hunterUsd > 0} /></div>
-    <Card><Title t="新增手動資產" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="資產名稱，例如：薪轉戶 / 富邦銀行 / 教育基金" /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={input()}>{assetTypes.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="金額" inputMode="numeric" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={input()} placeholder="備註，例如：薪轉 / 手動輸入 / 約當台幣" /><Btn onClick={addAsset}>新增資產</Btn><button onClick={loadWalletLedger} style={{ border: '1px solid rgba(34,197,94,.5)', borderRadius: 14, padding: 10, background: 'rgba(34,197,94,.12)', color: '#bbf7d0', fontWeight: 1000 }}>重新同步獵人投資</button></div></Card>
-    <Card><Title t="手動資產清單" r={`${assets.length} 筆`} />{assets.map((a) => <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><div><b>{a.name}</b><div style={{ color: '#94a3b8', fontSize: 12 }}>{a.type}｜{a.note}</div></div><b style={{ color: '#86efac' }}>{nt(a.amount)}</b><button onClick={() => setAssets(assets.filter((x) => x.id !== a.id))} style={{ background: 'transparent', color: '#fca5a5', border: '1px solid rgba(248,113,113,.3)', borderRadius: 10, padding: '7px 9px' }}>刪</button></div>)}</Card>
+    <Card><Title t="新增手動資產" r="Local DB" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="資產名稱，例如：薪轉戶 / 富邦銀行 / 教育基金" /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={input()}>{assetTypes.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="金額" inputMode="decimal" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={input()} placeholder="備註，例如：薪轉 / 手動輸入 / 約當台幣" /><Btn onClick={addAsset}>新增資產</Btn><button onClick={loadWalletLedger} style={{ border: '1px solid rgba(34,197,94,.5)', borderRadius: 14, padding: 10, background: 'rgba(34,197,94,.12)', color: '#bbf7d0', fontWeight: 1000 }}>重新同步獵人投資</button></div></Card>
+    <Card><Title t="手動資產清單" r={`${assets.length} 筆`} />{assets.map((a) => editingId === a.id ? <div key={a.id} style={{ display: 'grid', gap: 9, padding: '12px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} placeholder="資產名稱" /><select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} style={input()}>{assetTypes.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={{ ...input(), fontSize: 20, fontWeight: 900 }} placeholder="金額" inputMode="decimal" /><input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} style={input()} placeholder="備註" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><button onClick={() => saveEdit(a.id)} style={{ ...smallButton, color: '#bbf7d0', border: '1px solid rgba(34,197,94,.5)', background: 'rgba(34,197,94,.12)' }}>儲存</button><button onClick={cancelEdit} style={{ ...smallButton, color: '#cbd5e1', border: '1px solid rgba(148,163,184,.35)' }}>取消</button><button onClick={() => deleteAsset(a.id)} style={{ ...smallButton, color: '#fca5a5', border: '1px solid rgba(248,113,113,.35)', background: 'rgba(127,29,29,.18)' }}>刪除</button></div></div> : <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><div><b>{a.name}</b><div style={{ color: '#94a3b8', fontSize: 12 }}>{a.type}｜{a.note}</div></div><b style={{ color: '#86efac' }}>{nt(a.amount)}</b><button onClick={() => startEdit(a)} style={{ ...smallButton, color: '#fff7bd', border: '1px solid rgba(212,175,55,.55)', background: 'rgba(92,64,16,.4)' }}>編輯</button></div>)}</Card>
   </>;
 }
 
@@ -198,7 +225,7 @@ export default function FinancialOS() {
 
   return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
     <div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}>
-      <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V4.6｜薪轉帳戶｜資產同步｜安全刪除</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section>
+      <section style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V4.7｜薪轉帳戶｜資產同步｜資產編輯</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section>
       {tab === 'dashboard' && <Dashboard txs={txs} />}
       {tab === 'entry' && <Entry txs={txs} setTxs={setTxs} />}
       {tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} />}
