@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Temporary calculation source while Binance history archive matures"
+        description: "Calculation source"
         required: true
         default: "yfinance"
         type: choice
         options:
+          - binance
           - yfinance
           - csv
   schedule:
@@ -44,7 +45,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance
 
-      - name: Collect Binance 2560 daily snapshots
+      - name: Backfill Binance RWA OHLC and accumulate Binance volume
         run: |
           python scripts/collect_2560_binance_history.py
 
@@ -61,8 +62,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Preserve generated state, synchronize to the latest main, then
-          # restore only generated report/history folders to avoid rebase conflicts.
           tmp_dir="$(mktemp -d)"
           cp -R reports/paper "$tmp_dir/paper"
           if [ -d data/2560-binance-history ]; then
