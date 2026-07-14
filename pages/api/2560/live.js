@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import { get2560StorageStatus, read2560Snapshot } from "../../../lib/2560-store";
 
+const VALID_V1_PATTERNS = new Set(["RUSH_VOLUME", "BUILT_VOLUME", "VOLUME_PIT"]);
+
 function parseCsv(text) {
   const lines = String(text || "").trim().split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
@@ -32,6 +34,21 @@ function readRegistry() {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return { version: "invalid", symbols: [] }; }
 }
 
+function isV1Trade(row) {
+  return VALID_V1_PATTERNS.has(String(row?.pattern || "").trim());
+}
+
+function archiveLegacyView(rows) {
+  return (rows || []).filter((row) => !isV1Trade(row)).map((row) => ({
+    ...row,
+    status: "CLOSED",
+    exit_date: row.exit_date || row.last_date || "",
+    exit_price: row.exit_price || row.last_price || "",
+    exit_reason: row.exit_reason || "legacy_rule_replaced",
+    signal_reason: "LEGACY_RULE_REPLACED",
+  }));
+}
+
 function fallbackSnapshot() {
   const trades = readCsv("2560_paper_trades.csv");
   const openRows = readCsv("2560_open_positions.csv");
@@ -54,9 +71,6 @@ function fallbackSnapshot() {
       registryVersion: registry.version,
       universeCount: (registry.symbols || []).length,
       universeProfiles: registry.symbols || [],
-      open: openRows.filter((x) => x.status === "OPEN").length,
-      pending: openRows.filter((x) => x.status === "PENDING").length,
-      closed: closed.length,
       rawSummary,
       source: "reports/paper",
       storageMode: "file_fallback",
@@ -71,9 +85,13 @@ export default async function handler(req, res) {
   try {
     const stored = await read2560Snapshot();
     const snapshot = stored || fallbackSnapshot();
-    const open = snapshot.open || [];
-    const pending = snapshot.pending || [];
-    const closed = snapshot.closed || [];
+    const rawOpen = snapshot.open || [];
+    const rawPending = snapshot.pending || [];
+    const open = rawOpen.filter(isV1Trade);
+    const pending = rawPending.filter(isV1Trade);
+    const legacyArchived = archiveLegacyView([...rawOpen, ...rawPending]);
+    const closed = [...(snapshot.closed || []), ...legacyArchived];
+
     return res.status(200).json({
       ok: true,
       source: stored ? "upstash_kv" : "github_report_fallback",
@@ -83,6 +101,7 @@ export default async function handler(req, res) {
         open: open.length,
         pending: pending.length,
         closed: closed.length,
+        legacyArchived: legacyArchived.length,
         lastScan: snapshot.lastScan || null,
         updatedAt: snapshot.ingestedAt || snapshot.lastScan?.run_at_utc || null,
       },
