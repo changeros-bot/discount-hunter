@@ -26,7 +26,12 @@ function monthKey(ts) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
 }
 
-function yearsBetween(a,b){ return (b-a)/(365.25*DAY); }
+function totalMonths() {
+  let count = 0;
+  const d = new Date(Date.UTC(START.getUTCFullYear(), START.getUTCMonth(), 1));
+  while (d.getTime() < END.getTime()) { count += 1; d.setUTCMonth(d.getUTCMonth()+1); }
+  return count;
+}
 
 async function fetchYahoo(symbol) {
   const p1 = Math.floor(START.getTime()/1000);
@@ -42,9 +47,16 @@ async function fetchYahoo(symbol) {
   const adj = result.indicators?.adjclose?.[0]?.adjclose || [];
   const rows = [];
   for (let i=0;i<ts.length;i++) {
-    const close = safeNumber(adj[i] ?? q.close?.[i]);
-    const high = safeNumber(q.high?.[i] ?? close);
-    if (close > 0) rows.push({ ts: ts[i]*1000, close, high });
+    const rawClose = safeNumber(q.close?.[i]);
+    const adjustedClose = safeNumber(adj[i] ?? rawClose);
+    if (!(rawClose > 0) || !(adjustedClose > 0)) continue;
+    const factor = adjustedClose / rawClose;
+    const adjustedHigh = safeNumber(q.high?.[i]) * factor;
+    rows.push({
+      ts: ts[i]*1000,
+      close: adjustedClose,
+      high: adjustedHigh > 0 ? adjustedHigh : adjustedClose
+    });
   }
   return rows.filter(r => r.ts >= START.getTime() && r.ts < END.getTime());
 }
@@ -62,12 +74,13 @@ function firstTradeOnOrAfter14(rows) {
 
 function computeReference(rows, mode) {
   let allTimeHigh = 0;
+  let previousRollingHigh = 0;
   const highWindow = [];
   return rows.map((row) => {
     let reference = 0;
     let reset = false;
     if (mode === "cycle") {
-      if (row.high > allTimeHigh) {
+      if (row.high > allTimeHigh + 1e-9) {
         allTimeHigh = row.high;
         reset = true;
       }
@@ -75,10 +88,9 @@ function computeReference(rows, mode) {
     } else {
       highWindow.push({ ts: row.ts, high: row.high });
       while (highWindow.length && highWindow[0].ts < row.ts - 365*DAY) highWindow.shift();
-      const previous = reference;
       reference = highWindow.reduce((m,x)=>Math.max(m,x.high),0);
-      if (previous > 0 && reference > previous + 1e-9) reset = true;
-      if (highWindow.length === 1) reset = true;
+      if (reference > previousRollingHigh + 1e-9) reset = true;
+      previousRollingHigh = reference;
     }
     const dd = reference > 0 ? (row.close/reference - 1)*100 : 0;
     return { ...row, reference, dd, reset };
@@ -99,23 +111,18 @@ function simulateAsset(asset, rows, strategy) {
   const monthlyDates = firstTradeOnOrAfter14(rows);
   const monthlySeen = new Set();
   let completed = new Set();
-  let listed = false;
   const prepared = computeReference(rows, asset.mode);
 
   for (const row of prepared) {
     const key = monthKey(row.ts);
-    if (!listed) listed = true;
-
     if (monthlyDates.get(key) === row.ts && !monthlySeen.has(key)) {
       monthlySeen.add(key);
+      state.cash += 10;
+      state.contributed += 10;
       if (strategy === "pure_dca") {
-        state.cash += 10;
-        state.contributed += 10;
         if (buy(state,10,row.close,"dcaInvested")) state.dcaBuys += 1;
-      } else {
-        state.cash += asset.dca + asset.dip;
-        state.contributed += asset.dca + asset.dip;
-        if (asset.dca > 0 && buy(state,asset.dca,row.close,"dcaInvested")) state.dcaBuys += 1;
+      } else if (asset.dca > 0) {
+        if (buy(state,asset.dca,row.close,"dcaInvested")) state.dcaBuys += 1;
       }
     }
 
@@ -123,8 +130,7 @@ function simulateAsset(asset, rows, strategy) {
       if (row.reset) completed = new Set();
       for (let i=0;i<asset.rules.length;i++) {
         if (!completed.has(i) && row.dd <= asset.rules[i]) {
-          const amount = asset.amounts[i];
-          if (buy(state,amount,row.close,"dipInvested")) {
+          if (buy(state,asset.amounts[i],row.close,"dipInvested")) {
             completed.add(i);
             state.dipBuys += 1;
           }
@@ -132,6 +138,10 @@ function simulateAsset(asset, rows, strategy) {
       }
     }
   }
+
+  const missingMonths = Math.max(0, totalMonths() - monthlySeen.size);
+  state.cash += missingMonths * 10;
+  state.contributed += missingMonths * 10;
 
   const last = prepared[prepared.length-1];
   const price = last?.close || 0;
@@ -154,20 +164,17 @@ function simulateAsset(asset, rows, strategy) {
     dcaInvested: state.dcaInvested,
     dipInvested: state.dipInvested,
     dcaBuys: state.dcaBuys,
-    dipBuys: state.dipBuys
+    dipBuys: state.dipBuys,
+    missingMonthsHeldAsCash: missingMonths
   };
 }
 
 function unavailableResult(asset) {
-  const months = [];
-  let d = new Date(Date.UTC(START.getUTCFullYear(),START.getUTCMonth(),1));
-  const end = END.getTime();
-  while (d.getTime() < end) { months.push(new Date(d)); d.setUTCMonth(d.getUTCMonth()+1); }
-  const contributed = months.length * 10;
+  const contributed = totalMonths() * 10;
   return {
     symbol: asset.symbol,
-    firstDate: null,
-    lastDate: null,
+    firstDate:null,
+    lastDate:null,
     contributed,
     invested:0,
     cash:contributed,
@@ -181,6 +188,7 @@ function unavailableResult(asset) {
     dipInvested:0,
     dcaBuys:0,
     dipBuys:0,
+    missingMonthsHeldAsCash:totalMonths(),
     note:"缺乏可驗證十年公開歷史價格，整個袖套保留現金。"
   };
 }
@@ -189,17 +197,14 @@ function summarize(rows) {
   const sum = (key) => rows.reduce((a,b)=>a+safeNumber(b[key]),0);
   const contributed = sum("contributed");
   const totalValue = sum("totalValue");
-  const pnl = totalValue - contributed;
-  const years = yearsBetween(START.getTime(),END.getTime());
   return {
     contributed,
     invested:sum("invested"),
     cash:sum("cash"),
     marketValue:sum("marketValue"),
     totalValue,
-    pnl,
-    returnPct: contributed > 0 ? pnl/contributed : 0,
-    annualizedApprox: contributed > 0 && totalValue > 0 ? Math.pow(totalValue/contributed,1/years)-1 : 0,
+    pnl:totalValue-contributed,
+    returnPct: contributed > 0 ? (totalValue-contributed)/contributed : 0,
     dcaInvested:sum("dcaInvested"),
     dipInvested:sum("dipInvested"),
     dcaBuys:sum("dcaBuys"),
@@ -224,26 +229,30 @@ module.exports = async function handler(req,res) {
         hybrid.push(simulateAsset(asset,rows,"hybrid"));
       }
     }
+    const pureSummary = summarize(pure);
+    const hybridSummary = summarize(hybrid);
     return res.status(200).json({
       ok:true,
+      version:"10y-backtest-v2-adjusted-ohlc",
       methodology:{
         period:[START.toISOString().slice(0,10), new Date(END.getTime()-DAY).toISOString().slice(0,10)],
         monthlyBudget:MONTHLY_BUDGET,
         monthlyBuyDay:"每月第一個落在14日或之後的交易日",
-        pureDca:"十個袖套各10U；未上市或無資料袖套保留現金",
+        pureDca:"十個袖套各10U；未上市或無資料期間保留現金",
         hybrid:"QQQ 10U DCA；NVDA/TSM/AVGO/GOOGL/BTC 各5U DCA+5U逢低；AMD/MRVL/RKLB/SPCX各10U逢低",
-        stockReference:"滾動365日高點；高點上移後重置該週期已完成D層",
-        btcReference:"歷史新高；創新高後重置D層",
-        dipExecution:"同一高點週期每層只買一次，按V17各資產層級金額，現金不足則不買",
-        prices:"Yahoo Finance adjusted close；忽略稅、手續費與滑價",
-        caveat:"近十年回測存在存活者偏差；SPCX無可驗證十年行情"
+        stockReference:"拆股與股息調整後的滾動365日高點；高點上移後重置該週期D層",
+        btcReference:"調整後歷史新高；創新高後重置D層",
+        dipExecution:"同一高點週期每層只買一次，按V17層級金額，現金不足則不買",
+        prices:"Yahoo Finance adjusted close，且 high 以同日調整因子轉為相同尺度",
+        costs:"忽略稅、手續費與滑價",
+        caveat:"測試用途；存在存活者偏差，SPCX無可驗證十年行情"
       },
-      pureDca:{ summary:summarize(pure), assets:pure },
-      hybrid:{ summary:summarize(hybrid), assets:hybrid },
+      pureDca:{ summary:pureSummary, assets:pure },
+      hybrid:{ summary:hybridSummary, assets:hybrid },
       difference:{
-        totalValue:summarize(hybrid).totalValue-summarize(pure).totalValue,
-        pnl:summarize(hybrid).pnl-summarize(pure).pnl,
-        returnPctPoints:(summarize(hybrid).returnPct-summarize(pure).returnPct)*100
+        totalValue:hybridSummary.totalValue-pureSummary.totalValue,
+        pnl:hybridSummary.pnl-pureSummary.pnl,
+        returnPctPoints:(hybridSummary.returnPct-pureSummary.returnPct)*100
       },
       generatedAt:new Date().toISOString()
     });
