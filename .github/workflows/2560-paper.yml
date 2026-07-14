@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -50,11 +52,22 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Preserve the freshly generated reports, move the worktree to the
+          # latest main, then restore only the report files. This prevents
+          # rebase conflicts when other commits land during the scan.
+          tmp_dir="$(mktemp -d)"
+          cp -R reports/paper "$tmp_dir/paper"
+          git fetch origin main
+          git reset --hard origin/main
+          rm -rf reports/paper
+          mkdir -p reports
+          cp -R "$tmp_dir/paper" reports/paper
+
           git add reports/paper || true
           if git diff --cached --quiet; then
             echo "No paper report changes to commit."
           else
             git commit -m "Update 2560 paper reports"
-            git pull --rebase origin main
-            git push
+            git push origin HEAD:main
           fi
