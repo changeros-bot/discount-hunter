@@ -1,0 +1,444 @@
+{
+  "source": "binance_rwa_kline_utc_1d + binance_dynamic_stockInfo.volume",
+  "collected_at_utc": "2026-07-14T23:26:52.808246+00:00",
+  "available_count": 48,
+  "pending_count": 0,
+  "history_by_ticker": {
+    "QQQ": {
+      "price_days": 290,
+      "volume_days": 1,
+      "binance_symbol": "QQQON",
+      "chain_id": "56",
+      "contract_address": "0x0cde6936d305d5b34667fc46425e852efd73559a",
+      "market_status": "postmarket"
+    },
+    "NVDA": {
+      "price_days": 296,
+      "volume_days": 1,
+      "binance_symbol": "NVDAON",
+      "chain_id": "56",
+      "contract_address": "0xa9ee28c80f960b889dfbd1902055218cba016f75",
+      "market_status": "postmarket"
+    },
+    "TSM": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "TSMON",
+      "chain_id": "56",
+      "contract_address": "0xc37042a7a4fa510d8884a433762ab87257b91965",
+      "market_status": "postmarket"
+    },
+    "AVGO": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "AVGOON",
+      "chain_id": "56",
+      "contract_address": "0x0ed2e3180edf393e6bf8db124bd15ddd54de150a",
+      "market_status": "postmarket"
+    },
+    "SPCX": {
+      "price_days": 21,
+      "volume_days": 1,
+      "binance_symbol": "SPCXON",
+      "chain_id": "56",
+      "contract_address": "0xd0a58bc9d88d3ff48c0294cb7e45937d0e41a928",
+      "market_status": "postmarket"
+    },
+    "GOOGL": {
+      "price_days": 296,
+      "volume_days": 1,
+      "binance_symbol": "GOOGLON",
+      "chain_id": "56",
+      "contract_address": "0x091fc7778e6932d4009b087b191d1ee3bac5729a",
+      "market_status": "postmarket"
+    },
+    "AMD": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "AMDON",
+      "chain_id": "56",
+      "contract_address": "0x9f16e46c73b43bdb70861247d537bee4ea18f639",
+      "market_status": "postmarket"
+    },
+    "MRVL": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "MRVLON",
+      "chain_id": "56",
+      "contract_address": "0x1501ec83ffef405b4331cc4f73277a40fb0c627d",
+      "market_status": "postmarket"
+    },
+    "RKLB": {
+      "price_days": 107,
+      "volume_days": 1,
+      "binance_symbol": "RKLBON",
+      "chain_id": "56",
+      "contract_address": "0xb4d695569236273745b4cd54b539b1b9cc1513af",
+      "market_status": "postmarket"
+    },
+    "NOW": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "NOWON",
+      "chain_id": "56",
+      "contract_address": "0xeb19c13c54b1cd48afc62f6503375e92d5f1e856",
+      "market_status": "postmarket"
+    },
+    "QCOM": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "QCOMON",
+      "chain_id": "56",
+      "contract_address": "0xfbd4d681c92ead6af0e49950c8b2e47eeacbb2db",
+      "market_status": "postmarket"
+    },
+    "DELL": {
+      "price_days": 27,
+      "volume_days": 1,
+      "binance_symbol": "DELLON",
+      "chain_id": "56",
+      "contract_address": "0xf26518958935654878de15be7bc79a26971583ba",
+      "market_status": "postmarket"
+    },
+    "MSFT": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "MSFTON",
+      "chain_id": "56",
+      "contract_address": "0x6bfe75d1ad432050ea973c3a3dcd88f02e2444c3",
+      "market_status": "postmarket"
+    },
+    "NFLX": {
+      "price_days": 292,
+      "volume_days": 1,
+      "binance_symbol": "NFLXON",
+      "chain_id": "56",
+      "contract_address": "0x7048f5227b032326cc8dbc53cf3fddd947a2c757",
+      "market_status": "postmarket"
+    },
+    "ADBE": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "ADBEON",
+      "chain_id": "56",
+      "contract_address": "0xcb22db0ecb6fe58b7b47db443dcfdfdfbf729cef",
+      "market_status": "postmarket"
+    },
+    "SOFI": {
+      "price_days": 184,
+      "volume_days": 1,
+      "binance_symbol": "SOFION",
+      "chain_id": "56",
+      "contract_address": "0x71507068e98049cba81e9bbc8d901e4a2f4222eb",
+      "market_status": "postmarket"
+    },
+    "REGN": {
+      "price_days": 103,
+      "volume_days": 1,
+      "binance_symbol": "REGNON",
+      "chain_id": "56",
+      "contract_address": "0x30bd85fd4286c5c9857679f5b188f737b4a7b8c0",
+      "market_status": "postmarket"
+    },
+    "MA": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "MAON",
+      "chain_id": "56",
+      "contract_address": "0x25ffda07f585c39848db6573e533d7585679c52d",
+      "market_status": "postmarket"
+    },
+    "V": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "VON",
+      "chain_id": "56",
+      "contract_address": "0x1cde419fae0ef7f7931ae3e29e5f411c8c5e5fa1",
+      "market_status": "postmarket"
+    },
+    "PWR": {
+      "price_days": 27,
+      "volume_days": 1,
+      "binance_symbol": "PWRON",
+      "chain_id": "56",
+      "contract_address": "0x2418c2e1ae3b8d767594b3974d32610743f88155",
+      "market_status": "postmarket"
+    },
+    "CEG": {
+      "price_days": 173,
+      "volume_days": 1,
+      "binance_symbol": "CEGON",
+      "chain_id": "56",
+      "contract_address": "0x65d84f0990b7394209d591380c2952c83d778aa3",
+      "market_status": "postmarket"
+    },
+    "COST": {
+      "price_days": 292,
+      "volume_days": 1,
+      "binance_symbol": "COSTON",
+      "chain_id": "56",
+      "contract_address": "0x34375f826fd3dd4e15f883d4f4786bb45eb705ac",
+      "market_status": "postmarket"
+    },
+    "GEV": {
+      "price_days": 107,
+      "volume_days": 1,
+      "binance_symbol": "GEVON",
+      "chain_id": "56",
+      "contract_address": "0x2aea1d415d45ccf3eabe565d45dcaf4ea2035b9c",
+      "market_status": "postmarket"
+    },
+    "LLY": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "LLYON",
+      "chain_id": "56",
+      "contract_address": "0x341d31b2be1fee9c00e395a62ba41837f4322eed",
+      "market_status": "postmarket"
+    },
+    "SPOT": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "SPOTON",
+      "chain_id": "56",
+      "contract_address": "0x50356167a4dbc38bea6779c045e24e25facedfdc",
+      "market_status": "postmarket"
+    },
+    "TMUS": {
+      "price_days": 172,
+      "volume_days": 1,
+      "binance_symbol": "TMUSON",
+      "chain_id": "56",
+      "contract_address": "0x2588f20bad92da8dcce7fac8311b5f8ab4690e43",
+      "market_status": "postmarket"
+    },
+    "ACN": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "ACNON",
+      "chain_id": "56",
+      "contract_address": "0x7af44d51d1fb88c5b74fc71d3cba649bb8099d14",
+      "market_status": "postmarket"
+    },
+    "AAPL": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "AAPLON",
+      "chain_id": "56",
+      "contract_address": "0x390a684ef9cade28a7ad0dfa61ab1eb3842618c4",
+      "market_status": "postmarket"
+    },
+    "AMZN": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "AMZNON",
+      "chain_id": "56",
+      "contract_address": "0x4553cfe1c09f37f38b12dc509f676964e392f8fc",
+      "market_status": "postmarket"
+    },
+    "KO": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "KOON",
+      "chain_id": "56",
+      "contract_address": "0x405f38b90bebf1259062cf29da299f3398662bcb",
+      "market_status": "postmarket"
+    },
+    "BAC": {
+      "price_days": 174,
+      "volume_days": 1,
+      "binance_symbol": "BACON",
+      "chain_id": "56",
+      "contract_address": "0xd615468088b19fb9d4f03cb3ce9e33876ff3db99",
+      "market_status": "postmarket"
+    },
+    "AXP": {
+      "price_days": 285,
+      "volume_days": 1,
+      "binance_symbol": "AXPON",
+      "chain_id": "56",
+      "contract_address": "0xd803f8777187d6dee1ea57854aeb957043fb1675",
+      "market_status": "postmarket"
+    },
+    "CVX": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "CVXON",
+      "chain_id": "56",
+      "contract_address": "0xd3113a0ad20a46f6a662c63fe8e637f7713e59c7",
+      "market_status": "postmarket"
+    },
+    "XOM": {
+      "price_days": 184,
+      "volume_days": 1,
+      "binance_symbol": "XOMON",
+      "chain_id": "56",
+      "contract_address": "0x4d209d275e3492ac08497a7a42915899c4dd5e86",
+      "market_status": "postmarket"
+    },
+    "LIN": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "LINON",
+      "chain_id": "56",
+      "contract_address": "0xe1743616f705954620aa351465c8885fbde5a8a9",
+      "market_status": "postmarket"
+    },
+    "NOC": {
+      "price_days": 106,
+      "volume_days": 1,
+      "binance_symbol": "NOCON",
+      "chain_id": "56",
+      "contract_address": "0x4d3442d884202584f1729bca20db05472b886b52",
+      "market_status": "postmarket"
+    },
+    "UNH": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "UNHON",
+      "chain_id": "56",
+      "contract_address": "0x3385cb29cca0ac66f5d2354d13ef977b49a2510f",
+      "market_status": "postmarket"
+    },
+    "MU": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "MUON",
+      "chain_id": "56",
+      "contract_address": "0x8b6acf6041a81567f012ff6a4c6d96d5818d74bf",
+      "market_status": "postmarket"
+    },
+    "SNDK": {
+      "price_days": 107,
+      "volume_days": 1,
+      "binance_symbol": "SNDKON",
+      "chain_id": "56",
+      "contract_address": "0x4fd67cb8cfedc718bac984b5936abe3330d0a2a4",
+      "market_status": "postmarket"
+    },
+    "WDC": {
+      "price_days": 107,
+      "volume_days": 1,
+      "binance_symbol": "WDCON",
+      "chain_id": "56",
+      "contract_address": "0xceb29848d04ad3cb46e1fe8e45b82ffac39d797d",
+      "market_status": "postmarket"
+    },
+    "STX": {
+      "price_days": 106,
+      "volume_days": 1,
+      "binance_symbol": "STXON",
+      "chain_id": "56",
+      "contract_address": "0x966ebcba3c51e81f5cf159a1eabefd2327ab5e8d",
+      "market_status": "postmarket"
+    },
+    "SKHY": {
+      "price_days": 3,
+      "volume_days": 1,
+      "binance_symbol": "SKHYON",
+      "chain_id": "56",
+      "contract_address": "0x4268f2bfb23a7496504aa5ed1ee325248586299f",
+      "market_status": "postmarket"
+    },
+    "DRAM": {
+      "price_days": 24,
+      "volume_days": 1,
+      "binance_symbol": "DRAMON",
+      "chain_id": "56",
+      "contract_address": "0x087b5761b161429013d41ea54cd2fb6022a21564",
+      "market_status": "postmarket"
+    },
+    "OXY": {
+      "price_days": 174,
+      "volume_days": 1,
+      "binance_symbol": "OXYON",
+      "chain_id": "56",
+      "contract_address": "0x01b5a4ac600be98448dbefbb78bcdf38262552cc",
+      "market_status": "postmarket"
+    },
+    "PBR": {
+      "price_days": 280,
+      "volume_days": 1,
+      "binance_symbol": "PBRON",
+      "chain_id": "56",
+      "contract_address": "0x2b1d5cdecc356530a746c5754231efaeaca64022",
+      "market_status": "postmarket"
+    },
+    "META": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "METAON",
+      "chain_id": "56",
+      "contract_address": "0xd7df5863a3e742f0c767768cdfcb63f09e0422f6",
+      "market_status": "postmarket"
+    },
+    "PLTR": {
+      "price_days": 286,
+      "volume_days": 1,
+      "binance_symbol": "PLTRON",
+      "chain_id": "56",
+      "contract_address": "0x9351abd19f42101dd36025e495b98e910b255d78",
+      "market_status": "postmarket"
+    },
+    "NBIS": {
+      "price_days": 107,
+      "volume_days": 1,
+      "binance_symbol": "NBISON",
+      "chain_id": "56",
+      "contract_address": "0xee268780473e7a0e47bac41547c6e01512555a16",
+      "market_status": "postmarket"
+    }
+  },
+  "full_2560_ready": [],
+  "price_ready_volume_pending": [
+    "AAPL",
+    "ACN",
+    "ADBE",
+    "AMD",
+    "AMZN",
+    "AVGO",
+    "AXP",
+    "BAC",
+    "CEG",
+    "COST",
+    "CVX",
+    "GEV",
+    "GOOGL",
+    "KO",
+    "LIN",
+    "LLY",
+    "MA",
+    "META",
+    "MRVL",
+    "MSFT",
+    "MU",
+    "NBIS",
+    "NFLX",
+    "NOC",
+    "NOW",
+    "NVDA",
+    "OXY",
+    "PBR",
+    "PLTR",
+    "QCOM",
+    "QQQ",
+    "REGN",
+    "RKLB",
+    "SNDK",
+    "SOFI",
+    "SPOT",
+    "STX",
+    "TMUS",
+    "TSM",
+    "UNH",
+    "V",
+    "WDC",
+    "XOM"
+  ],
+  "pending": [],
+  "limitations": [
+    "Binance RWA 1d bars use UTC day boundaries, not US regular-session boundaries.",
+    "The K-line reserved volume field is zero; volume is accumulated from Binance dynamic stockInfo.volume only from collection day onward.",
+    "Corporate-action back-adjustment is not documented and remains unverified."
+  ]
+}

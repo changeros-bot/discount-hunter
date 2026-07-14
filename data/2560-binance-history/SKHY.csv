@@ -1,0 +1,4 @@
+Date,Open,High,Low,Close,Volume,KlineReservedVolume,close_time_utc,price_source,volume_source,binance_symbol,shares_multiplier,token_volume_24h_usd,market_status,collected_at_utc
+2026-07-10,171.703182,173.651667,168.0,172.126,,0.0,2026-07-10T23:59:59.999000+00:00,binance_rwa_kline_utc_1d,unavailable_in_binance_kline,SKHYON,1.0,,,2026-07-14T23:26:49.257257+00:00
+2026-07-13,172.126,172.126,149.574,152.633333,,0.0,2026-07-13T23:59:59.999000+00:00,binance_rwa_kline_utc_1d,unavailable_in_binance_kline,SKHYON,1.0,,,2026-07-14T23:26:49.257257+00:00
+2026-07-14,152.605,195.325,150.009883,185.413333,70800643.274636,0.0,2026-07-14T23:59:59.999000+00:00,binance_rwa_kline_utc_1d,binance_dynamic_stockInfo.volume,SKHYON,1.0,13142217682.07577,postmarket,2026-07-14T23:26:49.257257+00:00
