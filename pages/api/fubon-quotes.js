@@ -15,7 +15,7 @@ const ASSETS = [
       averageCost: 102.55,
       brokerPnl: 200,
       brokerPnlPct: 3.36,
-      snapshotAt: "2026-07-13T23:59:00+08:00",
+      snapshotAt: "2026-07-14T08:59:24+08:00",
     },
   },
   {
@@ -33,11 +33,11 @@ const ASSETS = [
       brokerMarketValue: 30.61,
       averageCost: 682.15824,
       brokerPnl: 0.52,
-      brokerPnlPct: 1.73,
+      brokerPnlPct: 1.75,
       fxRate: 32.2775,
       marketValueTwd: 988,
       pnlTwd: 17,
-      snapshotAt: "2026-07-14T07:29:00+08:00",
+      snapshotAt: "2026-07-14T08:59:10+08:00",
     },
   },
   {
