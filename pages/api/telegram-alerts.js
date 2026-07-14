@@ -2,6 +2,8 @@ const { sendTelegramMessage } = require("../../lib/telegram/notify");
 const { isPricesHealthy, isWalletHealthy, healthSummary } = require("../../lib/v16-health");
 
 const MAX_LEVEL = 4;
+const QUANTITY_TOLERANCE = 0.000000000001;
+const COST_TOLERANCE_USD = 0.05;
 
 function num(value) {
   const n = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
@@ -52,6 +54,15 @@ function normalizeHoldings(payload = {}) {
   return new Map((Array.isArray(rows) ? rows : []).map((row) => [stripOn(row.symbol), row]));
 }
 
+function holdingSnapshot(holdings, symbol) {
+  const holding = holdings.get(stripOn(symbol)) || {};
+  return {
+    quantity: num(holding.quantity),
+    totalCost: num(holding.totalCost),
+    currentValue: num(holding.currentValue || holding.marketValue || holding.positionValue),
+  };
+}
+
 function costDoneLevel(asset, holdings) {
   const holding = holdings.get(stripOn(asset?.symbol));
   const totalCost = num(holding?.totalCost);
@@ -79,6 +90,10 @@ function eventKey(type, symbol, fromLevel, toLevel) {
   return `notification:telegram:${type}:${symbol}:${tier(fromLevel)}:${tier(toLevel)}`;
 }
 
+function purchaseEventKey(symbol, quantity, totalCost) {
+  return `notification:telegram:purchase_detected:${stripOn(symbol)}:${quantity.toFixed(12)}:${totalCost.toFixed(4)}`;
+}
+
 function eventMessage(event, updatedAt) {
   const time = new Date(updatedAt || Date.now()).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
   return [event.title, "", ...event.lines, "", `檢查時間：${time}`].join("\n");
@@ -93,10 +108,37 @@ function buildEvents({ assets, ledger, alerts, holdings }) {
     if (!symbol) continue;
 
     const stateExists = Object.prototype.hasOwnProperty.call(states, symbol);
-    const previous = Number(states[symbol]?.currentLevel || 0);
+    const previousState = states[symbol] || {};
+    const previous = Number(previousState.currentLevel || 0);
     const current = getLevel(asset);
     const completed = detectedDoneLevel(asset, ledger, holdings);
     const discount = `${num(asset?.discount).toFixed(1)}%`;
+    const snapshot = holdingSnapshot(holdings, symbol);
+    const previousQuantity = num(previousState.quantity);
+    const previousTotalCost = num(previousState.totalCost);
+    const quantityIncrease = snapshot.quantity - previousQuantity;
+    const costIncrease = snapshot.totalCost - previousTotalCost;
+
+    if (stateExists && quantityIncrease > QUANTITY_TOLERANCE) {
+      const estimatedAmount = costIncrease > COST_TOLERANCE_USD ? costIncrease : 0;
+      events.push({
+        type: "purchase_detected",
+        symbol,
+        fromLevel: previous,
+        toLevel: current,
+        key: purchaseEventKey(symbol, snapshot.quantity, snapshot.totalCost),
+        title: "✅ DCA 折價獵人 已偵測買入",
+        lines: [
+          `${symbol} 交易所持倉數量已增加`,
+          `新增數量：約 ${quantityIncrease.toFixed(stripOn(symbol) === "BTC" ? 8 : 6)}`,
+          estimatedAmount > 0 ? `新增投入：約 ${estimatedAmount.toFixed(2)}U` : "新增投入：成本資料尚未完整更新",
+          `目前總數量：${snapshot.quantity.toFixed(stripOn(symbol) === "BTC" ? 8 : 6)}`,
+          `目前層級：${tier(current)}`,
+          `已偵測完成層級：${tier(completed)}`,
+          completed >= current && current > 0 ? "本層已完成，不再重複提醒買入。" : "持倉已更新；同一筆交易只通知一次。"
+        ]
+      });
+    }
 
     // 第一次建立狀態時，只在「尚未買到目前層」才通知一次。
     if (!stateExists) {
@@ -121,7 +163,7 @@ function buildEvents({ assets, ledger, alerts, holdings }) {
       continue;
     }
 
-    // 同一層內價格波動、已買入後的持續有效訊號，一律不再推播。
+    // 同一層內價格波動不推播；但上方已獨立檢查交易所買入。
     if (current === previous) continue;
 
     if (current > previous) {
@@ -145,7 +187,7 @@ function buildEvents({ assets, ledger, alerts, holdings }) {
           : [
               `${symbol} 已由 ${tier(previous)} 下移到 ${tier(current)}`,
               `目前跌幅：${discount}`,
-              `此層已從持倉成本／買入紀錄偵測完成。`,
+              "此層已從持倉成本／買入紀錄偵測完成。",
               "不需要重複買入。"
             ]
       });
@@ -235,9 +277,13 @@ async function handler(req, res) {
     for (const asset of assets) {
       const symbol = String(asset?.symbol || "").trim();
       if (!symbol) continue;
+      const snapshot = holdingSnapshot(holdings, symbol);
       nextAlerts.__layerState[symbol] = {
         currentLevel: getLevel(asset),
         completedLevel: detectedDoneLevel(asset, ledger, holdings),
+        quantity: snapshot.quantity,
+        totalCost: snapshot.totalCost,
+        currentValue: snapshot.currentValue,
         updatedAt: now
       };
     }
@@ -256,7 +302,7 @@ async function handler(req, res) {
         symbol: event.symbol,
         fromLevel: event.fromLevel,
         toLevel: event.toLevel,
-        repeatMode: "layer_change_only"
+        repeatMode: event.type === "purchase_detected" ? "holding_change_once" : "layer_change_only"
       };
     }
 
@@ -271,10 +317,10 @@ async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "16.9-layer-change-only-after-detected-buy",
+      version: "17.0-layer-and-purchase-change-notifications",
       sent: sendableEvents.length > 0,
-      repeatMode: "layer_change_only",
-      purchaseDetection: "ledger_or_live_total_cost",
+      repeatMode: "layer_change_or_purchase_change_once",
+      purchaseDetection: "live_quantity_increase_with_cost_delta_when_available",
       pricesOk: true,
       walletOk: true,
       portfolioTruthOk: Boolean(truthRes.ok),
