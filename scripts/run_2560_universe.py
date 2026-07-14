@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Run the ratified 2560 paper engine against the unified registry."""
+"""Run the ratified 2560 paper engine against the unified registry.
+
+Hybrid mode uses Binance RWA OHLC as the price source and Yahoo only for the
+underlying stock's historical daily volume. It never substitutes Yahoo OHLC.
+"""
 from __future__ import annotations
 
 import json
@@ -15,6 +19,8 @@ import paper_2560_bot as engine
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "config" / "2560-universe.json"
 BINANCE_HISTORY_DIR = ROOT / "data" / "2560-binance-history"
+HYBRID_DATA_DIR_SENTINEL = "hybrid"
+HYBRID_SOURCE_LABEL = "binance_rwa_ohlc+yahoo_underlying_volume"
 
 
 def load_registry():
@@ -30,6 +36,44 @@ def load_registry():
     return payload, unique
 
 
+def merge_binance_price_with_underlying_volume(ticker: str, data_symbol: str, start: str):
+    price_path = BINANCE_HISTORY_DIR / f"{ticker}.csv"
+    if not price_path.exists() or price_path.stat().st_size == 0:
+        raise ValueError(f"BINANCE_PRICE_HISTORY_PENDING:{ticker}:file_missing")
+
+    price = pd.read_csv(price_path)
+    required = {"Date", "Open", "High", "Low", "Close"}
+    if not required.issubset(price.columns):
+        raise ValueError(f"BINANCE_PRICE_HISTORY_INVALID:{ticker}:missing_ohlc")
+    price = price[["Date", "Open", "High", "Low", "Close"]].copy()
+    price["Date"] = pd.to_datetime(price["Date"], utc=True, errors="coerce").dt.tz_convert(None).dt.normalize()
+    for column in ["Open", "High", "Low", "Close"]:
+        price[column] = pd.to_numeric(price[column], errors="coerce")
+    price = price.dropna().drop_duplicates("Date", keep="last")
+
+    import yfinance as yf
+
+    raw_volume = yf.download(data_symbol, start=start, auto_adjust=False, progress=False)
+    if raw_volume.empty:
+        raise ValueError(f"UNDERLYING_VOLUME_MISSING:{ticker}:{data_symbol}")
+    raw_volume = engine.flat(raw_volume).reset_index()
+    cols = {str(c).lower().strip().replace(" ", "_"): c for c in raw_volume.columns}
+    date_col = cols.get("date") or cols.get("datetime")
+    volume_col = cols.get("volume")
+    if date_col is None or volume_col is None:
+        raise ValueError(f"UNDERLYING_VOLUME_INVALID:{ticker}:{data_symbol}")
+    volume = pd.DataFrame({
+        "Date": pd.to_datetime(raw_volume[date_col], utc=True, errors="coerce").dt.tz_convert(None).dt.normalize(),
+        "Volume": pd.to_numeric(raw_volume[volume_col], errors="coerce"),
+    }).dropna()
+    volume = volume[volume.Volume > 0].drop_duplicates("Date", keep="last")
+
+    merged = price.merge(volume, on="Date", how="inner").sort_values("Date")
+    if len(merged) < 60:
+        raise ValueError(f"HYBRID_HISTORY_PENDING:{ticker}:matched_days={len(merged)}/60")
+    return engine.clean(merged.reset_index(drop=True))
+
+
 def install_registry(symbols):
     enabled = [item for item in symbols if item.get("scan_enabled") and item.get("data_symbol")]
     metadata = {item["ticker"]: item for item in enabled}
@@ -41,21 +85,26 @@ def install_registry(symbols):
     def mapped_load_price(ticker, args):
         item = metadata[ticker]
         data_symbol = item.get("data_symbol") or ticker
-        if args.source in {"csv", "binance"}:
-            data_dir = BINANCE_HISTORY_DIR if args.source == "binance" else Path(args.data_dir)
-            primary = Path(data_dir) / f"{ticker}.csv"
-            fallback = Path(data_dir) / f"{data_symbol}.csv"
+        hybrid_mode = args.source == "csv" and str(args.data_dir).strip().lower() == HYBRID_DATA_DIR_SENTINEL
+
+        if hybrid_mode:
+            # BTC has no RWA token file. Keep its existing market feed separate
+            # until Binance Spot historical klines are added to this worker.
+            if ticker == "BTC":
+                import yfinance as yf
+                raw = yf.download(data_symbol, start=args.start, auto_adjust=True, progress=False)
+                if raw.empty:
+                    raise ValueError("BTC_HISTORY_MISSING")
+                return engine.clean(engine.flat(raw).reset_index())
+            return merge_binance_price_with_underlying_volume(ticker, data_symbol, args.start)
+
+        if args.source == "csv":
+            primary = Path(args.data_dir) / f"{ticker}.csv"
+            fallback = Path(args.data_dir) / f"{data_symbol}.csv"
             source = primary if primary.exists() else fallback
             if not source.exists():
-                raise ValueError(f"BINANCE_HISTORY_PENDING:{ticker}:file_missing" if args.source == "binance" else f"csv missing: {ticker}")
-            raw = pd.read_csv(source)
-            if args.source == "binance":
-                volume = pd.to_numeric(raw.get("Volume"), errors="coerce").fillna(0)
-                price_days = int(pd.to_numeric(raw.get("Close"), errors="coerce").notna().sum())
-                volume_days = int((volume > 0).sum())
-                if price_days < 60 or volume_days < 60:
-                    raise ValueError(f"BINANCE_HISTORY_PENDING:{ticker}:price={price_days}/60,volume={volume_days}/60")
-            return engine.clean(raw)
+                raise ValueError(f"csv missing: {ticker}")
+            return engine.clean(pd.read_csv(source))
 
         import yfinance as yf
         raw = yf.download(data_symbol, start=args.start, auto_adjust=True, progress=False)
@@ -157,6 +206,7 @@ def main():
     payload, symbols = load_registry()
     enabled = install_registry(symbols)
     args = engine.parse_args()
+    hybrid_mode = args.source == "csv" and str(args.data_dir).strip().lower() == HYBRID_DATA_DIR_SENTINEL
     engine.run(args)
 
     output_dir = Path(args.output_dir)
@@ -171,9 +221,15 @@ def main():
             for item in symbols
             if not item.get("scan_enabled") or not item.get("data_symbol")
         ]
-        if args.source == "binance":
-            pending_errors = [x for x in audit.get("errors", []) if "BINANCE_HISTORY_PENDING" in str(x.get("error", ""))]
-            audit["binance_history_pending"] = pending_errors
+        if hybrid_mode:
+            audit["source"] = HYBRID_SOURCE_LABEL
+            audit["source_detail"] = {
+                "price_ohlc": "Binance RWA UTC 1d K-line divided by sharesMultiplier",
+                "volume": "Yahoo Finance underlying daily share volume",
+                "btc_exception": "BTC currently uses its existing BTC-USD feed until Binance Spot history is added",
+            }
+            pending_errors = [x for x in audit.get("errors", []) if any(tag in str(x.get("error", "")) for tag in ["BINANCE_PRICE_HISTORY_PENDING", "HYBRID_HISTORY_PENDING"])]
+            audit["hybrid_history_pending"] = pending_errors
             audit["errors"] = [x for x in audit.get("errors", []) if x not in pending_errors]
             audit["error_count"] = len(audit["errors"])
             audit["ok"] = audit["error_count"] == 0
