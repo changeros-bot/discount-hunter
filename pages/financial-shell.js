@@ -1,31 +1,49 @@
+import { useEffect } from "react";
 import FinancialOS from "./financial-os";
 
 export default function FinancialShell() {
-  return <>
-    <FinancialOS />
-    <a
-      href="/financial-audit"
-      aria-label="進入多元記帳本查帳頁"
-      style={{
-        position: "fixed",
-        right: 14,
-        bottom: 76,
-        zIndex: 9999,
-        minWidth: 86,
-        textAlign: "center",
-        textDecoration: "none",
-        border: "1px solid rgba(212,175,55,.78)",
-        borderRadius: 16,
-        padding: "11px 14px",
-        background: "linear-gradient(180deg,rgba(250,204,21,.34),rgba(92,64,16,.92))",
-        color: "#fff7bd",
-        fontSize: 13,
-        fontWeight: 1000,
-        boxShadow: "0 10px 28px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.35)",
-        backdropFilter: "blur(10px)",
-      }}
-    >
-      查帳
-    </a>
-  </>;
+  useEffect(() => {
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      const nav = document.querySelector("nav");
+      const grid = nav?.firstElementChild;
+      if (!grid) {
+        if (attempts >= 40) window.clearInterval(timer);
+        return;
+      }
+
+      grid.style.gridTemplateColumns = "repeat(5, minmax(0, 1fr))";
+      grid.style.gap = "6px";
+
+      if (!document.getElementById("financial-audit-nav-link")) {
+        const link = document.createElement("a");
+        link.id = "financial-audit-nav-link";
+        link.href = "/financial-audit";
+        link.textContent = "查帳";
+        link.setAttribute("aria-label", "進入多元記帳本查帳頁");
+        Object.assign(link.style, {
+          display: "grid",
+          placeItems: "center",
+          minWidth: "0",
+          boxSizing: "border-box",
+          border: "1px solid rgba(212,175,55,.65)",
+          borderRadius: "13px",
+          padding: "9px 2px",
+          background: "rgba(92,64,16,.45)",
+          color: "#fff7bd",
+          fontSize: "11px",
+          fontWeight: "1000",
+          lineHeight: "normal",
+          textDecoration: "none",
+        });
+        grid.insertBefore(link, grid.children[2] || null);
+      }
+      window.clearInterval(timer);
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return <FinancialOS />;
 }
