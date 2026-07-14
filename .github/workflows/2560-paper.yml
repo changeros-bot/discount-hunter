@@ -3,13 +3,13 @@ name: 2560 Paper Bot
 on:
   workflow_dispatch:
     inputs:
-      source:
-        description: "Calculation source"
+      mode:
+        description: "Calculation mode"
         required: true
-        default: "yfinance"
+        default: "hybrid"
         type: choice
         options:
-          - binance
+          - hybrid
           - yfinance
           - csv
   schedule:
@@ -54,8 +54,16 @@ jobs:
           python scripts/migrate_2560_legacy_trades.py
 
       - name: Run unified 2560 paper universe and publish KV snapshot
+        shell: bash
         run: |
-          python scripts/run_2560_universe.py --source ${{ github.event.inputs.source || 'yfinance' }}
+          mode="${{ github.event.inputs.mode || 'hybrid' }}"
+          if [ "$mode" = "hybrid" ]; then
+            python scripts/run_2560_universe.py --source csv --data-dir hybrid
+          elif [ "$mode" = "csv" ]; then
+            python scripts/run_2560_universe.py --source csv
+          else
+            python scripts/run_2560_universe.py --source yfinance
+          fi
 
       - name: Commit paper reports and Binance history as audit backup
         run: |
