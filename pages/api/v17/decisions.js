@@ -9,6 +9,7 @@ function compactStates(decisions = []) {
       status: decision.status,
       tier: decision.tier,
       level: decision.level,
+      detectedAmount: Number(decision.detectedAmount ?? decision.eventSummary?.totalAmount ?? 0),
       price: decision.price,
       discount: decision.discount,
       updatedAt: decision.decidedAt
@@ -53,7 +54,7 @@ export default async function handler(req, res) {
         noLedgerWrite: true,
         queueOnly: true,
         sourceOfTruth: "market_price_and_events",
-        notifyRule: "state_or_price_change_only"
+        notifyRule: "state_tier_or_detected_amount_change_only"
       }
     });
   } catch (error) {
