@@ -10,11 +10,21 @@ function safeNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function performancePct(point) {
+  const stored = Number(point?.pnlPct);
+  if (Number.isFinite(stored)) return stored;
+  const value = safeNumber(point?.value);
+  const cost = safeNumber(point?.cost);
+  return cost > 0 ? (value - cost) / cost : 0;
+}
+
 function readHistory() {
   if (typeof window === "undefined") return [];
   try {
     const parsed = JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((p) => safeNumber(p?.ts) > 0 && safeNumber(p?.value) > 0) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((p) => safeNumber(p?.ts) > 0 && safeNumber(p?.value) > 0)
+      : [];
   } catch {
     return [];
   }
@@ -51,11 +61,21 @@ function compactPoints(points, max = 120) {
   return Array.from({ length: max }, (_, i) => points[Math.round(i * step)]);
 }
 
-function PortfolioValueChart() {
+function signedUsd(value) {
+  const n = safeNumber(value);
+  return `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
+}
+
+function signedPct(value, digits = 2) {
+  const n = safeNumber(value) * 100;
+  return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}%`;
+}
+
+function PortfolioPerformanceChart() {
   const [range, setRange] = useState("7D");
   const [history, setHistory] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [status, setStatus] = useState("讀取真實持倉…");
+  const [status, setStatus] = useState("讀取真實持倉績效…");
 
   async function capturePoint() {
     try {
@@ -63,15 +83,18 @@ function PortfolioValueChart() {
       const data = await res.json();
       const totals = data?.totals || {};
       const value = safeNumber(totals.currentValue);
-      if (!(value > 0)) throw new Error("current_value_missing");
+      const cost = totals.totalCost == null ? null : safeNumber(totals.totalCost);
+      if (!(value > 0) || !(cost > 0)) throw new Error("portfolio_performance_missing");
+
       const point = {
         ts: Date.now(),
         value,
-        cost: totals.totalCost == null ? null : safeNumber(totals.totalCost),
-        pnl: totals.pnl == null ? null : safeNumber(totals.pnl),
-        pnlPct: totals.pnlPct == null ? null : safeNumber(totals.pnlPct),
+        cost,
+        pnl: totals.pnl == null ? value - cost : safeNumber(totals.pnl),
+        pnlPct: totals.pnlPct == null ? (value - cost) / cost : safeNumber(totals.pnlPct),
         holdingCount: safeNumber(totals.holdingCount),
       };
+
       const old = readHistory();
       const last = old[old.length - 1];
       const merged = last && point.ts - last.ts < 5 * 60 * 1000
@@ -86,7 +109,7 @@ function PortfolioValueChart() {
     } catch {
       const cached = readHistory();
       setHistory(cached);
-      setStatus(cached.length ? "即時資料暫時失敗，顯示已保存快照" : "尚無可用歷史；等待下一次真實持倉同步");
+      setStatus(cached.length ? "即時資料暫時失敗，顯示已保存績效快照" : "尚無可用績效歷史；等待下一次真實持倉同步");
     }
   }
 
@@ -99,42 +122,46 @@ function PortfolioValueChart() {
 
   const visible = useMemo(() => {
     const cutoff = Date.now() - RANGES[range];
-    return compactPoints(history.filter((p) => p.ts >= cutoff).sort((a, b) => a.ts - b.ts));
+    return compactPoints(
+      history
+        .filter((p) => p.ts >= cutoff && safeNumber(p.cost) > 0)
+        .sort((a, b) => a.ts - b.ts)
+        .map((p) => ({ ...p, performance: performancePct(p) }))
+    );
   }, [history, range]);
 
   const chart = useMemo(() => {
     const points = visible.length ? visible : [];
     if (!points.length) return null;
-    const values = points.map((p) => p.value);
+    const values = points.map((p) => p.performance);
     let min = Math.min(...values);
     let max = Math.max(...values);
     if (max === min) {
-      const pad = Math.max(0.5, max * 0.005);
+      const pad = Math.max(0.005, Math.abs(max) * 0.1);
       min -= pad;
       max += pad;
     } else {
-      const pad = (max - min) * 0.12;
+      const pad = Math.max(0.0025, (max - min) * 0.12);
       min -= pad;
       max += pad;
     }
-    const W = 720, H = 280, L = 66, R = 14, T = 18, B = 46;
+    const W = 720, H = 280, L = 76, R = 14, T = 18, B = 46;
     const plotW = W - L - R, plotH = H - T - B;
     const xy = points.map((p, i) => ({
       ...p,
       x: L + (points.length === 1 ? plotW / 2 : (i / (points.length - 1)) * plotW),
-      y: T + ((max - p.value) / (max - min)) * plotH,
+      y: T + ((max - p.performance) / (max - min)) * plotH,
     }));
     const path = xy.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
     const area = `${path} L${xy[xy.length - 1].x.toFixed(1)},${(T + plotH).toFixed(1)} L${xy[0].x.toFixed(1)},${(T + plotH).toFixed(1)} Z`;
     const yTicks = Array.from({ length: 4 }, (_, i) => max - (i / 3) * (max - min));
     const xIndexes = [...new Set([0, Math.floor((points.length - 1) / 3), Math.floor(((points.length - 1) * 2) / 3), points.length - 1])];
-    return { W, H, L, R, T, B, plotW, plotH, xy, path, area, yTicks, xIndexes, min, max };
+    return { W, H, L, R, T, B, plotW, plotH, xy, path, area, yTicks, xIndexes };
   }, [visible]);
 
   const active = selected || visible[visible.length - 1] || null;
   const first = visible[0] || null;
-  const change = active && first ? active.value - first.value : 0;
-  const changePct = first?.value ? change / first.value : 0;
+  const performanceChange = active && first ? active.performance - first.performance : 0;
 
   function selectNearest(event) {
     if (!chart?.xy?.length) return;
@@ -145,31 +172,39 @@ function PortfolioValueChart() {
     setSelected(nearest);
   }
 
+  const activePerformance = performancePct(active);
+  const activeColor = activePerformance >= 0 ? "#4ade80" : "#fb7185";
+  const changeColor = performanceChange >= 0 ? "#4ade80" : "#fb7185";
+
   return <section style={{ margin: "12px 0 16px", padding: 14, borderRadius: 20, background: "linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98))", border: "1px solid rgba(250,204,21,.24)", boxShadow: "0 16px 42px rgba(0,0,0,.28)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
       <div>
-        <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>真實持倉總市值（USD）</div>
-        <div style={{ color: "#f8fafc", fontSize: 30, fontWeight: 1000, marginTop: 4 }}>${safeNumber(active?.value).toFixed(2)}</div>
-        <div style={{ marginTop: 3, color: change >= 0 ? "#4ade80" : "#fb7185", fontSize: 13, fontWeight: 1000 }}>{range === "1D" ? "1日" : range === "7D" ? "7日" : "30日"} {change >= 0 ? "+" : "-"}${Math.abs(change).toFixed(2)}（{changePct >= 0 ? "+" : ""}{(changePct * 100).toFixed(2)}%）</div>
+        <div style={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>策略持倉績效曲線</div>
+        <div style={{ color: activeColor, fontSize: 34, fontWeight: 1000, marginTop: 4 }}>{signedPct(activePerformance)}</div>
+        <div style={{ marginTop: 3, color: changeColor, fontSize: 13, fontWeight: 1000 }}>
+          {range === "1D" ? "1日" : range === "7D" ? "7日" : "30日"}績效變化 {performanceChange >= 0 ? "+" : ""}{(performanceChange * 100).toFixed(2)} 個百分點
+        </div>
       </div>
       <div style={{ textAlign: "right", color: "#cbd5e1", fontSize: 11, fontWeight: 850, lineHeight: 1.55 }}>
         <div>{active ? formatDateTime(active.ts) : "等待資料"}</div>
-        <div>損益：{active?.pnl == null ? "N/A" : `${active.pnl >= 0 ? "+" : "-"}$${Math.abs(active.pnl).toFixed(2)}`}</div>
+        <div>市值：${safeNumber(active?.value).toFixed(2)}</div>
+        <div>投入：${safeNumber(active?.cost).toFixed(2)}</div>
+        <div>損益：{active?.pnl == null ? "N/A" : signedUsd(active.pnl)}</div>
       </div>
     </div>
 
     <div style={{ marginTop: 12, borderRadius: 15, overflow: "hidden", background: "rgba(2,6,23,.72)", border: "1px solid rgba(148,163,184,.12)" }}>
-      {chart ? <svg viewBox={`0 0 ${chart.W} ${chart.H}`} role="img" aria-label="真實持倉總市值歷史曲線" style={{ width: "100%", display: "block", touchAction: "none" }} onMouseMove={selectNearest} onClick={selectNearest} onTouchStart={selectNearest} onTouchMove={selectNearest}>
+      {chart ? <svg viewBox={`0 0 ${chart.W} ${chart.H}`} role="img" aria-label="真實持倉報酬率歷史曲線" style={{ width: "100%", display: "block", touchAction: "none" }} onMouseMove={selectNearest} onClick={selectNearest} onTouchStart={selectNearest} onTouchMove={selectNearest}>
         <defs>
-          <linearGradient id="v17PortfolioArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#facc15" stopOpacity=".34" /><stop offset="100%" stopColor="#facc15" stopOpacity="0" /></linearGradient>
-          <filter id="v17PortfolioGlow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+          <linearGradient id="v17PerformanceArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#facc15" stopOpacity=".34" /><stop offset="100%" stopColor="#facc15" stopOpacity="0" /></linearGradient>
+          <filter id="v17PerformanceGlow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
         </defs>
         {chart.yTicks.map((tick, i) => {
           const y = chart.T + (i / 3) * chart.plotH;
-          return <g key={tick}><line x1={chart.L} x2={chart.W - chart.R} y1={y} y2={y} stroke="rgba(148,163,184,.18)" strokeDasharray="5 6" /><text x={chart.L - 8} y={y + 4} textAnchor="end" fill="#94a3b8" fontSize="16" fontWeight="700">${tick.toFixed(2)}</text></g>;
+          return <g key={`${tick}-${i}`}><line x1={chart.L} x2={chart.W - chart.R} y1={y} y2={y} stroke="rgba(148,163,184,.18)" strokeDasharray="5 6" /><text x={chart.L - 8} y={y + 4} textAnchor="end" fill="#94a3b8" fontSize="16" fontWeight="700">{(tick * 100).toFixed(2)}%</text></g>;
         })}
-        <path d={chart.area} fill="url(#v17PortfolioArea)" />
-        <path d={chart.path} fill="none" stroke="#facc15" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" filter="url(#v17PortfolioGlow)" />
+        <path d={chart.area} fill="url(#v17PerformanceArea)" />
+        <path d={chart.path} fill="none" stroke="#facc15" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" filter="url(#v17PerformanceGlow)" />
         {chart.xIndexes.map((idx) => <text key={idx} x={chart.xy[idx].x} y={chart.H - 15} textAnchor={idx === 0 ? "start" : idx === chart.xy.length - 1 ? "end" : "middle"} fill="#94a3b8" fontSize="16" fontWeight="700">{formatDate(chart.xy[idx].ts, range)}</text>)}
         {active ? (() => {
           const point = chart.xy.reduce((best, p) => Math.abs(p.ts - active.ts) < Math.abs(best.ts - active.ts) ? p : best, chart.xy[0]);
@@ -179,9 +214,11 @@ function PortfolioValueChart() {
     </div>
 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginTop: 10 }}>
-      {[['1D','1日'],['7D','7日'],['30D','30日']].map(([key,label]) => <button key={key} onClick={() => { setRange(key); setSelected(null); }} style={{ padding: "10px 5px", borderRadius: 12, border: range === key ? "1px solid #facc15" : "1px solid rgba(148,163,184,.16)", background: range === key ? "rgba(250,204,21,.12)" : "rgba(15,23,42,.78)", color: range === key ? "#fde047" : "#94a3b8", fontWeight: 1000 }}>{label}</button>)}
+      {[["1D","1日"],["7D","7日"],["30D","30日"]].map(([key,label]) => <button key={key} onClick={() => { setRange(key); setSelected(null); }} style={{ padding: "10px 5px", borderRadius: 12, border: range === key ? "1px solid #facc15" : "1px solid rgba(148,163,184,.16)", background: range === key ? "rgba(250,204,21,.12)" : "rgba(15,23,42,.78)", color: range === key ? "#fde047" : "#94a3b8", fontWeight: 1000 }}>{label}</button>)}
     </div>
-    <div style={{ marginTop: 8, color: "#64748b", fontSize: 10, fontWeight: 800, lineHeight: 1.45 }}>{status}｜每分鐘保存一次真實持倉總市值；歷史從功能上線後開始累積。</div>
+    <div style={{ marginTop: 8, color: "#64748b", fontSize: 10, fontWeight: 800, lineHeight: 1.45 }}>
+      {status}｜曲線使用「未實現損益 ÷ 累積投入成本」；新增資金本身不會直接被當成獲利。歷史從功能上線後開始累積。
+    </div>
   </section>;
 }
 
@@ -211,7 +248,7 @@ function ChartPortal() {
     }, 500);
     return () => clearInterval(timer);
   }, []);
-  return target ? createPortal(<PortfolioValueChart />, target) : null;
+  return target ? createPortal(<PortfolioPerformanceChart />, target) : null;
 }
 
 export default function V17WithChart() {
