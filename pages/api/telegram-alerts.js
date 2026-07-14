@@ -2,6 +2,7 @@ const { sendTelegramMessage } = require("../../lib/telegram/notify");
 const { isPricesHealthy, isWalletHealthy, healthSummary } = require("../../lib/v16-health");
 
 const MAX_LEVEL = 4;
+const STATE_VERSION = 3;
 const QUANTITY_TOLERANCE = 0.000000000001;
 const COST_TOLERANCE_USD = 0.05;
 
@@ -21,13 +22,10 @@ function tier(level) {
 function getLevel(asset) {
   const signal = Number(asset?.signal?.level || 0);
   if (signal > 0) return Math.min(MAX_LEVEL, signal);
-
   const depth = Math.abs(num(asset?.discount));
   const rules = (asset?.rules || []).map((rule) => Math.abs(num(rule)));
   let level = 0;
-  for (let i = 0; i < rules.length; i += 1) {
-    if (depth >= rules[i]) level = i + 1;
-  }
+  for (let i = 0; i < rules.length; i += 1) if (depth >= rules[i]) level = i + 1;
   return Math.min(MAX_LEVEL, level);
 }
 
@@ -54,44 +52,29 @@ function normalizeHoldings(payload = {}) {
   return new Map((Array.isArray(rows) ? rows : []).map((row) => [stripOn(row.symbol), row]));
 }
 
+function normalizeStates(alerts = {}) {
+  const source = alerts.__layerState || {};
+  const map = new Map();
+  for (const [key, value] of Object.entries(source)) map.set(stripOn(key), value || {});
+  return map;
+}
+
 function holdingSnapshot(holdings, symbol) {
   const holding = holdings.get(stripOn(symbol)) || {};
   return {
     quantity: num(holding.quantity),
     totalCost: num(holding.totalCost),
     currentValue: num(holding.currentValue || holding.marketValue || holding.positionValue),
+    costReady: num(holding.totalCost) > 0 && !holding.costBasisMissing,
   };
 }
 
-function costDoneLevel(asset, holdings) {
-  const holding = holdings.get(stripOn(asset?.symbol));
-  const totalCost = num(holding?.totalCost);
-  const amounts = Array.isArray(asset?.amounts) ? asset.amounts.map(num) : [];
-  if (!(totalCost > 0) || amounts.length === 0) return 0;
-
-  let cumulative = 0;
-  let completed = 0;
-  for (let i = 0; i < Math.min(MAX_LEVEL, amounts.length); i += 1) {
-    cumulative += amounts[i];
-    if (totalCost + 0.25 >= cumulative) completed = i + 1;
-    else break;
-  }
-  return completed;
-}
-
-function detectedDoneLevel(asset, ledger, holdings) {
-  return Math.max(
-    ledgerDoneLevel(ledger, asset?.symbol),
-    costDoneLevel(asset, holdings)
-  );
-}
-
 function eventKey(type, symbol, fromLevel, toLevel) {
-  return `notification:telegram:${type}:${symbol}:${tier(fromLevel)}:${tier(toLevel)}`;
+  return `notification:telegram:v3:${type}:${stripOn(symbol)}:${tier(fromLevel)}:${tier(toLevel)}`;
 }
 
-function purchaseEventKey(symbol, quantity, totalCost) {
-  return `notification:telegram:purchase_detected:${stripOn(symbol)}:${quantity.toFixed(12)}:${totalCost.toFixed(4)}`;
+function holdingEventKey(symbol, quantity, totalCost) {
+  return `notification:telegram:v3:holding_delta:${stripOn(symbol)}:${quantity.toFixed(12)}:${totalCost.toFixed(4)}`;
 }
 
 function eventMessage(event, updatedAt) {
@@ -101,93 +84,84 @@ function eventMessage(event, updatedAt) {
 
 function buildEvents({ assets, ledger, alerts, holdings }) {
   const events = [];
-  const states = alerts.__layerState || {};
+  const states = normalizeStates(alerts);
+  let baselineCount = 0;
 
   for (const asset of assets || []) {
     const symbol = String(asset?.symbol || "").trim();
     if (!symbol) continue;
 
-    const stateExists = Object.prototype.hasOwnProperty.call(states, symbol);
-    const previousState = states[symbol] || {};
-    const previous = Number(previousState.currentLevel || 0);
+    const previousState = states.get(stripOn(symbol)) || null;
     const current = getLevel(asset);
-    const completed = detectedDoneLevel(asset, ledger, holdings);
+    const previousLevel = Number(previousState?.currentLevel || 0);
+    const completed = ledgerDoneLevel(ledger, symbol);
     const discount = `${num(asset?.discount).toFixed(1)}%`;
     const snapshot = holdingSnapshot(holdings, symbol);
+    const validBaseline = Boolean(
+      previousState &&
+      Number(previousState.snapshotVersion) === STATE_VERSION &&
+      Number.isFinite(Number(previousState.quantity)) &&
+      Number.isFinite(Number(previousState.totalCost))
+    );
+
+    // 首次同步或版本升級只建立基準，不得把全部既有持倉誤報為新買入。
+    if (!validBaseline) {
+      baselineCount += 1;
+      continue;
+    }
+
     const previousQuantity = num(previousState.quantity);
     const previousTotalCost = num(previousState.totalCost);
     const quantityIncrease = snapshot.quantity - previousQuantity;
     const costIncrease = snapshot.totalCost - previousTotalCost;
 
-    if (stateExists && quantityIncrease > QUANTITY_TOLERANCE) {
-      const estimatedAmount = costIncrease > COST_TOLERANCE_USD ? costIncrease : 0;
+    if (quantityIncrease > QUANTITY_TOLERANCE) {
+      const costDeltaReady = snapshot.costReady && previousTotalCost > 0 && costIncrease > COST_TOLERANCE_USD;
       events.push({
-        type: "purchase_detected",
+        type: "holding_delta",
         symbol,
-        fromLevel: previous,
+        fromLevel: previousLevel,
         toLevel: current,
-        key: purchaseEventKey(symbol, snapshot.quantity, snapshot.totalCost),
-        title: "✅ DCA 折價獵人 已偵測買入",
+        key: holdingEventKey(symbol, snapshot.quantity, snapshot.totalCost),
+        title: "✅ DCA 折價獵人 持倉增加已偵測",
         lines: [
-          `${symbol} 交易所持倉數量已增加`,
+          `${symbol} 持倉數量已增加`,
           `新增數量：約 ${quantityIncrease.toFixed(stripOn(symbol) === "BTC" ? 8 : 6)}`,
-          estimatedAmount > 0 ? `新增投入：約 ${estimatedAmount.toFixed(2)}U` : "新增投入：成本資料尚未完整更新",
+          costDeltaReady ? `新增成本：約 ${costIncrease.toFixed(2)}U` : "新增成本：資料不足，未推算",
           `目前總數量：${snapshot.quantity.toFixed(stripOn(symbol) === "BTC" ? 8 : 6)}`,
-          `目前層級：${tier(current)}`,
-          `已偵測完成層級：${tier(completed)}`,
-          completed >= current && current > 0 ? "本層已完成，不再重複提醒買入。" : "持倉已更新；同一筆交易只通知一次。"
+          `目前總成本：${snapshot.costReady ? `${snapshot.totalCost.toFixed(2)}U` : "N/A"}`,
+          `目前價格層級：${tier(current)}`,
+          `逢低完成層級：${tier(completed)}`,
+          "此通知只代表持倉差額；不會自動判定為定期定額或逢低買進。",
+          "只有折價獵人交易紀錄才會影響 D 層完成度。"
         ]
       });
     }
 
-    // 第一次建立狀態時，只在「尚未買到目前層」才通知一次。
-    if (!stateExists) {
-      if (current > completed && current > 0) {
-        const amount = num(asset?.amounts?.[current - 1]);
-        events.push({
-          type: "trigger",
-          symbol,
-          fromLevel: completed,
-          toLevel: current,
-          key: eventKey("trigger", symbol, completed, current),
-          title: "🚨 DCA 折價獵人 買點警報",
-          lines: [
-            `${symbol} 已觸發 ${tier(current)}`,
-            `目前跌幅：${discount}`,
-            `本層建議：${amount}U`,
-            `已偵測完成層級：${tier(completed)}`,
-            "請打開 App 檢查今日決策。"
-          ]
-        });
-      }
-      continue;
-    }
+    if (current === previousLevel) continue;
 
-    // 同一層內價格波動不推播；但上方已獨立檢查交易所買入。
-    if (current === previous) continue;
-
-    if (current > previous) {
+    if (current > previousLevel) {
       const amount = num(asset?.amounts?.[current - 1]);
       const needsBuy = current > completed;
       events.push({
-        type: needsBuy ? "layer_down_buy" : "layer_down_completed",
+        type: needsBuy ? "layer_down_buy" : "layer_down_recorded",
         symbol,
-        fromLevel: previous,
+        fromLevel: previousLevel,
         toLevel: current,
-        key: eventKey(needsBuy ? "layer_down_buy" : "layer_down_completed", symbol, previous, current),
+        key: eventKey(needsBuy ? "layer_down_buy" : "layer_down_recorded", symbol, previousLevel, current),
         title: needsBuy ? "🚨 DCA 折價獵人 層級下移" : "🔽 DCA 折價獵人 層級下移",
         lines: needsBuy
           ? [
-              `${symbol} 已由 ${tier(previous)} 下移到 ${tier(current)}`,
+              `${symbol} 已由 ${tier(previousLevel)} 下移到 ${tier(current)}`,
               `目前跌幅：${discount}`,
               `本層建議：${amount}U`,
-              `已偵測完成層級：${tier(completed)}`,
-              "新層級尚未完成，請打開 App 檢查。"
+              `折價交易紀錄完成層級：${tier(completed)}`,
+              "新層級尚未在折價交易紀錄中完成。"
             ]
           : [
-              `${symbol} 已由 ${tier(previous)} 下移到 ${tier(current)}`,
+              `${symbol} 已由 ${tier(previousLevel)} 下移到 ${tier(current)}`,
               `目前跌幅：${discount}`,
-              "此層已從持倉成本／買入紀錄偵測完成。",
+              `折價交易紀錄已完成到 ${tier(completed)}`,
               "不需要重複買入。"
             ]
       });
@@ -195,12 +169,12 @@ function buildEvents({ assets, ledger, alerts, holdings }) {
       events.push({
         type: "layer_up",
         symbol,
-        fromLevel: previous,
+        fromLevel: previousLevel,
         toLevel: current,
-        key: eventKey("layer_up", symbol, previous, current),
+        key: eventKey("layer_up", symbol, previousLevel, current),
         title: "🔄 DCA 折價獵人 層級回升",
         lines: [
-          `${symbol} 已由 ${tier(previous)} 回升到 ${tier(current)}`,
+          `${symbol} 已由 ${tier(previousLevel)} 回升到 ${tier(current)}`,
           current === 0 ? "目前已離開買點區。" : `目前位於 ${tier(current)}。`,
           `目前跌幅：${discount}`,
           "層級已改變，因此通知一次。"
@@ -209,7 +183,7 @@ function buildEvents({ assets, ledger, alerts, holdings }) {
     }
   }
 
-  return events;
+  return { events, baselineCount };
 }
 
 async function readJson(response) {
@@ -233,7 +207,7 @@ async function handler(req, res) {
         cache: "no-store",
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "telegram-alerts" })
+        body: JSON.stringify({ source: "telegram-alerts-v3" })
       }),
       fetch(`${base}/api/v17/portfolio-truth?t=${Date.now()}`, { cache: "no-store" }),
       readLedger(),
@@ -248,29 +222,24 @@ async function handler(req, res) {
 
     if (!pricesRes.ok || !isPricesHealthy(prices)) {
       const reason = prices?.error || prices?.message || `http_${pricesRes.status}_unhealthy_payload`;
-      const sent = await sendTelegramMessage(
-        `🔴 DCA 折價獵人 API異常\n\n行情資料讀取失敗。\n錯誤：${reason}`,
-        { cooldownKey: "telegram-alerts:prices-error", cooldownHours: 12 }
-      );
+      const sent = await sendTelegramMessage(`🔴 DCA 折價獵人 API異常\n\n行情資料讀取失敗。\n錯誤：${reason}`, { cooldownKey: "telegram-alerts:prices-error", cooldownHours: 12 });
       return res.status(500).json({ ok: false, pricesOk: false, health, telegram: sent });
     }
 
     if (!walletRes.ok || !isWalletHealthy(wallet)) {
       const reason = wallet?.error || wallet?.message || `http_${walletRes.status}_unhealthy_payload`;
-      const sent = await sendTelegramMessage(
-        `⚠️ DCA 折價獵人 Wallet讀取異常\n\n本次不發買點清單。\n錯誤：${reason}`,
-        { cooldownKey: "telegram-alerts:wallet-error", cooldownHours: 12 }
-      );
+      const sent = await sendTelegramMessage(`⚠️ DCA 折價獵人 Wallet讀取異常\n\n本次不發買點清單。\n錯誤：${reason}`, { cooldownKey: "telegram-alerts:wallet-error", cooldownHours: 12 });
       return res.status(500).json({ ok: false, walletOk: false, health, walletStatus: walletRes.status, telegram: sent });
     }
 
     const assets = prices?.data || [];
-    const allEvents = buildEvents({ assets, ledger, alerts, holdings });
+    const built = buildEvents({ assets, ledger, alerts, holdings });
     const now = new Date().toISOString();
-    const sendableEvents = allEvents.filter((event) => !alerts?.[event.key]);
+    const sendableEvents = built.events.filter((event) => !alerts?.[event.key]);
 
     const nextAlerts = {
       ...(alerts || {}),
+      __telegramStateVersion: STATE_VERSION,
       __layerState: { ...(alerts.__layerState || {}) }
     };
 
@@ -279,8 +248,9 @@ async function handler(req, res) {
       if (!symbol) continue;
       const snapshot = holdingSnapshot(holdings, symbol);
       nextAlerts.__layerState[symbol] = {
+        snapshotVersion: STATE_VERSION,
         currentLevel: getLevel(asset),
-        completedLevel: detectedDoneLevel(asset, ledger, holdings),
+        completedLevel: ledgerDoneLevel(ledger, symbol),
         quantity: snapshot.quantity,
         totalCost: snapshot.totalCost,
         currentValue: snapshot.currentValue,
@@ -288,12 +258,12 @@ async function handler(req, res) {
       };
     }
 
+    // 先保存新基準，避免版本升級或舊狀態造成整批既有持倉誤報。
+    await writeAlerts(nextAlerts);
+
     const telegramResults = [];
     for (const event of sendableEvents) {
-      const sent = await sendTelegramMessage(
-        eventMessage(event, prices?.updatedAt),
-        { cooldownKey: event.key, cooldownHours: 24 * 365 }
-      );
+      const sent = await sendTelegramMessage(eventMessage(event, prices?.updatedAt), { cooldownKey: event.key, cooldownHours: 24 * 365 });
       telegramResults.push({ key: event.key, ok: sent.ok, skipped: Boolean(sent.skipped) });
       if (!sent.ok) return res.status(500).json({ ok: false, failedEvent: event.key, telegram: sent });
       nextAlerts[event.key] = {
@@ -302,36 +272,33 @@ async function handler(req, res) {
         symbol: event.symbol,
         fromLevel: event.fromLevel,
         toLevel: event.toLevel,
-        repeatMode: event.type === "purchase_detected" ? "holding_change_once" : "layer_change_only"
+        repeatMode: event.type === "holding_delta" ? "true_delta_once" : "layer_change_only"
       };
     }
 
     const storage = await writeAlerts(nextAlerts);
-    const view = (event) => ({
-      type: event.type,
-      symbol: event.symbol,
-      fromLevel: tier(event.fromLevel),
-      toLevel: tier(event.toLevel),
-      key: event.key
-    });
+    const view = (event) => ({ type: event.type, symbol: event.symbol, fromLevel: tier(event.fromLevel), toLevel: tier(event.toLevel), key: event.key });
 
     return res.status(200).json({
       ok: true,
-      version: "17.0-layer-and-purchase-change-notifications",
+      version: "17.1-snapshot-delta-strategy-separated",
       sent: sendableEvents.length > 0,
-      repeatMode: "layer_change_or_purchase_change_once",
-      purchaseDetection: "live_quantity_increase_with_cost_delta_when_available",
+      baselineInitializedCount: built.baselineCount,
+      repeatMode: "true_holding_delta_or_layer_change_once",
+      purchaseDetection: "snapshot_difference_only",
+      dLayerAccounting: "ledger_only",
+      firstSyncPolicy: "baseline_only_no_purchase_notification",
       pricesOk: true,
       walletOk: true,
       portfolioTruthOk: Boolean(truthRes.ok),
       holdingCount: holdings.size,
       health,
-      eventCount: allEvents.length,
+      eventCount: built.events.length,
       sendableCount: sendableEvents.length,
-      suppressedDuplicateCount: allEvents.length - sendableEvents.length,
+      suppressedDuplicateCount: built.events.length - sendableEvents.length,
       storage: storage.store,
       telegramResults,
-      events: allEvents.map(view),
+      events: built.events.map(view),
       sentEvents: sendableEvents.map(view)
     });
   } catch (error) {
