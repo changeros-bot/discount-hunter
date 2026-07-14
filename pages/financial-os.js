@@ -71,7 +71,7 @@ function autoCat(note) {
 function groupTx(t) {
   const c = t.category;
   if (c === '居家修繕') return '居家修繕';
-  if (isHouse(t)) return '家用';
+  if (c === '家用' || isHouse(t)) return '家用';
   if (c === '教育') return '教育';
   if (food.includes(c)) return '飲食';
   if (c === '機車') return '交通';

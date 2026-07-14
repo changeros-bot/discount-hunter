@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => today().slice(0, 7) + "-01";
 const nt = (n) => "$" + Number(n || 0).toLocaleString("zh-TW", { maximumFractionDigits: 0 });
+const CATEGORY_OPTIONS = ['早餐','午餐','晚餐','飲料','咖啡','菸','點心/宵夜','生活用品','生活費','家用','居家修繕','交通','機車','醫療','醫療健康','教育','服飾','娛樂','金融','固定支出','富邦DCA','其他'];
 
 const inputStyle = {
   width: "100%",
@@ -24,7 +25,7 @@ const card = {
 };
 
 export default function FinancialAudit() {
-  const [filters, setFilters] = useState({ start: monthStart(), end: today(), q: "", type: "", category: "", account: "", budgetId: "" });
+  const [filters, setFilters] = useState({ start: monthStart(), end: today(), q: "", amountExact: "", type: "", category: "", account: "", budgetId: "" });
   const [data, setData] = useState({ transactions: [], budgets: [], assets: [] });
   const [status, setStatus] = useState("讀取 Neon 帳本…");
   const [loading, setLoading] = useState(false);
@@ -49,7 +50,7 @@ export default function FinancialAudit() {
 
   useEffect(() => { load(filters); }, []);
 
-  const categories = useMemo(() => [...new Set(data.transactions.map((t) => t.category).filter(Boolean))].sort(), [data.transactions]);
+  const categories = useMemo(() => [...new Set([...CATEGORY_OPTIONS, ...data.transactions.map((t) => t.category).filter(Boolean)])], [data.transactions]);
   const accounts = useMemo(() => [...new Set(data.transactions.map((t) => t.account).filter(Boolean))].sort(), [data.transactions]);
   const totals = useMemo(() => {
     const income = data.transactions.filter((t) => t.type === "收入").reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -69,14 +70,18 @@ export default function FinancialAudit() {
           <input type="date" value={filters.start} onChange={(e) => setFilters({ ...filters, start: e.target.value })} style={inputStyle} />
           <input type="date" value={filters.end} onChange={(e) => setFilters({ ...filters, end: e.target.value })} style={inputStyle} />
         </div>
-        <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="搜尋備註、分類或帳戶，例如：99、燈具、其他" style={{ ...inputStyle, marginTop: 9 }} />
+        <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="搜尋文字：打火機、淘寶運費、燈具、家用" style={{ ...inputStyle, marginTop: 9 }} />
+        <input value={filters.amountExact} onChange={(e) => setFilters({ ...filters, amountExact: e.target.value })} placeholder="精確金額，例如：99（不會再誤抓 199、27950）" inputMode="decimal" style={{ ...inputStyle, marginTop: 9 }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginTop: 9 }}>
           <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} style={inputStyle}><option value="">全部類型</option><option>收入</option><option>支出</option><option>投資扣款</option></select>
           <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} style={inputStyle}><option value="">全部分類</option>{categories.map((x) => <option key={x}>{x}</option>)}</select>
           <select value={filters.account} onChange={(e) => setFilters({ ...filters, account: e.target.value })} style={inputStyle}><option value="">全部帳戶</option>{accounts.map((x) => <option key={x}>{x}</option>)}</select>
           <select value={filters.budgetId} onChange={(e) => setFilters({ ...filters, budgetId: e.target.value })} style={inputStyle}><option value="">全部預算</option>{data.budgets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
         </div>
-        <button disabled={loading} onClick={() => load(filters)} style={{ width: "100%", marginTop: 10, padding: 12, borderRadius: 14, border: "1px solid rgba(212,175,55,.72)", background: "linear-gradient(180deg,rgba(250,204,21,.28),rgba(92,64,16,.74))", color: "#fff7bd", fontWeight: 1000 }}>{loading ? "查帳中…" : "執行查帳"}</button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 10 }}>
+          <button disabled={loading} onClick={() => load(filters)} style={{ padding: 12, borderRadius: 14, border: "1px solid rgba(212,175,55,.72)", background: "linear-gradient(180deg,rgba(250,204,21,.28),rgba(92,64,16,.74))", color: "#fff7bd", fontWeight: 1000 }}>{loading ? "查帳中…" : "執行查帳"}</button>
+          <button disabled={loading} onClick={() => { const next = { ...filters, q: '', amountExact: '', type: '支出', category: '其他' }; setFilters(next); load(next); }} style={{ padding: 12, borderRadius: 14, border: '1px solid rgba(248,113,113,.45)', background: 'rgba(127,29,29,.22)', color: '#fecaca', fontWeight: 1000 }}>只看「其他」</button>
+        </div>
       </section>
 
       <section style={card}>

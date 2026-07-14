@@ -86,6 +86,8 @@ export default async function handler(req, res) {
       const account = clean(req.query.account, 80);
       const budgetId = clean(req.query.budgetId, 120);
       const q = clean(req.query.q, 200);
+      const amountExactRaw = clean(req.query.amountExact, 40);
+      const amountExact = amountExactRaw === '' ? null : Number(amountExactRaw);
       const limit = Math.min(1000, Math.max(1, Number(req.query.limit || 300)));
 
       const transactions = await sql.query(
@@ -96,10 +98,11 @@ export default async function handler(req, res) {
            and ($4 = '' or category = $4)
            and ($5 = '' or account = $5)
            and ($6 = '' or budget_client_id = $6)
-           and ($7 = '' or note ilike '%' || $7 || '%' or category ilike '%' || $7 || '%' or account ilike '%' || $7 || '%' or amount::text ilike '%' || $7 || '%')
+           and ($7 = '' or note ilike '%' || $7 || '%' or category ilike '%' || $7 || '%' or account ilike '%' || $7 || '%')
+           and ($8::numeric is null or amount = $8::numeric)
          order by tx_date desc, created_at desc
-         limit $8`,
-        [start, end, type, category, account, budgetId, q, limit]
+         limit $9`,
+        [start, end, type, category, account, budgetId, q, Number.isFinite(amountExact) ? amountExact : null, limit]
       );
       const [budgets, assets] = await Promise.all([
         sql.query(`select * from public.financial_budgets order by created_at asc`),
