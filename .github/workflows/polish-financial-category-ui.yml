@@ -65,3 +65,5 @@ jobs:
           git add pages/financial-os.js
           git diff --cached --quiet || git commit -m "feat(financial): polish category accordion UI"
           git push
+
+# trigger: 2026-07-14 premium category UI
