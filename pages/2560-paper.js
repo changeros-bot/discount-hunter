@@ -12,7 +12,7 @@ const patternZh = {
   "弱量續攻": "舊版訊號",
 };
 const stageZh = {
-  WATCH: "觀察",
+  WATCH: "正常觀察",
   PRICE_SETUP: "價格結構成立",
   VOLUME_SETUP: "等待量能確認",
   TRIGGERED: "正式觸發",
@@ -49,6 +49,13 @@ const exitZh = {
   stop_loss_8pct: "舊版停損 -8%",
   take_profit_15pct: "舊版停利 +15%",
   max_30d: "舊版 30 日到期",
+};
+const sourceZh = {
+  yfinance: "Yahoo Finance 價格與成交量",
+  csv: "CSV 歷史資料",
+  binance: "Binance 原生資料",
+  binance_rwa_ohlc+yahoo_underlying_volume: "Binance RWA 價格＋原股票歷史成交量",
+  github_actions_market_worker: "GitHub Actions 市場資料工作器",
 };
 
 function pick(row, keys, fallback = "") {
@@ -166,6 +173,7 @@ function ScanCard({ row }) {
 function ScanProof({ scan }) {
   const runAt = scan?.run_at_utc ? new Date(scan.run_at_utc).toLocaleString("zh-TW", { hour12: false }) : "尚無巡查紀錄";
   const ok = scan?.ok;
+  const source = sourceZh[scan?.source] || scan?.source || "—";
   return <section style={{ marginTop: 14, border: `1px solid ${ok ? "#22c55e55" : "#f59e0b55"}`, background: ok ? "rgba(20,83,45,.16)" : "rgba(120,53,15,.16)", borderRadius: 22, padding: 14 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
       <div style={{ color: "#f8fafc", fontWeight: 1000 }}>後台巡查證據</div>
@@ -173,7 +181,8 @@ function ScanProof({ scan }) {
     </div>
     <div style={{ marginTop: 8, color: "#cbd5e1", fontSize: 13, lineHeight: 1.55, fontWeight: 850 }}>
       最後巡查：{runAt}<br />
-      資料源：{scan?.source || "—"}｜已掃描：{scan?.scanned_count ?? "—"}/{scan?.universe_count ?? "—"}｜新訊號：{scan?.new_signal_count ?? "—"}｜錯誤：{scan?.error_count ?? "—"}
+      資料源：{source}<br />
+      已掃描：{scan?.scanned_count ?? "—"}/{scan?.universe_count ?? "—"}｜新訊號：{scan?.new_signal_count ?? "—"}｜錯誤：{scan?.error_count ?? "—"}
     </div>
   </section>;
 }
@@ -202,8 +211,11 @@ export default function Paper2560() {
     [profiles, activeTickers, scanTickers]
   );
   const triggeredScans = scans.filter((x) => x.stage_status === "TRIGGERED" && x.gate_status === "PASS" && x.risk_status === "NORMAL");
-  const setupScans = scans.filter((x) => ["PRICE_SETUP", "VOLUME_SETUP"].includes(x.stage_status) && x.gate_status === "PASS");
+  const setupScans = scans.filter((x) => ["PRICE_SETUP", "VOLUME_SETUP"].includes(x.stage_status) && x.gate_status === "PASS" && x.risk_status === "NORMAL");
   const riskScans = scans.filter((x) => x.gate_status === "REJECTED" || !["NORMAL", undefined, null].includes(x.risk_status));
+  const classifiedTickers = new Set([...triggeredScans, ...setupScans, ...riskScans].map(tickerOf));
+  const normalScans = scans.filter((x) => !classifiedTickers.has(tickerOf(x)));
+  const classifiedTotal = triggeredScans.length + setupScans.length + normalScans.length + riskScans.length;
   const openExposure = activeRows.length * 100;
 
   return <main style={{ minHeight: "100vh", color: "#f8fafc", background: "radial-gradient(circle at top,#0f2a44 0%,#020617 42%,#020617 100%)", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}>
@@ -223,8 +235,10 @@ export default function Paper2560() {
 
       {s && <>
         <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Stat label="本次已掃描" value={scans.length} sub={`四類合計 ${classifiedTotal} 檔`} color="#f8fafc" />
           <Stat label="正式觸發" value={triggeredScans.length} sub="門檻通過＋風險正常" color="#22c55e" />
           <Stat label="結構準備中" value={setupScans.length} sub="價格／量能準備" color="#38bdf8" />
+          <Stat label="正常觀察" value={normalScans.length} sub="門檻通過，尚未形成結構" color="#60a5fa" />
           <Stat label="風險／排除" value={riskScans.length} sub="排除／過度延伸／跌深" color="#f59e0b" />
           <Stat label="模擬曝險" value={money(openExposure)} sub={`不重複部位 ${activeRows.length} 檔`} color="#a78bfa" />
         </section>
