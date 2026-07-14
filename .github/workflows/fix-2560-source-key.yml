@@ -1,0 +1,34 @@
+name: Fix 2560 source key
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-2560-source-key.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quote source map key
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('pages/2560-paper.js')
+          s = p.read_text()
+          old = '  binance_rwa_ohlc+yahoo_underlying_volume: "Binance RWA 價格＋原股票歷史成交量",'
+          new = '  "binance_rwa_ohlc+yahoo_underlying_volume": "Binance RWA 價格＋原股票歷史成交量",'
+          if old in s:
+              p.write_text(s.replace(old, new))
+          PY
+      - name: Commit repair
+        run: |
+          git config user.name changeros-bot
+          git config user.email chang.eros@gmail.com
+          git add pages/2560-paper.js
+          git diff --cached --quiet || git commit -m "fix(2560): quote composite data-source key"
+          git push
