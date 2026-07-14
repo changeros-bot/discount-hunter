@@ -54,7 +54,7 @@ const sourceZh = {
   yfinance: "Yahoo Finance 價格與成交量",
   csv: "CSV 歷史資料",
   binance: "Binance 原生資料",
-  binance_rwa_ohlc+yahoo_underlying_volume: "Binance RWA 價格＋原股票歷史成交量",
+  "binance_rwa_ohlc+yahoo_underlying_volume": "Binance RWA 價格＋原股票歷史成交量",
   github_actions_market_worker: "GitHub Actions 市場資料工作器",
 };
 
