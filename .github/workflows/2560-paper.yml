@@ -44,6 +44,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance
 
+      - name: Archive pre-V1 active paper signals
+        run: |
+          python scripts/migrate_2560_legacy_trades.py
+
       - name: Run unified 2560 paper universe and publish KV snapshot
         run: |
           python scripts/run_2560_universe.py --source ${{ github.event.inputs.source || 'yfinance' }}
