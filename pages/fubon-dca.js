@@ -30,9 +30,13 @@ function Metric({ label, value, accent }) {
 function AssetCard({ asset }) {
   const live = asset.status === "LIVE";
   const active = asset.level?.active || 0;
-  const pnl = asset.liveHolding?.pnl || 0;
+  const livePnl = asset.liveHolding?.pnl || 0;
+  const brokerPnl = asset.holding?.brokerPnl || 0;
   const hasHolding = asset.holding?.shares > 0;
   const nextPrice = asset.level?.nextRule == null ? null : targetPrice(asset.high52w, asset.level.nextRule);
+  const snapshotText = asset.holding?.snapshotAt
+    ? new Date(asset.holding.snapshotAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
+    : "未提供";
 
   return <Card style={{ borderColor: active ? "rgba(34,197,94,.52)" : "rgba(56,189,248,.24)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
@@ -44,7 +48,7 @@ function AssetCard({ asset }) {
     </div>
 
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 16 }}>
-      <Metric label="真實價格" value={money(asset.price, asset.currency)} />
+      <Metric label="公開市場價格" value={money(asset.price, asset.currency)} />
       <Metric label="52 週高點" value={money(asset.high52w, asset.currency)} />
     </div>
 
@@ -63,16 +67,33 @@ function AssetCard({ asset }) {
     </div>
 
     <div style={{ marginTop: 14 }}>
-      <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 900, marginBottom: 8 }}>富邦實際持倉</div>
+      <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 900, marginBottom: 8 }}>富邦持倉基礎資料</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Metric label="持有股數" value={hasHolding ? asset.holding.shares : "尚未持有"} />
         <Metric label="投資成本" value={money(asset.holding.cost, asset.currency)} />
         <Metric label="成交均價" value={hasHolding ? money(asset.holding.averageCost, asset.currency) : "—"} />
-        <Metric label="即時估算損益" value={hasHolding ? `${pnl >= 0 ? "+" : ""}${money(pnl, asset.currency)} (${asset.liveHolding.pnlPct}%)` : "—"} accent={pnl >= 0 ? "#86efac" : "#fca5a5"} />
+        <Metric label="富邦截圖市值" value={hasHolding ? money(asset.holding.brokerMarketValue, asset.currency) : "—"} />
       </div>
-      {asset.symbol === "VOO" && hasHolding && <div style={{ color: "#64748b", fontSize: 11, marginTop: 9 }}>富邦截圖：市值 US$30.61／成本 US$30.09／原幣損益 +US$0.52；匯率 32.2775。</div>}
-      {asset.symbol === "0050" && hasHolding && <div style={{ color: "#64748b", fontSize: 11, marginTop: 9 }}>富邦截圖：37 股／市值 NT$3,899／成本 NT$3,867／損益 +NT$32。</div>}
     </div>
+
+    {hasHolding && <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ background: "rgba(15,23,42,.9)", border: "1px solid rgba(148,163,184,.2)", borderRadius: 16, padding: 12 }}>
+        <div style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 1000 }}>富邦帳面損益</div>
+        <div style={{ color: brokerPnl >= 0 ? "#86efac" : "#fca5a5", fontSize: 19, fontWeight: 1000, marginTop: 6 }}>{brokerPnl >= 0 ? "+" : ""}{money(brokerPnl, asset.currency)}</div>
+        <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>{asset.holding.brokerPnlPct}%</div>
+        <div style={{ color: "#64748b", fontSize: 10, marginTop: 8 }}>來源：富邦 App 截圖<br />時間：{snapshotText}</div>
+      </div>
+      <div style={{ background: "rgba(15,23,42,.9)", border: "1px solid rgba(56,189,248,.25)", borderRadius: 16, padding: 12 }}>
+        <div style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 1000 }}>市場即時估算</div>
+        <div style={{ color: livePnl >= 0 ? "#86efac" : "#fca5a5", fontSize: 19, fontWeight: 1000, marginTop: 6 }}>{livePnl >= 0 ? "+" : ""}{money(livePnl, asset.currency)}</div>
+        <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>{asset.liveHolding?.pnlPct ?? 0}%</div>
+        <div style={{ color: "#64748b", fontSize: 10, marginTop: 8 }}>來源：公開市場行情<br />依最新價格自動重算</div>
+      </div>
+    </div>}
+
+    {hasHolding && <div style={{ marginTop: 10, padding: 11, borderRadius: 14, background: "rgba(120,53,15,.16)", border: "1px solid rgba(251,191,36,.22)", color: "#fde68a", fontSize: 11, lineHeight: 1.55, fontWeight: 750 }}>
+      兩者可能不同：富邦帳面數字取自券商截圖；市場估算使用公開行情。報價時間、券商帳務價、匯率與費用計算不同，都會造成損益差異。
+    </div>}
 
     {asset.ladderEnabled && <div style={{ marginTop: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "36px 54px 1fr 1fr", gap: 6, padding: "0 0 7px", color: "#64748b", fontSize: 10, fontWeight: 900 }}>
@@ -126,9 +147,9 @@ export default function FubonDcaPage() {
     <div style={{ maxWidth: 430, margin: "0 auto", padding: "18px 14px 40px" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div>
-          <div style={{ color: "#38bdf8", fontSize: 12, fontWeight: 900, letterSpacing: 1 }}>LIVE PRICE + HOLDINGS</div>
+          <div style={{ color: "#38bdf8", fontSize: 12, fontWeight: 900, letterSpacing: 1 }}>LIVE PRICE + BROKER SNAPSHOT</div>
           <h1 style={{ margin: "5px 0 0", fontSize: 28, lineHeight: 1.1, fontWeight: 1000 }}>富邦長期 DCA</h1>
-          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6, fontWeight: 800 }}>0050 / VOO / QQQM｜真實價格、持倉與價格買點</div>
+          <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6, fontWeight: 800 }}>富邦帳面資料與市場估算分開顯示</div>
         </div>
         <a href="/" style={{ color: "#bae6fd", textDecoration: "none", border: "1px solid rgba(56,189,248,.35)", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: 950 }}>返回首頁</a>
       </header>
@@ -136,21 +157,21 @@ export default function FubonDcaPage() {
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div>
-            <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 900 }}>報價狀態</div>
+            <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 900 }}>公開行情狀態</div>
             <div style={{ marginTop: 4, fontSize: 16, fontWeight: 1000 }}>{loading ? "更新中…" : `${liveCount}/3 正常`}</div>
           </div>
           <button onClick={refresh} disabled={loading} style={{ border: "1px solid rgba(56,189,248,.4)", background: "rgba(14,116,144,.16)", color: "#bae6fd", borderRadius: 13, padding: "9px 12px", fontWeight: 1000 }}>{loading ? "讀取中" : "立即更新"}</button>
         </div>
-        {data?.checkedAt && <div style={{ color: "#64748b", fontSize: 11, marginTop: 9 }}>更新：{new Date(data.checkedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</div>}
+        {data?.checkedAt && <div style={{ color: "#64748b", fontSize: 11, marginTop: 9 }}>公開行情更新：{new Date(data.checkedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</div>}
         {error && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 9 }}>{error}</div>}
       </Card>
 
       {data?.quotes?.map((asset) => <AssetCard key={asset.symbol} asset={asset} />)}
-      {!data && !error && <Card><div style={{ color: "#94a3b8", textAlign: "center", padding: 20 }}>正在載入真實市場資料…</div></Card>}
+      {!data && !error && <Card><div style={{ color: "#94a3b8", textAlign: "center", padding: 20 }}>正在載入公開市場資料…</div></Card>}
 
       <Card>
-        <div style={{ fontSize: 16, fontWeight: 1000, marginBottom: 8 }}>執行規則</div>
-        <div style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 13, fontWeight: 800 }}>固定 DCA 永不中斷，三檔皆保留回撤分層加碼。0050、VOO：-10/-20/-30/-40%；QQQM：-15/-25/-35/-45%。每層價格以最新 52 週高點動態換算，不自動下單。</div>
+        <div style={{ fontSize: 16, fontWeight: 1000, marginBottom: 8 }}>資料來源說明</div>
+        <div style={{ color: "#cbd5e1", lineHeight: 1.65, fontSize: 13, fontWeight: 800 }}>富邦帳面持倉與損益依你最後提供的 App 截圖；市場價格、52 週高點、回撤、買點及即時估算損益來自公開行情。兩者更新時間和計算方式不同，數字不必完全一致。</div>
       </Card>
     </div>
   </main>;
