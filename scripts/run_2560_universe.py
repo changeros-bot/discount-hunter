@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Run the ratified 2560 paper engine against the unified deduplicated registry.
-
-The scanner remains a scheduled data worker. After each run it can publish the
-complete paper snapshot to the production API, which persists it in Upstash KV.
-"""
+"""Run the ratified 2560 paper engine against the unified registry."""
 from __future__ import annotations
 
 import json
@@ -18,14 +14,14 @@ import paper_2560_bot as engine
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "config" / "2560-universe.json"
+BINANCE_HISTORY_DIR = ROOT / "data" / "2560-binance-history"
 
 
 def load_registry():
     payload = json.loads(REGISTRY_PATH.read_text(encoding="utf8"))
-    symbols = payload.get("symbols", [])
     seen = set()
     unique = []
-    for item in symbols:
+    for item in payload.get("symbols", []):
         ticker = str(item.get("ticker", "")).upper().strip()
         if not ticker or ticker in seen:
             continue
@@ -37,7 +33,6 @@ def load_registry():
 def install_registry(symbols):
     enabled = [item for item in symbols if item.get("scan_enabled") and item.get("data_symbol")]
     metadata = {item["ticker"]: item for item in enabled}
-
     engine.UNIVERSE = {
         item["ticker"]: item.get("group") or item.get("list") or "未分類"
         for item in enabled
@@ -46,14 +41,23 @@ def install_registry(symbols):
     def mapped_load_price(ticker, args):
         item = metadata[ticker]
         data_symbol = item.get("data_symbol") or ticker
-        if args.source == "csv":
-            primary = Path(args.data_dir) / f"{ticker}.csv"
-            fallback = Path(args.data_dir) / f"{data_symbol}.csv"
+        if args.source in {"csv", "binance"}:
+            data_dir = BINANCE_HISTORY_DIR if args.source == "binance" else Path(args.data_dir)
+            primary = Path(data_dir) / f"{ticker}.csv"
+            fallback = Path(data_dir) / f"{data_symbol}.csv"
             source = primary if primary.exists() else fallback
-            return engine.clean(pd.read_csv(source))
+            if not source.exists():
+                raise ValueError(f"BINANCE_HISTORY_PENDING:{ticker}:file_missing" if args.source == "binance" else f"csv missing: {ticker}")
+            raw = pd.read_csv(source)
+            if args.source == "binance":
+                volume = pd.to_numeric(raw.get("Volume"), errors="coerce").fillna(0)
+                price_days = int(pd.to_numeric(raw.get("Close"), errors="coerce").notna().sum())
+                volume_days = int((volume > 0).sum())
+                if price_days < 60 or volume_days < 60:
+                    raise ValueError(f"BINANCE_HISTORY_PENDING:{ticker}:price={price_days}/60,volume={volume_days}/60")
+            return engine.clean(raw)
 
         import yfinance as yf
-
         raw = yf.download(data_symbol, start=args.start, auto_adjust=True, progress=False)
         if raw.empty:
             raise ValueError(f"no data for {ticker} via {data_symbol}")
@@ -66,8 +70,7 @@ def install_registry(symbols):
 def csv_records(path: Path):
     if not path.exists() or path.stat().st_size == 0:
         return []
-    frame = pd.read_csv(path).fillna("")
-    return frame.to_dict(orient="records")
+    return pd.read_csv(path).fillna("").to_dict(orient="records")
 
 
 def build_snapshot(output_dir: Path, registry_payload, symbols):
@@ -126,10 +129,9 @@ def publish_snapshot(snapshot):
         print("2560 ingest skipped: INGEST_TOKEN_2560 is not configured")
         return {"published": False, "reason": "missing_ingest_token"}
 
-    payload = json.dumps(snapshot, ensure_ascii=False).encode("utf8")
     request = Request(
         f"{base_url}/api/2560/ingest",
-        data=payload,
+        data=json.dumps(snapshot, ensure_ascii=False).encode("utf8"),
         method="POST",
         headers={
             "Authorization": f"Bearer {token}",
@@ -165,19 +167,19 @@ def main():
         audit["registry_count"] = len(symbols)
         audit["scan_enabled_count"] = len(enabled)
         audit["data_pending"] = [
-            {
-                "ticker": item["ticker"],
-                "name": item.get("name", ""),
-                "list": item.get("list", ""),
-                "reason": "MARKET_DATA_SOURCE_PENDING",
-            }
+            {"ticker": item["ticker"], "name": item.get("name", ""), "list": item.get("list", ""), "reason": "MARKET_DATA_SOURCE_PENDING"}
             for item in symbols
             if not item.get("scan_enabled") or not item.get("data_symbol")
         ]
+        if args.source == "binance":
+            pending_errors = [x for x in audit.get("errors", []) if "BINANCE_HISTORY_PENDING" in str(x.get("error", ""))]
+            audit["binance_history_pending"] = pending_errors
+            audit["errors"] = [x for x in audit.get("errors", []) if x not in pending_errors]
+            audit["error_count"] = len(audit["errors"])
+            audit["ok"] = audit["error_count"] == 0
         audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf8")
 
-    snapshot = build_snapshot(output_dir, payload, symbols)
-    publish_snapshot(snapshot)
+    publish_snapshot(build_snapshot(output_dir, payload, symbols))
 
 
 if __name__ == "__main__":
