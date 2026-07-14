@@ -57,7 +57,7 @@ async function ensureSchema(sql) {
 function rowTx(row) {
   return {
     id: row.client_id,
-    date: String(row.tx_date).slice(0, 10),
+    date: row.tx_date_text || String(row.tx_date).slice(0, 10),
     type: row.tx_type,
     amount: Number(row.amount),
     account: row.account,
@@ -89,13 +89,14 @@ export default async function handler(req, res) {
       const limit = Math.min(1000, Math.max(1, Number(req.query.limit || 300)));
 
       const transactions = await sql.query(
-        `select * from public.financial_transactions
+        `select *, to_char(tx_date, 'YYYY-MM-DD') as tx_date_text
+         from public.financial_transactions
          where tx_date between $1 and $2
            and ($3 = '' or tx_type = $3)
            and ($4 = '' or category = $4)
            and ($5 = '' or account = $5)
            and ($6 = '' or budget_client_id = $6)
-           and ($7 = '' or note ilike '%' || $7 || '%' or category ilike '%' || $7 || '%' or account ilike '%' || $7 || '%')
+           and ($7 = '' or note ilike '%' || $7 || '%' or category ilike '%' || $7 || '%' or account ilike '%' || $7 || '%' or amount::text ilike '%' || $7 || '%')
          order by tx_date desc, created_at desc
          limit $8`,
         [start, end, type, category, account, budgetId, q, limit]
