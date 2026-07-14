@@ -1,0 +1,52 @@
+name: Financial clickable groups
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/financial-clickable-groups.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch dashboard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('pages/financial-os.js')
+          s = p.read_text()
+
+          s = s.replace(
+            "  const cycle = livingCycle();\n  const [r, setR] = useState({ start: cycle.start, end: today() });",
+            "  const cycle = livingCycle();\n  const [r, setR] = useState({ start: cycle.start, end: today() });\n  const [selectedGroup, setSelectedGroup] = useState(null);"
+          )
+
+          s = s.replace(
+            '<Metric label="區間總支出" value={nt(s.totalOutflow)} sub={`一般支出 ${nt(s.expense)}｜投資 ${nt(s.invest)}`} /><Metric label="投資扣款" value={nt(s.invest)} /><Metric label="生活費（10日週期）"',
+            '<Metric label="區間總支出" value={nt(s.totalOutflow)} sub={`一般支出 ${nt(s.expense)}｜投資 ${nt(s.invest)}`} /><Metric label="生活費（10日週期）"'
+          )
+
+          old = '''    <Card><Title t="區間大類支出" r={`${s.outflowGroups.length} 類`} />{s.outflowGroups.map((g) => <div key={g.name} style={{ display: 'grid', gridTemplateColumns: '82px 1fr auto', gap: 10, padding: '7px 0' }}><b>{g.name}</b><div style={{ height: 12, borderRadius: 99, background: '#243044', overflow: 'hidden', marginTop: 4 }}><div style={{ height: '100%', width: Math.min(100, Math.max(1, g.amount / Math.max(1, s.totalOutflow) * 100)) + '%', background: 'linear-gradient(90deg,#38bdf8,#22c55e)' }} /></div><b>{nt(g.amount)}</b></div>)}</Card>'''
+          new = '''    <Card><Title t="區間大類支出" r={`${s.outflowGroups.length} 類｜點擊看明細`} />{s.outflowGroups.map((g) => <button key={g.name} onClick={() => setSelectedGroup(selectedGroup?.name === g.name ? null : g)} style={{ width: '100%', display: 'grid', gridTemplateColumns: '82px 1fr auto', gap: 10, padding: '10px 0', border: 0, borderBottom: '1px solid rgba(148,163,184,.08)', background: selectedGroup?.name === g.name ? 'rgba(34,197,94,.08)' : 'transparent', color: '#f8fafc', textAlign: 'left', cursor: 'pointer' }}><b>{g.name}</b><div style={{ height: 12, borderRadius: 99, background: '#243044', overflow: 'hidden', marginTop: 4 }}><div style={{ height: '100%', width: Math.min(100, Math.max(1, g.amount / Math.max(1, s.totalOutflow) * 100)) + '%', background: 'linear-gradient(90deg,#38bdf8,#22c55e)' }} /></div><b>{nt(g.amount)}　›</b></button>)}{selectedGroup && <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(34,197,94,.24)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}><b style={{ color: '#86efac' }}>{selectedGroup.name}支出細項</b><button onClick={() => setSelectedGroup(null)} style={{ border: 0, background: 'transparent', color: '#94a3b8', fontWeight: 900 }}>收起</button></div><TxList rows={selectedGroup.rows || []} /></div>}</Card>'''
+          if old not in s:
+            raise SystemExit('group block not found')
+          s = s.replace(old, new)
+
+          s = s.replace(
+            "多元記帳本 V5.0｜總支出含投資｜支出明細可追溯",
+            "多元記帳本 V5.1｜五等分導覽｜大類可展開明細"
+          )
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name changeros-bot
+          git config user.email chang.eros@gmail.com
+          git add pages/financial-os.js
+          git diff --cached --quiet || git commit -m "feat(financial): remove duplicate investment card and expand category details"
+          git push
