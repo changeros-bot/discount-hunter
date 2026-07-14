@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Price source"
+        description: "Temporary calculation source while Binance history archive matures"
         required: true
         default: "yfinance"
         type: choice
@@ -12,7 +12,7 @@ on:
           - yfinance
           - csv
   schedule:
-    # 22:30 UTC = 06:30 Taiwan time, after US market close and yfinance daily data has usually settled.
+    # 22:30 UTC = 06:30 Taiwan time, after the US session.
     - cron: "30 22 * * 1-5"
 
 permissions:
@@ -44,6 +44,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance
 
+      - name: Collect Binance 2560 daily snapshots
+        run: |
+          python scripts/collect_2560_binance_history.py
+
       - name: Archive pre-V1 active paper signals
         run: |
           python scripts/migrate_2560_legacy_trades.py
@@ -52,26 +56,36 @@ jobs:
         run: |
           python scripts/run_2560_universe.py --source ${{ github.event.inputs.source || 'yfinance' }}
 
-      - name: Commit paper reports as audit backup
+      - name: Commit paper reports and Binance history as audit backup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Preserve the freshly generated reports, move the worktree to the
-          # latest main, then restore only the report files. This prevents
-          # rebase conflicts when other commits land during the scan.
+          # Preserve generated state, synchronize to the latest main, then
+          # restore only generated report/history folders to avoid rebase conflicts.
           tmp_dir="$(mktemp -d)"
           cp -R reports/paper "$tmp_dir/paper"
+          if [ -d data/2560-binance-history ]; then
+            cp -R data/2560-binance-history "$tmp_dir/2560-binance-history"
+          fi
+
           git fetch origin main
           git reset --hard origin/main
+
           rm -rf reports/paper
           mkdir -p reports
           cp -R "$tmp_dir/paper" reports/paper
 
-          git add reports/paper || true
+          if [ -d "$tmp_dir/2560-binance-history" ]; then
+            rm -rf data/2560-binance-history
+            mkdir -p data
+            cp -R "$tmp_dir/2560-binance-history" data/2560-binance-history
+          fi
+
+          git add reports/paper data/2560-binance-history || true
           if git diff --cached --quiet; then
-            echo "No paper report changes to commit."
+            echo "No generated 2560 changes to commit."
           else
-            git commit -m "Update 2560 paper reports"
+            git commit -m "Update 2560 paper reports and Binance history"
             git push origin HEAD:main
           fi
