@@ -1,0 +1,66 @@
+name: Direct financial category UI v5.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/direct-financial-category-ui-v53.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace category accordion in React source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('pages/financial-os.js')
+          s = p.read_text()
+
+          marker = "  const outflowRows = [...s.ex, ...s.invRows];\n"
+          if "const categoryIcons" not in s:
+            s = s.replace(marker, marker + "  const categoryIcons = { '飲食': '🍴', '家用': '⌂', '其他': '▦', '投資': '↗', '教育': '學', '交通': '車', '醫療': '＋', '娛樂': '樂', '金融': '$', '固定支出': '定', '生活用品': '品', '居家修繕': '修', '服飾': '衣' };\n")
+
+          old = '''    <Card><Title t="區間大類支出" r={`${s.outflowGroups.length} 類｜點擊看明細`} />{s.outflowGroups.map((g) => <button key={g.name} onClick={() => setSelectedGroup(selectedGroup?.name === g.name ? null : g)} style={{ width: '100%', display: 'grid', gridTemplateColumns: '82px 1fr auto', gap: 10, padding: '10px 0', border: 0, borderBottom: '1px solid rgba(148,163,184,.08)', background: selectedGroup?.name === g.name ? 'rgba(34,197,94,.08)' : 'transparent', color: '#f8fafc', textAlign: 'left', cursor: 'pointer' }}><b>{g.name}</b><div style={{ height: 12, borderRadius: 99, background: '#243044', overflow: 'hidden', marginTop: 4 }}><div style={{ height: '100%', width: Math.min(100, Math.max(1, g.amount / Math.max(1, s.totalOutflow) * 100)) + '%', background: 'linear-gradient(90deg,#38bdf8,#22c55e)' }} /></div><b>{nt(g.amount)}　›</b></button>)}{selectedGroup && <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(34,197,94,.24)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}><b style={{ color: '#86efac' }}>{selectedGroup.name}支出細項</b><button onClick={() => setSelectedGroup(null)} style={{ border: 0, background: 'transparent', color: '#94a3b8', fontWeight: 900 }}>收起</button></div><TxList rows={selectedGroup.rows || []} /></div>}</Card>'''
+
+          new = '''    <Card style={{ padding: 15, borderColor: 'rgba(34,211,238,.32)', background: 'linear-gradient(155deg,rgba(8,20,38,.98),rgba(3,18,34,.98))', boxShadow: '0 18px 48px rgba(8,145,178,.12),0 12px 32px rgba(0,0,0,.3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span style={{ width: 4, height: 28, borderRadius: 99, background: 'linear-gradient(180deg,#22d3ee,#10b981)', boxShadow: '0 0 15px rgba(34,211,238,.5)' }} /><h2 style={{ margin: 0, fontSize: 20, fontWeight: 1000 }}>區間大類支出</h2></div>
+        <b style={{ color: '#5eead4', fontSize: 12, whiteSpace: 'nowrap' }}>{s.outflowGroups.length} 類｜點擊看明細</b>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {s.outflowGroups.map((g) => { const open = selectedGroup?.name === g.name; const pct = Math.min(100, Math.max(1, g.amount / Math.max(1, s.totalOutflow) * 100)); return <div key={g.name} style={{ border: open ? '1px solid rgba(45,212,191,.52)' : '1px solid rgba(56,189,248,.18)', borderRadius: 18, background: open ? 'linear-gradient(155deg,rgba(8,47,73,.9),rgba(6,78,59,.34))' : 'linear-gradient(155deg,rgba(15,23,42,.95),rgba(3,18,34,.9))', overflow: 'hidden', boxShadow: open ? '0 12px 30px rgba(16,185,129,.11)' : 'none' }}>
+          <button type="button" onClick={() => setSelectedGroup(open ? null : g)} style={{ appearance: 'none', WebkitAppearance: 'none', width: '100%', display: 'grid', gridTemplateColumns: '42px 58px minmax(72px,1fr) auto 16px', alignItems: 'center', gap: 9, padding: '14px 11px', margin: 0, border: 0, borderRadius: 0, background: 'transparent', boxShadow: 'none', color: '#f8fafc', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <span style={{ width: 40, height: 40, borderRadius: '50%', display: 'grid', placeItems: 'center', border: '1px solid rgba(34,211,238,.42)', color: '#2dd4bf', fontSize: 18, fontWeight: 1000, background: 'rgba(8,47,73,.5)' }}>{categoryIcons[g.name] || '•'}</span>
+            <b style={{ fontSize: 16 }}>{g.name}</b>
+            <span style={{ height: 10, borderRadius: 99, background: 'rgba(51,65,85,.82)', overflow: 'hidden', border: '1px solid rgba(148,163,184,.08)' }}><span style={{ display: 'block', height: '100%', width: pct + '%', borderRadius: 99, background: 'linear-gradient(90deg,#22d3ee,#14b8a6,#22c55e)', boxShadow: '0 0 14px rgba(34,211,238,.4)' }} /></span>
+            <b style={{ color: '#fde68a', fontSize: 18, whiteSpace: 'nowrap' }}>{nt(g.amount)}</b>
+            <span style={{ color: '#fcd34d', fontSize: 21, lineHeight: 1, transform: open ? 'rotate(-90deg)' : 'none', transition: 'transform .2s' }}>›</span>
+          </button>
+          {open && <div style={{ padding: '0 11px 13px' }}>
+            <div style={{ height: 1, background: 'linear-gradient(90deg,transparent,rgba(45,212,191,.42),transparent)', marginBottom: 11 }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}><b style={{ color: '#5eead4', fontSize: 16 }}>●　{g.name}支出細項</b><button type="button" onClick={() => setSelectedGroup(null)} style={{ appearance: 'none', WebkitAppearance: 'none', border: '1px solid rgba(45,212,191,.4)', borderRadius: 999, padding: '7px 12px', background: 'rgba(13,148,136,.1)', color: '#5eead4', fontWeight: 900, fontFamily: 'inherit' }}>收合⌃</button></div>
+            <div style={{ border: '1px solid rgba(34,211,238,.23)', borderRadius: 16, padding: '4px 12px', background: 'rgba(2,6,23,.5)' }}><TxList rows={g.rows || []} /></div>
+          </div>}
+        </div>; })}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 12, color: '#2dd4bf', fontSize: 11 }}>ⓘ　點擊任一大類可查看該類的所有支出明細</div>
+    </Card>'''
+
+          if old not in s:
+            raise SystemExit('current category block not found; aborting without changes')
+          s = s.replace(old, new)
+          s = s.replace('多元記帳本 V5.1｜五等分導覽｜大類可展開明細', '多元記帳本 V5.3｜分類卡重製｜資料邏輯不變')
+          p.write_text(s)
+          PY
+      - name: Commit direct React change
+        run: |
+          git config user.name changeros-bot
+          git config user.email chang.eros@gmail.com
+          git add pages/financial-os.js
+          git diff --cached --quiet || git commit -m "feat(financial): rebuild category UI directly in React"
+          git push
