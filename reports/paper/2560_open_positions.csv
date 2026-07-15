@@ -1,2 +1,0 @@
-trade_id,status,ticker,industry,pattern,signal_date,entry_date,entry_price,stop_price,target_price,last_date,last_price,exit_date,exit_price,exit_reason,hold_days,return_pct,created_at,updated_at,pattern_zh,gate_status,stage_status,risk_status,signal_reason,pullback_low,atr14
-2560-SOFI-20260714-BUILT_VOLUME,PENDING,SOFI,金融科技,BUILT_VOLUME,2026-07-14,,,,,2026-07-14,18.578182,,,,,,2026-07-14T23:26:53.528916+00:00,2026-07-14T23:26:53.528916+00:00,做量,PASS,TRIGGERED,NORMAL,PRIOR_VOLUME_BUILT,17.035714,1.0623567142857142
