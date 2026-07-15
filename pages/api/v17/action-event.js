@@ -32,11 +32,15 @@ function buildEvent({ action, symbol, layer, amount, price, note }) {
   }
 
   if (action === "complete") {
+    const expectedAmount = cleanAmount(amount);
     return {
       ...base,
       type: "manual_buy",
       status: "filled",
-      amount: cleanAmount(amount),
+      amount: expectedAmount,
+      expectedAmount,
+      completionIntent: "user_confirmed_current_layer_complete",
+      ruleSnapshotVersion: "v17_ui_amount_snapshot_v1",
       price: Number(price || 0) || null
     };
   }
