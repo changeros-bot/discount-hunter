@@ -28,6 +28,34 @@ async function parseMarketPrices(req) {
   return btcPrice > 0 ? { BTC: { price: btcPrice } } : {};
 }
 
+function dashboardHolding(holding) {
+  return {
+    symbol: holding.symbol,
+    quantity: holding.quantity,
+    valuationQuantity: holding.valuationQuantity,
+    totalCost: holding.totalCost,
+    rawTotalCost: holding.rawTotalCost,
+    averageCost: holding.averageCost,
+    averageBuyPrice: holding.averageBuyPrice,
+    tokenPrice: holding.tokenPrice,
+    marketPrice: holding.marketPrice,
+    currentValue: holding.currentValue,
+    rawCurrentValue: holding.rawCurrentValue,
+    marketValue: holding.marketValue,
+    positionValue: holding.positionValue,
+    unrealizedPnL: holding.unrealizedPnL,
+    pnlPct: holding.pnlPct,
+    returnPct: holding.returnPct,
+    officialHolding: holding.officialHolding,
+    quantitySource: holding.quantitySource,
+    costBasisSource: holding.costBasisSource,
+    costBasisMissing: holding.costBasisMissing,
+    costBasisWarning: holding.costBasisWarning,
+    priceSource: holding.priceSource,
+    checkedAt: holding.checkedAt,
+  };
+}
+
 function sanitizeBinanceError(error) {
   const payload = error?.payload || null;
   return {
@@ -74,11 +102,16 @@ async function handler(req, res) {
     const result = await fetchBinanceExchangePositions({ marketPrices });
 
     return res.status(200).json({
-      ...result,
+      ok: result.ok,
+      configured: result.configured,
+      source: result.source,
+      holdings: (result.holdings || []).map(dashboardHolding),
+      checkedAt: result.checkedAt,
       diagnostics: {
         envConfigured: true,
         binanceSignedRequest: "success",
-        btcMarketPrice: marketPrices?.BTC?.price || 0
+        btcMarketPrice: marketPrices?.BTC?.price || 0,
+        sensitiveRouteRedacted: true
       }
     });
   } catch (error) {
