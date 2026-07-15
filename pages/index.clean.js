@@ -26,15 +26,6 @@ const projects = [
     status: "SEALED",
     accent: "#38bdf8",
   },
-  {
-    id: 4,
-    eyebrow: "研究專案",
-    title: "2560 技術研究室",
-    description: "盤後訊號研究。隔日開盤紙上紀錄；顯示運行中、等待訊號與觀察區，不執行真實下單。",
-    href: "/2560-paper",
-    status: "紙上交易",
-    accent: "#f59e0b",
-  },
 ];
 
 function ProjectCard({ project }) {
@@ -71,7 +62,7 @@ export default function ProjectPager() {
       </section>
 
       <footer style={{ marginTop: 18, color: "#64748b", fontSize: 12, lineHeight: 1.6, fontWeight: 800 }}>
-        入口：折價獵人、Josh 2026多元記帳本、富邦 DCA、2560 技術研究室。研究報表與回測保留在 GitHub Actions / reports。
+        入口：折價獵人、Josh 2026多元記帳本、富邦 DCA。
       </footer>
     </div>
   </main>;
