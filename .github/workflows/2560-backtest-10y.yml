@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - scripts/backtest_2560_10y.py
+      - scripts/analyze_2560_backtest.py
       - scripts/paper_2560_bot.py
       - config/2560-universe.json
       - .github/workflows/2560-backtest-10y.yml
@@ -34,10 +35,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas yfinance
+          pip install pandas numpy scipy yfinance
 
       - name: Run current-universe ten-year backtest
         run: python scripts/backtest_2560_10y.py
+
+      - name: Run statistical validation and BUILT_VOLUME grid
+        run: python scripts/analyze_2560_backtest.py
 
       - name: Commit reproducible results
         run: |
@@ -54,6 +58,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No backtest changes."
           else
-            git commit -m "Update 2560 ten-year backtest results [skip ci]"
+            git commit -m "Update 2560 ten-year statistical analysis [skip ci]"
             git push origin HEAD:main
           fi
