@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/backtest_2560_10y.py
       - scripts/analyze_2560_backtest.py
+      - scripts/analyze_2560_backtest_fast.py
       - scripts/paper_2560_bot.py
       - config/2560-universe.json
       - .github/workflows/2560-backtest-10y.yml
@@ -21,6 +22,7 @@ concurrency:
 jobs:
   backtest:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,8 +42,8 @@ jobs:
       - name: Run current-universe ten-year backtest
         run: python scripts/backtest_2560_10y.py
 
-      - name: Run statistical validation and BUILT_VOLUME grid
-        run: python scripts/analyze_2560_backtest.py
+      - name: Run optimized statistical validation and BUILT_VOLUME grid
+        run: python scripts/analyze_2560_backtest_fast.py
 
       - name: Commit reproducible results
         run: |
