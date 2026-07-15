@@ -1,0 +1,308 @@
+{
+  "ticker_tests": {
+    "tested_tickers": 44,
+    "significantly_worse_fdr_5pct": []
+  },
+  "holding_period": {
+    "pearson_r": 0.45942617411154857,
+    "pearson_p": 6.184712401328193e-54,
+    "spearman_rho": 0.4934921945397422,
+    "spearman_p": 3.584124300312054e-63
+  },
+  "time_split": [
+    {
+      "period": "2016-2021",
+      "pattern": "BUILT_VOLUME",
+      "trades": 331,
+      "win_rate": 0.3867069486404834,
+      "average_return": 0.0002786137216143235,
+      "median_return": -0.0154525352930063,
+      "profit_factor": 1.010819055667855
+    },
+    {
+      "period": "2016-2021",
+      "pattern": "RUSH_VOLUME",
+      "trades": 88,
+      "win_rate": 0.4318181818181818,
+      "average_return": 0.004854381682484801,
+      "median_return": -0.01591155814487405,
+      "profit_factor": 1.198298971677677
+    },
+    {
+      "period": "2016-2021",
+      "pattern": "VOLUME_PIT",
+      "trades": 54,
+      "win_rate": 0.5185185185185185,
+      "average_return": 0.024999099150837315,
+      "median_return": 0.011019257841638999,
+      "profit_factor": 2.6661403811746367
+    },
+    {
+      "period": "2021-2026",
+      "pattern": "BUILT_VOLUME",
+      "trades": 369,
+      "win_rate": 0.39295392953929537,
+      "average_return": 0.004205402154235887,
+      "median_return": -0.0178824093834267,
+      "profit_factor": 1.1576710743592697
+    },
+    {
+      "period": "2021-2026",
+      "pattern": "RUSH_VOLUME",
+      "trades": 93,
+      "win_rate": 0.44086021505376344,
+      "average_return": 0.015204414088475738,
+      "median_return": -0.0116892275337218,
+      "profit_factor": 1.6620859219774702
+    },
+    {
+      "period": "2021-2026",
+      "pattern": "VOLUME_PIT",
+      "trades": 76,
+      "win_rate": 0.4342105263157895,
+      "average_return": 0.0008655901959785314,
+      "median_return": -0.01696251578468795,
+      "profit_factor": 1.027048297047892
+    }
+  ],
+  "built_volume_grid": {
+    "combinations": 80,
+    "current_rule": [
+      {
+        "target_pct": 0.15,
+        "atr_stop_multiple": 1.5,
+        "max_hold_days": 30,
+        "trades": 761,
+        "win_rate": 0.39816031537450725,
+        "average_return": 0.0038038041150224755,
+        "median_return": -0.0159095306146102,
+        "total_pnl_usd_100": 289.46949315321035,
+        "profit_factor": 1.1477346659514192
+      }
+    ],
+    "top_20": [
+      {
+        "target_pct": 0.25,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 30,
+        "trades": 743,
+        "win_rate": 0.4306864064602961,
+        "average_return": 0.006575709539533958,
+        "median_return": -0.010192470989668467,
+        "total_pnl_usd_100": 488.5752187873731,
+        "profit_factor": 1.2457591109711164
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 30,
+        "trades": 743,
+        "win_rate": 0.43203230148048455,
+        "average_return": 0.0065161242801554595,
+        "median_return": -0.010165612285888859,
+        "total_pnl_usd_100": 484.1480340155506,
+        "profit_factor": 1.244002461611701
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 60,
+        "trades": 734,
+        "win_rate": 0.4305177111716621,
+        "average_return": 0.0062756516162098585,
+        "median_return": -0.010179041637778663,
+        "total_pnl_usd_100": 460.6328286298036,
+        "profit_factor": 1.2332264186333441
+      },
+      {
+        "target_pct": 0.25,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 60,
+        "trades": 734,
+        "win_rate": 0.42915531335149865,
+        "average_return": 0.00628240870598094,
+        "median_return": -0.010433409943452931,
+        "total_pnl_usd_100": 461.128799019001,
+        "profit_factor": 1.2330254651821149
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 45,
+        "trades": 735,
+        "win_rate": 0.4340136054421769,
+        "average_return": 0.006066262117863221,
+        "median_return": -0.010192470989668467,
+        "total_pnl_usd_100": 445.8702656629468,
+        "profit_factor": 1.224616479431164
+      },
+      {
+        "target_pct": 0.25,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 45,
+        "trades": 735,
+        "win_rate": 0.4326530612244898,
+        "average_return": 0.006061374832254783,
+        "median_return": -0.010674348897237396,
+        "total_pnl_usd_100": 445.51105017072655,
+        "profit_factor": 1.2240031342532318
+      },
+      {
+        "target_pct": 0.1,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 60,
+        "trades": 742,
+        "win_rate": 0.44339622641509435,
+        "average_return": 0.005790154184378242,
+        "median_return": -0.008747729077578092,
+        "total_pnl_usd_100": 429.6294404808656,
+        "profit_factor": 1.2163893245694493
+      },
+      {
+        "target_pct": 0.25,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 20,
+        "trades": 755,
+        "win_rate": 0.45165562913907287,
+        "average_return": 0.005457496299391923,
+        "median_return": -0.006786910191848183,
+        "total_pnl_usd_100": 412.04097060409015,
+        "profit_factor": 1.2121744321698862
+      },
+      {
+        "target_pct": 0.1,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 45,
+        "trades": 742,
+        "win_rate": 0.44609164420485176,
+        "average_return": 0.005640135634371809,
+        "median_return": -0.008747729077578092,
+        "total_pnl_usd_100": 418.49806407038824,
+        "profit_factor": 1.2109757473625744
+      },
+      {
+        "target_pct": 0.15,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 60,
+        "trades": 735,
+        "win_rate": 0.4326530612244898,
+        "average_return": 0.005638013990231815,
+        "median_return": -0.009271948971730004,
+        "total_pnl_usd_100": 414.3940282820384,
+        "profit_factor": 1.2091329989005204
+      },
+      {
+        "target_pct": 0.25,
+        "atr_stop_multiple": 2.0,
+        "max_hold_days": 30,
+        "trades": 747,
+        "win_rate": 0.41767068273092367,
+        "average_return": 0.005522768993868359,
+        "median_return": -0.012211838458749402,
+        "total_pnl_usd_100": 412.5508438419664,
+        "profit_factor": 1.2072907915981077
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 2.0,
+        "max_hold_days": 30,
+        "trades": 747,
+        "win_rate": 0.4190093708165997,
+        "average_return": 0.005492081085812288,
+        "median_return": -0.012003908612300496,
+        "total_pnl_usd_100": 410.2584571101779,
+        "profit_factor": 1.206536587722268
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 20,
+        "trades": 755,
+        "win_rate": 0.45298013245033114,
+        "average_return": 0.005291330358547309,
+        "median_return": -0.0067772777898489345,
+        "total_pnl_usd_100": 399.4954420703218,
+        "profit_factor": 1.2061209800193904
+      },
+      {
+        "target_pct": 0.15,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 45,
+        "trades": 736,
+        "win_rate": 0.4361413043478261,
+        "average_return": 0.005414423074927494,
+        "median_return": -0.009718780628809431,
+        "total_pnl_usd_100": 398.50153831466355,
+        "profit_factor": 1.2001043021714715
+      },
+      {
+        "target_pct": 0.15,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 30,
+        "trades": 744,
+        "win_rate": 0.43413978494623656,
+        "average_return": 0.005346430187309664,
+        "median_return": -0.009516015384846588,
+        "total_pnl_usd_100": 397.77440593583907,
+        "profit_factor": 1.1998230565990557
+      },
+      {
+        "target_pct": 0.1,
+        "atr_stop_multiple": 2.5,
+        "max_hold_days": 30,
+        "trades": 747,
+        "win_rate": 0.44176706827309237,
+        "average_return": 0.005222450028676008,
+        "median_return": -0.009061933709240022,
+        "total_pnl_usd_100": 390.1170171420978,
+        "profit_factor": 1.1959820976563633
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 2.0,
+        "max_hold_days": 60,
+        "trades": 740,
+        "win_rate": 0.41621621621621624,
+        "average_return": 0.005071422657610545,
+        "median_return": -0.012533577750409253,
+        "total_pnl_usd_100": 375.2852766631803,
+        "profit_factor": 1.1884734071234786
+      },
+      {
+        "target_pct": 0.2,
+        "atr_stop_multiple": 1.5,
+        "max_hold_days": 30,
+        "trades": 760,
+        "win_rate": 0.3960526315789474,
+        "average_return": 0.004835033895754589,
+        "median_return": -0.016321023353053854,
+        "total_pnl_usd_100": 367.4625760773488,
+        "profit_factor": 1.1878954047114314
+      },
+      {
+        "target_pct": 0.25,
+        "atr_stop_multiple": 2.0,
+        "max_hold_days": 60,
+        "trades": 740,
+        "win_rate": 0.41486486486486485,
+        "average_return": 0.005022262796374456,
+        "median_return": -0.012707577917688728,
+        "total_pnl_usd_100": 371.6474469317098,
+        "profit_factor": 1.186287967703501
+      },
+      {
+        "target_pct": 0.1,
+        "atr_stop_multiple": 2.0,
+        "max_hold_days": 60,
+        "trades": 747,
+        "win_rate": 0.42971887550200805,
+        "average_return": 0.004948095868445921,
+        "median_return": -0.01121433493073365,
+        "total_pnl_usd_100": 369.6227613729103,
+        "profit_factor": 1.1855382060087367
+      }
+    ],
+    "warning": "In-sample grid only; no production rule change without walk-forward confirmation."
+  },
+  "decision": "KEEP_CURRENT_RULES_PENDING_WALK_FORWARD"
+}

@@ -7,19 +7,19 @@
   },
   "stake_per_trade_usd": 100.0,
   "initial_reference_equity_usd": 10000.0,
-  "trades": 1010,
-  "winning_trades": 412,
+  "trades": 1011,
+  "winning_trades": 413,
   "losing_trades": 598,
-  "win_rate": 0.4079207920792079,
-  "average_return_per_trade": 0.004921306741269927,
-  "median_return_per_trade": -0.01524580664205627,
-  "total_pnl_usd_fixed_100_each": 497.0519808682626,
-  "gross_profit_usd": 3086.873994422514,
-  "gross_loss_usd": -2589.8220135542515,
-  "profit_factor": 1.1919251509435247,
-  "max_drawdown_reference_equity": -0.014876038751376108,
-  "ending_reference_equity_usd": 10497.051980868264,
-  "average_hold_days": 11.173267326732674,
+  "win_rate": 0.4085064292779426,
+  "average_return_per_trade": 0.004847622991190764,
+  "median_return_per_trade": -0.015188906789841639,
+  "total_pnl_usd_fixed_100_each": 490.0946844093863,
+  "gross_profit_usd": 3079.916065927101,
+  "gross_loss_usd": -2589.821381517715,
+  "profit_factor": 1.1892387976664922,
+  "max_drawdown_reference_equity": -0.014886193619257249,
+  "ending_reference_equity_usd": 10490.094684409387,
+  "average_hold_days": 11.163204747774481,
   "coverage": [
     {
       "ticker": "BTC",
@@ -252,7 +252,7 @@
       "first_usable_date": "2017-01-03",
       "last_date": "2026-07-14",
       "usable_days": 2394,
-      "trades": 32,
+      "trades": 33,
       "status": "OK"
     },
     {
@@ -442,8 +442,8 @@
       "trades": 25,
       "wins": 14,
       "win_rate": 0.56,
-      "avg_return": 0.03877293155950858,
-      "total_pnl_usd": 96.93232889877144
+      "avg_return": 0.03877291451246446,
+      "total_pnl_usd": 96.93228628116115
     },
     {
       "ticker": "SNDK",
@@ -466,40 +466,40 @@
       "trades": 31,
       "wins": 16,
       "win_rate": 0.5161290322580645,
-      "avg_return": 0.021428622191102933,
-      "total_pnl_usd": 66.4287287924191
+      "avg_return": 0.02142865938861415,
+      "total_pnl_usd": 66.42884410470387
     },
     {
       "ticker": "NVDA",
       "trades": 24,
       "wins": 14,
       "win_rate": 0.5833333333333334,
-      "avg_return": 0.026291545303590614,
-      "total_pnl_usd": 63.09970872861747
+      "avg_return": 0.026291583583065752,
+      "total_pnl_usd": 63.099800599357806
     },
     {
       "ticker": "GOOGL",
       "trades": 18,
       "wins": 12,
       "win_rate": 0.6666666666666666,
-      "avg_return": 0.034253919254130544,
-      "total_pnl_usd": 61.65705465743498
+      "avg_return": 0.034253971936351345,
+      "total_pnl_usd": 61.65714948543241
     },
     {
       "ticker": "GEV",
       "trades": 8,
       "wins": 5,
       "win_rate": 0.625,
-      "avg_return": 0.0677584144853802,
-      "total_pnl_usd": 54.20673158830416
+      "avg_return": 0.06775840612812893,
+      "total_pnl_usd": 54.20672490250315
     },
     {
       "ticker": "MRVL",
       "trades": 29,
       "wins": 15,
       "win_rate": 0.5172413793103449,
-      "avg_return": 0.016646385907250007,
-      "total_pnl_usd": 48.274519131025016
+      "avg_return": 0.016646389465291574,
+      "total_pnl_usd": 48.27452944934556
     },
     {
       "ticker": "BTC",
@@ -514,8 +514,8 @@
       "trades": 15,
       "wins": 8,
       "win_rate": 0.5333333333333333,
-      "avg_return": 0.025065059132699585,
-      "total_pnl_usd": 37.59758869904938
+      "avg_return": 0.025064985296373878,
+      "total_pnl_usd": 37.597477944560815
     }
   ],
   "bottom_10_tickers": [
@@ -524,8 +524,8 @@
       "trades": 28,
       "wins": 7,
       "win_rate": 0.25,
-      "avg_return": -0.02538025258468388,
-      "total_pnl_usd": -71.06470723711486
+      "avg_return": -0.025380243865248554,
+      "total_pnl_usd": -71.06468282269594
     },
     {
       "ticker": "NOW",
@@ -540,8 +540,8 @@
       "trades": 29,
       "wins": 7,
       "win_rate": 0.2413793103448276,
-      "avg_return": -0.013059264112070743,
-      "total_pnl_usd": -37.87186592500515
+      "avg_return": -0.013059300156966328,
+      "total_pnl_usd": -37.87197045520235
     },
     {
       "ticker": "ADBE",
@@ -556,24 +556,24 @@
       "trades": 30,
       "wins": 11,
       "win_rate": 0.36666666666666664,
-      "avg_return": -0.008037292379389212,
-      "total_pnl_usd": -24.111877138167635
+      "avg_return": -0.00803731520095674,
+      "total_pnl_usd": -24.11194560287022
     },
     {
       "ticker": "UNH",
       "trades": 22,
       "wins": 8,
       "win_rate": 0.36363636363636365,
-      "avg_return": -0.010951455229224062,
-      "total_pnl_usd": -24.093201504292935
+      "avg_return": -0.010951488508581908,
+      "total_pnl_usd": -24.093274718880195
     },
     {
       "ticker": "TSM",
       "trades": 26,
       "wins": 9,
       "win_rate": 0.34615384615384615,
-      "avg_return": -0.008827607066084372,
-      "total_pnl_usd": -22.951778371819366
+      "avg_return": -0.00882761524123227,
+      "total_pnl_usd": -22.951799627203908
     },
     {
       "ticker": "RKLB",
@@ -596,31 +596,31 @@
       "trades": 16,
       "wins": 5,
       "win_rate": 0.3125,
-      "avg_return": -0.010667322160525183,
-      "total_pnl_usd": -17.067715456840293
+      "avg_return": -0.010667350994477957,
+      "total_pnl_usd": -17.06776159116473
     }
   ],
   "by_pattern": [
     {
       "pattern": "RUSH_VOLUME",
-      "trades": 180,
-      "win_rate": 0.43333333333333335,
-      "avg_return": 0.01018520293339847,
-      "total_pnl_usd": 183.33365280117243
+      "trades": 181,
+      "win_rate": 0.43646408839779005,
+      "avg_return": 0.010172354134181799,
+      "total_pnl_usd": 184.11960982869056
     },
     {
       "pattern": "BUILT_VOLUME",
       "trades": 700,
       "win_rate": 0.39,
-      "avg_return": 0.0023485940632439256,
-      "total_pnl_usd": 164.40158442707482
+      "avg_return": 0.002348592195381963,
+      "total_pnl_usd": 164.40145367673742
     },
     {
       "pattern": "VOLUME_PIT",
       "trades": 130,
       "win_rate": 0.46923076923076923,
-      "avg_return": 0.011485903356924261,
-      "total_pnl_usd": 149.3167436400154
+      "avg_return": 0.01089027853107371,
+      "total_pnl_usd": 141.57362090395824
     }
   ],
   "limitations": [
