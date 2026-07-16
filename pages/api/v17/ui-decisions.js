@@ -90,6 +90,19 @@ export default async function handler(req, res) {
     const status = req.method === "GET" && req.query?.status ? String(req.query.status) : undefined;
     const assets = getAssetRegistry({ status });
     const body = req.method === "POST" ? (req.body || {}) : {};
+    console.log("v17_ui_decisions_caller", JSON.stringify({
+      at: now,
+      method: req.method,
+      userAgent: req.headers["user-agent"] || null,
+      forwardedFor: req.headers["x-forwarded-for"] || null,
+      vercelId: req.headers["x-vercel-id"] || null,
+      referer: req.headers.referer || null,
+      persistState: body.persistState === true,
+      hasMarkets: Boolean(body.markets || body.marketData),
+      marketCount: Object.keys(body.markets || body.marketData || {}).length,
+      hasPreviousStates: Boolean(body.previousStates),
+      hasEvents: Array.isArray(body.events)
+    }));
     const markets = body.markets || body.marketData || {};
     const storedAction = await readV17State(V17_STORAGE_KEYS.ACTION_STATE, { states: {} });
     const storedEvents = await readV17State(V17_STORAGE_KEYS.EVENT_LOG, { events: [] });
