@@ -1,0 +1,30 @@
+# Watchlist 36 Stage Classification
+
+No name is automatically removed at this stage.
+
+## A_PRIORITY_DEEP_REVIEW (5)
+PWR, AAPL, MSFT, NOW, AXP
+
+## B_CYCLICAL_OR_HIGH_DRAWDOWN (4)
+MU, STX, DELL, WDC
+
+## B_QUALITY_WAIT_FOR_PRICE (3)
+LLY, COST, LIN
+
+## C_SECONDARY_REVIEW (9)
+NFLX, AMZN, MA, BAC, V, QCOM, NOC, ADBE, REGN
+
+## C_SPECIAL_SITUATION_REVIEW (2)
+UNH, ACN
+
+## D_5Y_PLUS (2)
+SPOT, SOFI
+
+## D_MONITOR (6)
+PBR, TMUS, CVX, KO, XOM, OXY
+
+## E_SHORT_HISTORY (3)
+SNDK, GEV, CEG
+
+## F_DATA_PENDING (2)
+SKHY, DRAM
