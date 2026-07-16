@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/backtest_market_46_complete.py'
       - 'scripts/backtest_market_91_discount_hunter.py'
+      - 'scripts/validate_market_46_ranking.py'
       - '.github/workflows/run-market-46-backtest.yml'
 
 permissions:
@@ -34,10 +35,14 @@ jobs:
       - name: Run unified 46-name backtest
         run: python scripts/backtest_market_46_complete.py
 
+      - name: Build validated rankings
+        run: python scripts/validate_market_46_ranking.py
+
       - name: Validate outputs
         run: |
           test -f reports/backtests/market_46/market_46_master_ranking.csv
           test -f reports/backtests/market_46/market_46_status.csv
+          test -f reports/backtests/market_46/market_46_validated_full10y_ranking.csv
           python - <<'PY'
           import pandas as pd
           p='reports/backtests/market_46/market_46_status.csv'
