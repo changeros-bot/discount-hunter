@@ -110,9 +110,11 @@ def main():
     taxonomy = pd.read_csv(TAXONOMY)[['ticker','sector_group','business_type','portfolio_role','strategy_bucket']]
     funds = pd.read_csv(FUNDS)
 
-    # Keep price/backtest fields from stages and fundamental/valuation fields from funds.
-    overlap = set(stages.columns).intersection(funds.columns) - {'ticker'}
-    stages = stages.drop(columns=[c for c in overlap if c in stages.columns])
+    # Preserve stage/backtest fields. Only remove duplicated fundamental/valuation snapshots from stages.
+    stage_snapshot_cols = [
+        'revenue_growth','earnings_growth','profit_margin','free_cash_flow','forward_pe','trailing_pe'
+    ]
+    stages = stages.drop(columns=[c for c in stage_snapshot_cols if c in stages.columns])
     funds = funds.drop(columns=[c for c in ['sector_group','business_type','portfolio_role','strategy_bucket','stage'] if c in funds.columns])
 
     df = stages.merge(taxonomy, on='ticker', how='left').merge(funds, on='ticker', how='left')
