@@ -9,6 +9,7 @@ on:
       - 'scripts/backtest_market_91_discount_hunter.py'
       - 'scripts/validate_market_46_ranking.py'
       - 'scripts/classify_watchlist_36.py'
+      - 'scripts/deep_review_watchlist_9.py'
       - '.github/workflows/run-market-46-backtest.yml'
 
 permissions:
@@ -35,20 +36,26 @@ jobs:
         run: python scripts/validate_market_46_ranking.py
       - name: Classify all 36 watchlist names
         run: python scripts/classify_watchlist_36.py
+      - name: Deep review top nine watchlist names
+        run: python scripts/deep_review_watchlist_9.py
       - name: Validate outputs
         run: |
           test -f reports/backtests/market_46/market_46_master_ranking.csv
           test -f reports/backtests/market_46/market_46_status.csv
           test -f reports/backtests/market_46/market_46_validated_full10y_ranking.csv
           test -f reports/backtests/market_46/watchlist_36_stage_classification.csv
+          test -f reports/backtests/market_46/watchlist_9_fundamental_summary.csv
           python - <<'PY'
           import pandas as pd
           status=pd.read_csv('reports/backtests/market_46/market_46_status.csv')
           stages=pd.read_csv('reports/backtests/market_46/watchlist_36_stage_classification.csv')
+          deep=pd.read_csv('reports/backtests/market_46/watchlist_9_fundamental_summary.csv')
           assert len(status)==46 and status['ticker'].nunique()==46
           assert len(stages)==36 and stages['ticker'].nunique()==36
+          assert len(deep)==9 and deep['ticker'].nunique()==9
           print(status['status'].value_counts(dropna=False).to_string())
           print(stages['stage'].value_counts(dropna=False).to_string())
+          print(deep[['ticker','fundamental_score']].to_string(index=False))
           PY
       - name: Upload backtest artifact
         uses: actions/upload-artifact@v4
