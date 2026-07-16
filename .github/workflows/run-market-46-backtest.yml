@@ -11,6 +11,7 @@ on:
       - 'scripts/classify_watchlist_36.py'
       - 'scripts/group_watchlist_36_taxonomy.py'
       - 'scripts/deep_review_watchlist_36.py'
+      - 'scripts/build_watchlist_36_group_decisions.py'
       - 'scripts/deep_review_watchlist_9.py'
       - 'scripts/build_watchlist_9_decision_matrix.py'
       - '.github/workflows/run-market-46-backtest.yml'
@@ -43,6 +44,8 @@ jobs:
         run: python scripts/group_watchlist_36_taxonomy.py
       - name: Deep review all 36 watchlist names
         run: python scripts/deep_review_watchlist_36.py
+      - name: Build group-specific decisions for all 36 names
+        run: python scripts/build_watchlist_36_group_decisions.py
       - name: Deep review top nine watchlist names
         run: python scripts/deep_review_watchlist_9.py
       - name: Build nine-name decision matrix
@@ -57,6 +60,7 @@ jobs:
           test -f reports/backtests/market_46/watchlist_36_by_sector.csv
           test -f reports/backtests/market_46/watchlist_36_by_strategy.csv
           test -f reports/backtests/market_46/watchlist_36_fundamental_summary.csv
+          test -f reports/backtests/market_46/watchlist_36_group_decision_summary.csv
           test -f reports/backtests/market_46/watchlist_9_fundamental_summary.csv
           test -f reports/backtests/market_46/watchlist_9_decision_summary.csv
           python - <<'PY'
@@ -65,18 +69,21 @@ jobs:
           stages=pd.read_csv('reports/backtests/market_46/watchlist_36_stage_classification.csv')
           taxonomy=pd.read_csv('reports/backtests/market_46/watchlist_36_full_taxonomy.csv')
           fullfund=pd.read_csv('reports/backtests/market_46/watchlist_36_fundamental_summary.csv')
+          groupdec=pd.read_csv('reports/backtests/market_46/watchlist_36_group_decision_summary.csv')
           deep=pd.read_csv('reports/backtests/market_46/watchlist_9_fundamental_summary.csv')
           decisions=pd.read_csv('reports/backtests/market_46/watchlist_9_decision_summary.csv')
           assert len(status)==46 and status['ticker'].nunique()==46
           assert len(stages)==36 and stages['ticker'].nunique()==36
           assert len(taxonomy)==36 and taxonomy['ticker'].nunique()==36
           assert len(fullfund)==36 and fullfund['ticker'].nunique()==36
+          assert len(groupdec)==36 and groupdec['ticker'].nunique()==36
           assert len(deep)==9 and deep['ticker'].nunique()==9
           assert len(decisions)==9 and decisions['ticker'].nunique()==9
           print(status['status'].value_counts(dropna=False).to_string())
           print(stages['stage'].value_counts(dropna=False).to_string())
           print(taxonomy['strategy_bucket'].value_counts(dropna=False).to_string())
           print(fullfund['fundamental_status'].value_counts(dropna=False).to_string())
+          print(groupdec['decision'].value_counts(dropna=False).to_string())
           print(decisions[['ticker','decision','quality_points','backtest_points']].to_string(index=False))
           PY
       - name: Upload backtest artifact
