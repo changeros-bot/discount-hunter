@@ -12,9 +12,7 @@ on:
       - 'scripts/group_watchlist_36_taxonomy.py'
       - 'scripts/deep_review_watchlist_36.py'
       - 'scripts/build_watchlist_36_group_decisions.py'
-      - 'scripts/build_watchlist_36_final_report.py'
-      - 'scripts/deep_review_watchlist_9.py'
-      - 'scripts/build_watchlist_9_decision_matrix.py'
+      - 'scripts/export_watchlist_36_final.py'
       - '.github/workflows/run-market-46-backtest.yml'
 
 concurrency:
@@ -39,79 +37,45 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pandas yfinance numpy
-      - name: Run unified 46-name backtest
+      - name: Run price backtest
         run: python scripts/backtest_market_46_complete.py
-      - name: Build validated rankings
+      - name: Validate rankings
         run: python scripts/validate_market_46_ranking.py
-      - name: Classify all 36 watchlist names
+      - name: Classify 36 names
         run: python scripts/classify_watchlist_36.py
-      - name: Group all 36 names by taxonomy
+      - name: Group 36 names
         run: python scripts/group_watchlist_36_taxonomy.py
-      - name: Deep review all 36 watchlist names
+      - name: Review 36 fundamentals
         run: python scripts/deep_review_watchlist_36.py
-      - name: Build group-specific decisions for all 36 names
+      - name: Build 36 decisions
         run: python scripts/build_watchlist_36_group_decisions.py
-      - name: Build final consolidated 36-name report
-        run: python scripts/build_watchlist_36_final_report.py
-      - name: Deep review top nine watchlist names
-        run: python scripts/deep_review_watchlist_9.py
-      - name: Build nine-name decision matrix
-        run: python scripts/build_watchlist_9_decision_matrix.py
-      - name: Validate outputs
+      - name: Export single final table
+        run: python scripts/export_watchlist_36_final.py
+      - name: Validate final table
         run: |
-          test -f reports/backtests/market_46/market_46_master_ranking.csv
-          test -f reports/backtests/market_46/market_46_status.csv
-          test -f reports/backtests/market_46/market_46_validated_full10y_ranking.csv
-          test -f reports/backtests/market_46/watchlist_36_stage_classification.csv
-          test -f reports/backtests/market_46/watchlist_36_full_taxonomy.csv
-          test -f reports/backtests/market_46/watchlist_36_by_sector.csv
-          test -f reports/backtests/market_46/watchlist_36_by_strategy.csv
-          test -f reports/backtests/market_46/watchlist_36_fundamental_summary.csv
-          test -f reports/backtests/market_46/watchlist_36_group_decision_summary.csv
-          test -f reports/backtests/market_46/watchlist_36_final_classification.csv
-          test -f reports/backtests/market_46/watchlist_9_fundamental_summary.csv
-          test -f reports/backtests/market_46/watchlist_9_decision_summary.csv
+          test -f reports/backtests/market_46/watchlist_36_final.csv
           python - <<'PY'
           import pandas as pd
-          status=pd.read_csv('reports/backtests/market_46/market_46_status.csv')
-          stages=pd.read_csv('reports/backtests/market_46/watchlist_36_stage_classification.csv')
-          taxonomy=pd.read_csv('reports/backtests/market_46/watchlist_36_full_taxonomy.csv')
-          fullfund=pd.read_csv('reports/backtests/market_46/watchlist_36_fundamental_summary.csv')
-          groupdec=pd.read_csv('reports/backtests/market_46/watchlist_36_group_decision_summary.csv')
-          final=pd.read_csv('reports/backtests/market_46/watchlist_36_final_classification.csv')
-          deep=pd.read_csv('reports/backtests/market_46/watchlist_9_fundamental_summary.csv')
-          decisions=pd.read_csv('reports/backtests/market_46/watchlist_9_decision_summary.csv')
-          assert len(status)==46 and status['ticker'].nunique()==46
-          assert len(stages)==36 and stages['ticker'].nunique()==36
-          assert len(taxonomy)==36 and taxonomy['ticker'].nunique()==36
-          assert len(fullfund)==36 and fullfund['ticker'].nunique()==36
-          assert len(groupdec)==36 and groupdec['ticker'].nunique()==36
+          final=pd.read_csv('reports/backtests/market_46/watchlist_36_final.csv')
           assert len(final)==36 and final['ticker'].nunique()==36
-          assert len(deep)==9 and deep['ticker'].nunique()==9
-          assert len(decisions)==9 and decisions['ticker'].nunique()==9
-          print(status['status'].value_counts(dropna=False).to_string())
-          print(stages['stage'].value_counts(dropna=False).to_string())
-          print(taxonomy['strategy_bucket'].value_counts(dropna=False).to_string())
-          print(fullfund['fundamental_status'].value_counts(dropna=False).to_string())
-          print(groupdec['decision'].value_counts(dropna=False).to_string())
-          print(final['final_tier'].value_counts(dropna=False).to_string())
-          print(decisions[['ticker','decision','quality_points','backtest_points']].to_string(index=False))
+          assert list(final.columns)==['ticker','strategy','fundamental_status','quality_score','backtest_score','valuation_band','decision','reason']
+          print(final['decision'].value_counts(dropna=False).to_string())
           PY
-      - name: Upload backtest artifact
+      - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: market-46-backtest
-          path: reports/backtests/market_46/
+          name: watchlist-36-final
+          path: reports/backtests/market_46/watchlist_36_final.csv
           retention-days: 30
-      - name: Commit generated reports
+      - name: Commit result
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add reports/backtests/market_46/
+          git add reports/backtests/market_46/watchlist_36_final.csv
           if git diff --cached --quiet; then
-            echo 'No report changes to commit'
+            echo 'No final-table changes to commit'
           else
-            git commit -m 'Update unified 46-name backtest results [skip ci]'
+            git commit -m 'Update watchlist 36 final table [skip ci]'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
