@@ -1,31 +1,26 @@
-name: Run Market 46 Backtest
+name: Build Watchlist 36 Final
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'scripts/backtest_market_46_complete.py'
-      - 'scripts/backtest_market_91_discount_hunter.py'
-      - 'scripts/validate_market_46_ranking.py'
-      - 'scripts/classify_watchlist_36.py'
-      - 'scripts/group_watchlist_36_taxonomy.py'
       - 'scripts/deep_review_watchlist_36.py'
       - 'scripts/build_watchlist_36_group_decisions.py'
       - 'scripts/export_watchlist_36_final.py'
       - '.github/workflows/run-market-46-backtest.yml'
 
 concurrency:
-  group: market-46-backtest-main
+  group: watchlist-36-final-main
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  backtest:
+  build-final:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,31 +29,27 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
+        run: pip install pandas yfinance
+      - name: Verify committed inputs
         run: |
-          python -m pip install --upgrade pip
-          pip install pandas yfinance numpy
-      - name: Run price backtest
-        run: python scripts/backtest_market_46_complete.py
-      - name: Validate rankings
-        run: python scripts/validate_market_46_ranking.py
-      - name: Classify 36 names
-        run: python scripts/classify_watchlist_36.py
-      - name: Group 36 names
-        run: python scripts/group_watchlist_36_taxonomy.py
+          test -f reports/backtests/market_46/watchlist_36_stage_classification.csv
+          test -f reports/backtests/market_46/watchlist_36_full_taxonomy.csv
       - name: Review 36 fundamentals
         run: python scripts/deep_review_watchlist_36.py
       - name: Build 36 decisions
         run: python scripts/build_watchlist_36_group_decisions.py
-      - name: Export single final table
+      - name: Export final table
         run: python scripts/export_watchlist_36_final.py
       - name: Validate final table
         run: |
-          test -f reports/backtests/market_46/watchlist_36_final.csv
           python - <<'PY'
           import pandas as pd
-          final=pd.read_csv('reports/backtests/market_46/watchlist_36_final.csv')
-          assert len(final)==36 and final['ticker'].nunique()==36
-          assert list(final.columns)==['ticker','strategy','fundamental_status','quality_score','backtest_score','valuation_band','decision','reason']
+          path='reports/backtests/market_46/watchlist_36_final.csv'
+          final=pd.read_csv(path)
+          expected=['ticker','strategy','fundamental_status','quality_score','backtest_score','valuation_band','decision','reason']
+          assert len(final)==36
+          assert final['ticker'].nunique()==36
+          assert list(final.columns)==expected
           print(final['decision'].value_counts(dropna=False).to_string())
           PY
       - name: Upload result
