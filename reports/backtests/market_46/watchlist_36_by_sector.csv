@@ -1,0 +1,32 @@
+sector_group,tickers,count
+AI Hardware / Servers,DELL,1
+AI Memory,MU,1
+Banking,BAC,1
+Biotech / Pharma,REGN,1
+Consumer Defensive / Retail,COST,1
+Consumer Platform / Audio,SPOT,1
+Consumer Platform / Media,NFLX,1
+Consumer Staples,KO,1
+Defense,NOC,1
+Energy,"CVX, XOM, OXY",3
+Energy / Emerging Market,PBR,1
+Fintech,SOFI,1
+IT Services / Consulting,ACN,1
+Industrial Gases,LIN,1
+Managed Care,UNH,1
+Mega-cap Consumer Tech,AAPL,1
+Mega-cap Platform / Cloud,"MSFT, AMZN",2
+Memory / Korea ETF,SKHY,1
+Memory ETF,DRAM,1
+Nuclear / Power,CEG,1
+Payments,"MA, V",2
+Payments / Credit,AXP,1
+Pharma,LLY,1
+Power Equipment / Grid,GEV,1
+Power Grid / AI Infrastructure,PWR,1
+Semiconductor / Connectivity,QCOM,1
+Software / Cloud,NOW,1
+Software / Creative,ADBE,1
+Storage / Flash,SNDK,1
+Storage / HDD,"STX, WDC",2
+Telecom,TMUS,1
