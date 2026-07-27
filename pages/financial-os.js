@@ -145,14 +145,96 @@ function Entry({ txs, setTxs, budgets, onSynced }) {
 }
 
 function Budget({ txs, budgets, setBudgets, onSynced }) {
-  const [form, setForm] = useState({ name: '', category: '生活費', amount: '' });
+  const empty = { name: '', category: '生活費', amount: '' };
+  const [form, setForm] = useState(empty);
   const [msg, setMsg] = useState('');
+  const [editingId, setEditingId] = useState('');
+  const [editForm, setEditForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
   const cycle = livingCycle();
   const living = stat(txs, { start: cycle.start, end: today() });
   const month = stat(txs, { start: monthStart(), end: today() });
   const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);
-  async function add() { const amount = Number(form.amount); if (!amount) return; const row = { id: 'b' + Date.now(), name: form.name.trim() || form.category, category: form.category, amount, mode: 'project' }; try { await apiWrite('budget', 'upsert', row); setBudgets([row, ...budgets]); setForm({ name: '', category: '生活費', amount: '' }); setMsg('預算已同步'); onSynced(); } catch (e) { setMsg('失敗：' + e.message); } }
-  return <><Card><Title t="新增預算" r="Neon 主寫入" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="預算金額" /><Btn onClick={add}>新增預算</Btn>{msg && <div style={{ color: '#86efac', fontSize: 12 }}>{msg}</div>}</div></Card>{budgets.map((b) => { const used = rows(b).reduce((s, x) => s + Number(x.amount || 0), 0); return <Card key={b.id}><Title t={b.name} r={b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`} /><Metric label={b.category} value={nt(used)} sub={`預算 ${nt(b.amount)}｜剩餘 ${nt(Number(b.amount) - used)}`} />{rows(b).length > 0 && <TxList rows={rows(b)} budgets={budgets} />}</Card>; })}</>;
+  const used = (b) => rows(b).reduce((s, x) => s + Number(x.amount || 0), 0);
+  const orderedBudgets = [...budgets].sort((a, b) => {
+    const aSystem = ['b-living', 'b-invest'].includes(a.id);
+    const bSystem = ['b-living', 'b-invest'].includes(b.id);
+    if (aSystem !== bSystem) return aSystem ? 1 : -1;
+    return String(b.id).localeCompare(String(a.id));
+  });
+  const totalBudget = budgets.reduce((s, b) => s + Number(b.amount || 0), 0);
+  const totalUsed = budgets.reduce((s, b) => s + used(b), 0);
+  const totalRemaining = totalBudget - totalUsed;
+
+  async function add() {
+    const amount = Number(form.amount);
+    if (!amount || saving) return;
+    const row = { id: 'b' + Date.now(), name: form.name.trim() || form.category, category: form.category, amount, mode: 'project' };
+    setSaving(true);
+    try {
+      await apiWrite('budget', 'upsert', row);
+      setBudgets([row, ...budgets]);
+      setForm(empty);
+      setMsg(`已新增：${row.name} ${nt(row.amount)}`);
+      await onSynced();
+    } catch (e) {
+      setMsg('新增失敗：' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEdit(b) {
+    setEditingId(b.id);
+    setEditForm({ name: b.name, category: b.category, amount: String(b.amount) });
+    setMsg('');
+  }
+
+  async function completeEdit(b) {
+    const amount = Number(editForm.amount);
+    if (!editForm.name.trim() || !Number.isFinite(amount) || amount < 0 || saving) return;
+    const row = { ...b, name: editForm.name.trim(), category: editForm.category, amount };
+    setSaving(true);
+    try {
+      await apiWrite('budget', 'upsert', row);
+      setBudgets(budgets.map((x) => x.id === b.id ? row : x));
+      setEditingId('');
+      setMsg(`已完成更新：${row.name}`);
+      await onSynced();
+    } catch (e) {
+      setMsg('更新失敗：' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(b) {
+    if (!confirm(`確定刪除預算「${b.name}」？已綁定的交易不會被刪除。`)) return;
+    setSaving(true);
+    try {
+      await apiWrite('budget', 'delete', b);
+      setBudgets(budgets.filter((x) => x.id !== b.id));
+      setEditingId('');
+      setMsg(`已刪除：${b.name}`);
+      await onSynced();
+    } catch (e) {
+      setMsg('刪除失敗：' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <>
+    <Card><Title t="新增預算" r="Neon 主寫入" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="預算金額" inputMode="numeric" /><Btn onClick={add} disabled={saving}>{saving ? '同步中…' : '新增預算'}</Btn>{msg && <div style={{ color: /失敗/.test(msg) ? '#fca5a5' : '#86efac', fontSize: 12, fontWeight: 900 }}>{msg}</div>}</div></Card>
+    {orderedBudgets.map((b) => {
+      const bUsed = used(b);
+      const remaining = Number(b.amount || 0) - bUsed;
+      const period = b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;
+      if (editingId === b.id) return <Card key={b.id}><Title t="編輯預算" r={period} /><div style={{ display: 'grid', gap: 9 }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} /><select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={input()} inputMode="numeric" /><div style={{ color: '#94a3b8', fontSize: 12 }}>目前已使用 {nt(bUsed)}｜修改預算不會改動交易明細</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><Btn onClick={() => completeEdit(b)} disabled={saving}>{saving ? '同步中' : '完成'}</Btn><button onClick={() => setEditingId('')} style={{ border: '1px solid rgba(148,163,184,.38)', background: 'rgba(15,23,42,.7)', color: '#cbd5e1', borderRadius: 12, fontWeight: 900 }}>取消</button><button onClick={() => remove(b)} disabled={saving} style={{ border: '1px solid rgba(248,113,113,.45)', background: 'rgba(127,29,29,.18)', color: '#fca5a5', borderRadius: 12, fontWeight: 900 }}>刪除</button></div></div></Card>;
+      return <Card key={b.id}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12 }}><div><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{b.name}</h2><div style={{ color: '#86efac', fontSize: 12, fontWeight: 900, marginTop: 4 }}>{period}</div></div><button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div><Metric label={b.category} value={nt(bUsed)} sub={`預算 ${nt(b.amount)}｜${remaining < 0 ? `超支 ${nt(Math.abs(remaining))}` : `剩餘 ${nt(remaining)}`}`} bad={remaining < 0} />{rows(b).length > 0 && <TxList rows={rows(b)} budgets={budgets} />}</Card>;
+    })}
+    <Card style={{ borderColor: 'rgba(56,189,248,.42)' }}><Title t="所有預算總計" r={`${budgets.length} 項`} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><div><div style={{ color: '#94a3b8', fontSize: 11 }}>總預算</div><b style={{ fontSize: 18 }}>{nt(totalBudget)}</b></div><div><div style={{ color: '#94a3b8', fontSize: 11 }}>已使用</div><b style={{ fontSize: 18, color: '#fca5a5' }}>{nt(totalUsed)}</b></div><div><div style={{ color: '#94a3b8', fontSize: 11 }}>{totalRemaining < 0 ? '總超支' : '總剩餘'}</div><b style={{ fontSize: 18, color: totalRemaining < 0 ? '#fca5a5' : '#86efac' }}>{nt(Math.abs(totalRemaining))}</b></div></div></Card>
+  </>;
 }
 
 function AssetPage({ assets, setAssets, onSynced }) {
@@ -183,5 +265,5 @@ export default function FinancialOS() {
   async function load() { setSync((s) => ({ ...s, loading: true })); try { const res = await fetch('/api/financial/data?limit=1000&t=' + Date.now(), { cache: 'no-store' }); const json = await res.json(); if (!res.ok || json.ok === false) throw new Error(json.error || 'Neon 讀取失敗'); const cloudTx = cleanDb(json.transactions), cloudBudgets = cleanBudgets(json.budgets), cloudAssets = cleanAssets(json.assets); setTxs(cloudTx); setBudgets(cloudBudgets); setAssets(cloudAssets); localStorage.setItem(TX_KEY, JSON.stringify(cloudTx)); localStorage.setItem(BUDGET_KEY, JSON.stringify(cloudBudgets)); localStorage.setItem(ASSET_KEY, JSON.stringify(cloudAssets)); setSync({ loading: false, source: 'neon', error: '', lastSync: new Date().toLocaleString('zh-TW'), counts: { transactions: cloudTx.length, budgets: cloudBudgets.length, assets: cloudAssets.length } }); } catch (e) { const localTx = cleanDb(JSON.parse(localStorage.getItem(TX_KEY) || '[]')); const localBudgets = cleanBudgets(JSON.parse(localStorage.getItem(BUDGET_KEY) || 'null')); const localAssets = cleanAssets(JSON.parse(localStorage.getItem(ASSET_KEY) || 'null')); setTxs(localTx); setBudgets(localBudgets); setAssets(localAssets); setSync({ loading: false, source: 'local', error: e.message, lastSync: '', counts: { transactions: localTx.length, budgets: localBudgets.length, assets: localAssets.length } }); } }
   useEffect(() => { load(); }, []);
   const status = sync.loading ? '正在同步 Neon…' : sync.source === 'neon' ? `Neon 已同步｜交易 ${sync.counts?.transactions}・預算 ${sync.counts?.budgets}・資產 ${sync.counts?.assets}｜${sync.lastSync}` : `Local 備援｜${sync.error}`;
-  return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}><section style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V5.6｜Neon 主讀寫｜Local 備援</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section><div style={{ color: sync.source === 'local' ? '#fca5a5' : '#86efac', border: '1px solid rgba(34,197,94,.35)', background: 'rgba(34,197,94,.08)', borderRadius: 12, padding: '9px 11px', fontSize: 11, fontWeight: 900, marginBottom: 12 }}>{status}</div>{tab === 'dashboard' && <Dashboard txs={txs} sync={sync} />}{tab === 'entry' && <Entry txs={txs} setTxs={setTxs} budgets={budgets} onSynced={load} />}{tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} onSynced={load} />}{tab === 'assets' && <AssetPage assets={assets} setAssets={setAssets} onSynced={load} />}</div><nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,.94)', borderTop: '1px solid rgba(34,197,94,.24)', padding: '8px 8px 10px' }}><div style={{ maxWidth: 430, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>{[['dashboard', '總覽'], ['entry', '記帳'], ['audit', '查帳'], ['budget', '預算'], ['assets', '資產']].map(([key, label]) => key === 'audit' ? <a key={key} href="/financial-audit" style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000, textAlign: 'center', textDecoration: 'none' }}>{label}</a> : <button key={key} onClick={() => setTab(key)} style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: tab === key ? 'linear-gradient(180deg,rgba(250,204,21,.32),rgba(92,64,16,.78))' : 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000 }}>{label}</button>)}</div></nav></main>;
+  return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}><section style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V5.7｜Neon 主讀寫｜Local 備援</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section><div style={{ color: sync.source === 'local' ? '#fca5a5' : '#86efac', border: '1px solid rgba(34,197,94,.35)', background: 'rgba(34,197,94,.08)', borderRadius: 12, padding: '9px 11px', fontSize: 11, fontWeight: 900, marginBottom: 12 }}>{status}</div>{tab === 'dashboard' && <Dashboard txs={txs} sync={sync} />}{tab === 'entry' && <Entry txs={txs} setTxs={setTxs} budgets={budgets} onSynced={load} />}{tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} onSynced={load} />}{tab === 'assets' && <AssetPage assets={assets} setAssets={setAssets} onSynced={load} />}</div><nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,.94)', borderTop: '1px solid rgba(34,197,94,.24)', padding: '8px 8px 10px' }}><div style={{ maxWidth: 430, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>{[['dashboard', '總覽'], ['entry', '記帳'], ['audit', '查帳'], ['budget', '預算'], ['assets', '資產']].map(([key, label]) => key === 'audit' ? <a key={key} href="/financial-audit" style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000, textAlign: 'center', textDecoration: 'none' }}>{label}</a> : <button key={key} onClick={() => setTab(key)} style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: tab === key ? 'linear-gradient(180deg,rgba(250,204,21,.32),rgba(92,64,16,.78))' : 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000 }}>{label}</button>)}</div></nav></main>;
 }
