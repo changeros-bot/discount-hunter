@@ -1,4 +1,4 @@
-name: Patch budget completion and details
+name: Patch budget archive and details
 
 on:
   push:
@@ -18,49 +18,48 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Patch Financial OS budget UX
+      - name: Patch Financial OS budget archive UX
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('pages/financial-os.js')
           s = p.read_text()
 
-          # State for expanded budget detail cards.
           if "const [expandedBudgetIds, setExpandedBudgetIds]" not in s:
               s = s.replace(
                   "const [saving, setSaving] = useState(false);\n  const cycle = livingCycle();",
                   "const [saving, setSaving] = useState(false);\n  const [expandedBudgetIds, setExpandedBudgetIds] = useState({});\n  const cycle = livingCycle();"
               )
 
-          if "const isCompleted = (b) => b.mode === 'project_completed';" not in s:
+          if "const isArchived = (b) => b.mode === 'project_archived';" not in s:
               s = s.replace(
                   "const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);",
-                  "const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);\n  const isCompleted = (b) => b.mode === 'project_completed';\n  const isExpanded = (b) => Boolean(expandedBudgetIds[b.id]);\n  const toggleDetails = (b) => setExpandedBudgetIds((current) => ({ ...current, [b.id]: !current[b.id] }));"
+                  "const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);\n  const isArchived = (b) => b.mode === 'project_archived';\n  const isExpanded = (b) => Boolean(expandedBudgetIds[b.id]);\n  const toggleDetails = (b) => setExpandedBudgetIds((current) => ({ ...current, [b.id]: !current[b.id] }));"
               )
 
-          if "const aDone = isCompleted(a);" not in s:
+          if "const aArchived = isArchived(a);" not in s:
               s = s.replace(
                   "if (aSystem !== bSystem) return aSystem ? 1 : -1;\n    return String(b.id).localeCompare(String(a.id));",
-                  "if (aSystem !== bSystem) return aSystem ? 1 : -1;\n    const aDone = isCompleted(a);\n    const bDone = isCompleted(b);\n    if (aDone !== bDone) return aDone ? 1 : -1;\n    return String(b.id).localeCompare(String(a.id));"
+                  "if (aSystem !== bSystem) return aSystem ? 1 : -1;\n    const aArchived = isArchived(a);\n    const bArchived = isArchived(b);\n    if (aArchived !== bArchived) return aArchived ? 1 : -1;\n    return String(b.id).localeCompare(String(a.id));"
               )
 
           s = s.replace("setMsg(`已完成更新：${row.name}`);", "setMsg(`已儲存修改：${row.name}`);")
           s = s.replace("{saving ? '同步中' : '完成'}</Btn>", "{saving ? '同步中' : '儲存修改'}</Btn>")
 
-          if "async function setTaskCompleted" not in s:
+          if "async function setBudgetArchived" not in s:
               anchor = "  async function remove(b) {"
-              insert = """  async function setTaskCompleted(b, completed) {
+              insert = """  async function setBudgetArchived(b, archived) {
     if (!String(b.mode || '').startsWith('project')) return;
-    const row = { ...b, mode: completed ? 'project_completed' : 'project' };
+    const row = { ...b, mode: archived ? 'project_archived' : 'project' };
     setSaving(true);
     try {
       await apiWrite('budget', 'upsert', row);
       setBudgets(budgets.map((x) => x.id === b.id ? row : x));
       setEditingId('');
-      setMsg(completed ? `任務已完成：${b.name}` : `已重新開啟：${b.name}`);
+      setMsg(archived ? `預算已結案並封存：${b.name}` : `預算已重新開啟：${b.name}`);
       await onSynced();
     } catch (e) {
-      setMsg((completed ? '標記完成失敗：' : '重新開啟失敗：') + e.message);
+      setMsg((archived ? '預算結案失敗：' : '重新開啟失敗：') + e.message);
     } finally {
       setSaving(false);
     }
@@ -71,11 +70,11 @@ jobs:
 
           s = s.replace(
               "const period = b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;",
-              "const period = isCompleted(b) ? '已完成' : b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;"
+              "const period = isArchived(b) ? '已封存' : b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;"
           )
 
           old_header = """<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div><Metric"""
-          new_header = """<div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>{String(b.mode || '').startsWith('project') && <button onClick={() => setTaskCompleted(b, !isCompleted(b))} disabled={saving} style={{ border: isCompleted(b) ? '1px solid rgba(56,189,248,.45)' : '1px solid rgba(34,197,94,.48)', background: isCompleted(b) ? 'rgba(14,116,144,.18)' : 'rgba(20,83,45,.24)', color: isCompleted(b) ? '#7dd3fc' : '#86efac', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>{isCompleted(b) ? '重新開啟' : '標記完成'}</button>}<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric"""
+          new_header = """<div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>{String(b.mode || '').startsWith('project') && <button onClick={() => setBudgetArchived(b, !isArchived(b))} disabled={saving} style={{ border: isArchived(b) ? '1px solid rgba(56,189,248,.45)' : '1px solid rgba(34,197,94,.48)', background: isArchived(b) ? 'rgba(14,116,144,.18)' : 'rgba(20,83,45,.24)', color: isArchived(b) ? '#7dd3fc' : '#86efac', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>{isArchived(b) ? '重新開啟' : '預算結案'}</button>}<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric"""
           if old_header in s:
               s = s.replace(old_header, new_header)
 
@@ -96,5 +95,5 @@ jobs:
             echo "Patch already applied"
             exit 0
           fi
-          git commit -m "fix(financial-os): add collapsible budget details and completion state"
+          git commit -m "fix(financial-os): add budget close archive and collapsible details"
           git push
