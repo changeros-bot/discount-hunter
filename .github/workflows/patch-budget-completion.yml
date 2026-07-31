@@ -1,9 +1,9 @@
-name: Separate active and archived budgets
+name: Add daily asset history chart
 
 on:
-  push:
-    paths:
-      - 'budget-separation-trigger.txt'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,65 +16,70 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Separate budget sections
+      - name: Add Neon asset snapshots and curve chart
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('pages/financial-os.js')
           s = p.read_text()
 
-          old = """  const orderedBudgets = [...budgets].sort((a, b) => {
-    const aSystem = ['b-living', 'b-invest'].includes(a.id);
-    const bSystem = ['b-living', 'b-invest'].includes(b.id);
-    if (aSystem !== bSystem) return aSystem ? 1 : -1;
-    const aArchived = isArchived(a);
-    const bArchived = isArchived(b);
-    if (aArchived !== bArchived) return aArchived ? 1 : -1;
-    return String(b.id).localeCompare(String(a.id));
-  });"""
-          new = """  const sortBudgetRows = (items) => [...items].sort((a, b) => {
-    const aSystem = ['b-living', 'b-invest'].includes(a.id);
-    const bSystem = ['b-living', 'b-invest'].includes(b.id);
-    if (aSystem !== bSystem) return aSystem ? 1 : -1;
-    return String(b.id).localeCompare(String(a.id));
-  });
-  const activeBudgets = sortBudgetRows(budgets.filter((b) => !isArchived(b)));
-  const archivedBudgets = sortBudgetRows(budgets.filter(isArchived));"""
-          if old not in s:
-              raise SystemExit('sorting anchor not found')
-          s = s.replace(old, new)
-
           s = s.replace(
-              """    {orderedBudgets.map((b) => {""",
-              """    <Title t=\"進行中預算\" r={`${activeBudgets.length} 項`} />
-    {activeBudgets.map((b) => {""",
-              1
+            "const cleanAssets = (rows) => Array.isArray(rows) ? rows.filter((a) => a?.id && a?.name).map((a) => ({ ...a, amount: Number(a.amount || 0), type: a.type || '其他' })) : defaultAssets;",
+            "const cleanAssets = (rows) => Array.isArray(rows) ? rows.filter((a) => a?.id && a?.name && a.type !== '資產快照').map((a) => ({ ...a, amount: Number(a.amount || 0), type: a.type || '其他' })) : defaultAssets;"
           )
 
-          anchor = """    <Card style={{ borderColor: 'rgba(56,189,248,.42)' }}><Title t=\"所有預算總計\""""
-          archived = """    {archivedBudgets.length > 0 && <>
-      <div style={{ margin: '22px 0 10px', paddingTop: 14, borderTop: '1px solid rgba(125,211,252,.28)' }}><Title t=\"已結案預算\" r={`${archivedBudgets.length} 項｜封存`} /></div>
-      {archivedBudgets.map((b) => {
-        const bRows = rows(b);
-        const bUsed = used(b);
-        const remaining = Number(b.amount || 0) - bUsed;
-        const period = '已封存';
-        if (editingId === b.id) return <Card key={b.id}><Title t=\"編輯預算\" r={period} /><div style={{ display: 'grid', gap: 9 }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} /><select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={input()} inputMode=\"numeric\" /><div style={{ color: '#94a3b8', fontSize: 12 }}>目前已使用 {nt(bUsed)}｜修改預算不會改動交易明細</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><Btn onClick={() => saveEdit(b)} disabled={saving}>{saving ? '同步中' : '儲存修改'}</Btn><button onClick={() => setEditingId('')} style={{ border: '1px solid rgba(148,163,184,.38)', background: 'rgba(15,23,42,.7)', color: '#cbd5e1', borderRadius: 12, fontWeight: 900 }}>取消</button><button onClick={() => remove(b)} disabled={saving} style={{ border: '1px solid rgba(248,113,113,.45)', background: 'rgba(127,29,29,.18)', color: '#fca5a5', borderRadius: 12, fontWeight: 900 }}>刪除</button></div></div></Card>;
-        return <Card key={b.id} style={{ opacity: .78, borderColor: 'rgba(125,211,252,.28)' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}><div><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{b.name}</h2><div style={{ color: '#7dd3fc', fontSize: 12, fontWeight: 900, marginTop: 4 }}>{period}</div></div><div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}><button onClick={() => setBudgetArchived(b, false)} disabled={saving} style={{ border: '1px solid rgba(56,189,248,.45)', background: 'rgba(14,116,144,.18)', color: '#7dd3fc', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>重新開啟</button><button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric label={b.category} value={nt(bUsed)} sub={`預算 ${nt(b.amount)}｜${remaining < 0 ? `超支 ${nt(Math.abs(remaining))}` : `剩餘 ${nt(remaining)}`}`} bad={remaining < 0} />{bRows.length > 0 && <><button onClick={() => toggleDetails(b)} style={{ width: '100%', marginTop: 10, border: '1px solid rgba(56,189,248,.32)', background: 'rgba(14,116,144,.12)', color: '#7dd3fc', borderRadius: 12, padding: '10px', fontWeight: 900 }}>{isExpanded(b) ? '收合明細' : `查看明細（${bRows.length} 筆）`}</button>{isExpanded(b) && <TxList rows={bRows} budgets={budgets} />}</>}</Card>;
-      })}
-    </>}
-"""
-          if anchor not in s:
-              raise SystemExit('total anchor not found')
-          s = s.replace(anchor, archived + anchor, 1)
-          s = s.replace('多元記帳本 V5.8｜Neon 主讀寫｜Local 備援', '多元記帳本 V5.9｜Neon 主讀寫｜Local 備援')
+          chart = r'''
+function AssetHistoryChart({ rows }) {
+  const data = [...rows].sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
+  if (!data.length) return <Card><Title t="資產變化曲線" r="每日快照" /><div style={{ color: '#94a3b8', fontSize: 13 }}>正在建立今天的第一筆資產快照。</div></Card>;
+  const values = data.map((x) => Number(x.amount || 0));
+  const min = Math.min(...values), max = Math.max(...values);
+  const spread = Math.max(1, max - min);
+  const w = 360, h = 190, left = 46, right = 12, top = 18, bottom = 34;
+  const x = (i) => left + (data.length === 1 ? (w - left - right) / 2 : i * (w - left - right) / (data.length - 1));
+  const y = (v) => top + (max - v) * (h - top - bottom) / spread;
+  const points = data.map((d, i) => `${x(i)},${y(Number(d.amount || 0))}`).join(' ');
+  const latest = data[data.length - 1];
+  const previous = data.length > 1 ? data[data.length - 2] : null;
+  const change = previous ? Number(latest.amount) - Number(previous.amount) : 0;
+  return <Card style={{ borderColor: 'rgba(56,189,248,.42)' }}><Title t="資產變化曲線" r={`近 ${data.length} 天`} /><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}><div><div style={{ color: '#94a3b8', fontSize: 11 }}>最新總資產</div><b style={{ fontSize: 24 }}>{nt(latest.amount)}</b></div><div style={{ textAlign: 'right' }}><div style={{ color: '#94a3b8', fontSize: 11 }}>較前一日</div><b style={{ color: change > 0 ? '#86efac' : change < 0 ? '#fca5a5' : '#cbd5e1' }}>{change > 0 ? '+' : ''}{nt(change)}</b></div></div><div style={{ overflowX: 'auto' }}><svg viewBox={`0 0 ${w} ${h}`} width="100%" role="img" aria-label="每日總資產變化曲線"><line x1={left} y1={top} x2={left} y2={h-bottom} stroke="rgba(148,163,184,.25)" /><line x1={left} y1={h-bottom} x2={w-right} y2={h-bottom} stroke="rgba(148,163,184,.25)" /><text x="2" y={top+5} fill="#94a3b8" fontSize="10">{nt(max)}</text><text x="2" y={h-bottom} fill="#94a3b8" fontSize="10">{nt(min)}</text>{data.length > 1 && <polyline fill="none" stroke="#22d3ee" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={points} />}{data.map((d, i) => <g key={d.date}><circle cx={x(i)} cy={y(Number(d.amount || 0))} r="4" fill="#86efac"><title>{d.date}｜{nt(d.amount)}</title></circle>{(i === 0 || i === data.length - 1 || data.length <= 7) && <text x={x(i)} y={h-10} textAnchor="middle" fill="#94a3b8" fontSize="9">{d.date.slice(5)}</text>}</g>)}</svg></div><div style={{ color: '#94a3b8', fontSize: 11, marginTop: 5 }}>每日自動保存一筆；同一天資產更新時會覆蓋當日快照。</div></Card>;
+}
+
+'''
+          if 'function AssetHistoryChart' not in s:
+            s = s.replace('function AssetPage({ assets, setAssets, onSynced }) {', chart + 'function AssetPage({ assets, setAssets, onSynced }) {')
+
+          s = s.replace(
+            "  const [ledger, setLedger] = useState({ loading: true, error: '', marketValue: 0 });\n  const manualTwd = useMemo(() => assets.reduce((s, a) => s + Number(a.amount || 0), 0), [assets]);",
+            "  const [ledger, setLedger] = useState({ loading: true, error: '', marketValue: 0 });\n  const [history, setHistory] = useState([]);\n  const manualTwd = useMemo(() => assets.reduce((s, a) => s + Number(a.amount || 0), 0), [assets]);"
+          )
+
+          old_load = "  async function loadLedger() { try { const r = await fetch('/api/wallet-ledger?t=' + Date.now(), { cache: 'no-store' }); const j = await r.json(); setLedger({ loading: false, error: '', marketValue: Number(j.portfolioMarketValue ?? j.currentValue ?? j.marketValue ?? 0) }); } catch (e) { setLedger({ loading: false, error: e.message, marketValue: 0 }); } }\n  useEffect(() => { loadLedger(); }, []);"
+          new_load = """  async function loadLedger() { try { const r = await fetch('/api/wallet-ledger?t=' + Date.now(), { cache: 'no-store' }); const j = await r.json(); setLedger({ loading: false, error: '', marketValue: Number(j.portfolioMarketValue ?? j.currentValue ?? j.marketValue ?? 0) }); } catch (e) { setLedger({ loading: false, error: e.message, marketValue: 0 }); } }
+  async function loadHistory() { try { const r = await fetch('/api/financial/data?limit=1&t=' + Date.now(), { cache: 'no-store' }); const j = await r.json(); const rows = (j.assets || []).filter((a) => a.type === '資產快照').map((a) => ({ date: String(a.id).replace('asset-snapshot-', ''), amount: Number(a.amount || 0), note: a.note || '' })).filter((a) => /^\\d{4}-\\d{2}-\\d{2}$/.test(a.date)); setHistory(rows); } catch (_) {} }
+  useEffect(() => { loadLedger(); loadHistory(); }, []);
+  useEffect(() => { if (ledger.loading) return; const total = manualTwd + Number(ledger.marketValue || 0) * RATE; const date = today(); const row = { id: 'asset-snapshot-' + date, name: date, type: '資產快照', amount: total, note: `手動 ${manualTwd}｜獵人 ${Number(ledger.marketValue || 0)} USD｜匯率 ${RATE}` }; apiWrite('asset', 'upsert', row).then(() => setHistory((current) => [...current.filter((x) => x.date !== date), { date, amount: total, note: row.note }])).catch(() => {}); }, [manualTwd, ledger.loading, ledger.marketValue]);"""
+          if old_load not in s:
+            raise SystemExit('asset load anchor not found')
+          s = s.replace(old_load, new_load)
+
+          old_end = "</div>)}{msg && <div style={{ color: /失敗/.test(msg) ? '#fca5a5' : '#86efac', fontSize: 12, marginTop: 10, fontWeight: 900 }}>{msg}</div>}</Card></>;"
+          new_end = "</div>)}{msg && <div style={{ color: /失敗/.test(msg) ? '#fca5a5' : '#86efac', fontSize: 12, marginTop: 10, fontWeight: 900 }}>{msg}</div>}</Card><AssetHistoryChart rows={history} /></>;"
+          if old_end not in s:
+            raise SystemExit('asset page end anchor not found')
+          s = s.replace(old_end, new_end, 1)
+          s = s.replace('多元記帳本 V5.9｜Neon 主讀寫｜Local 備援', '多元記帳本 V6.0｜Neon 主讀寫｜Local 備援')
           p.write_text(s)
           PY
 
       - name: Commit patch
         run: |
-          git config user.name "changeros-bot"
-          git config user.email "chang.eros@gmail.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pages/financial-os.js
-          git commit -m "fix(financial-os): separate active and archived budgets"
+          if git diff --cached --quiet; then
+            echo "Asset history chart already applied"
+            exit 0
+          fi
+          git commit -m "feat(financial-os): add daily asset history curve"
           git push
