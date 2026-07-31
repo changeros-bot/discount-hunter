@@ -10,10 +10,12 @@ const FUBON_MONTHLY = 2000 + 60 * RATE;
 const accountOptions = ['家用', '自用', '薪轉', '投資'];
 const cats = ['飲食', '投資', '家用', '居家修繕', '教育', '服飾', '交通', '娛樂', '醫療', '金融', '固定支出', '生活用品', '生活費', '薪水', '薪轉', '退稅', '早餐', '午餐', '晚餐', '飲料', '咖啡', '菸', '點心/宵夜', '機車', '醫療健康', '其他', '富邦DCA'];
 const assetTypes = ['現金', '銀行', '薪轉', '投資', '家用', '教育', '其他'];
+
 const defaultBudgets = [
   { id: 'b-living', name: '生活費', category: '生活費', amount: 8000, mode: 'living_cycle' },
   { id: 'b-invest', name: '富邦DCA', category: '富邦DCA', amount: FUBON_MONTHLY, mode: 'investment' },
 ];
+
 const defaultAssets = [
   { id: 'a1', name: '合作金庫（自用）', amount: 76, type: '銀行', note: '自用' },
   { id: 'a2', name: '富邦銀行（投資）', amount: 3299, type: '投資', note: '約當台幣' },
@@ -28,9 +30,9 @@ const parseDate = (s) => { const [y, m, d] = String(s).split('-').map(Number); r
 const nt = (n) => '$' + Number(n || 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
 const usd = (n) => 'USD ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const sortTx = (rows) => [...rows].sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(b.id || '').localeCompare(String(a.id || '')));
-const cleanDb = (rows) => Array.isArray(rows) ? rows.filter((t) => t && t.id).map((t) => ({ ...t, amount: Number(t.amount || 0), account: t.account || '自用', budgetId: t.budgetId || '' })) : [];
-const cleanAssets = (rows) => Array.isArray(rows) ? rows.filter((a) => a && a.id && a.name).map((a) => ({ ...a, amount: Number(a.amount || 0), type: a.type || '其他' })) : defaultAssets;
-const cleanBudgets = (rows) => Array.isArray(rows) ? rows.filter((b) => b && b.id && b.name).map((b) => ({ ...b, amount: Number(b.amount || 0), mode: b.id === 'b-living' ? 'living_cycle' : b.id === 'b-invest' ? 'investment' : (b.mode || 'project') })) : defaultBudgets;
+const cleanDb = (rows) => Array.isArray(rows) ? rows.filter((t) => t?.id).map((t) => ({ ...t, amount: Number(t.amount || 0), account: t.account || '自用', budgetId: t.budgetId || '' })) : [];
+const cleanAssets = (rows) => Array.isArray(rows) ? rows.filter((a) => a?.id && a?.name).map((a) => ({ ...a, amount: Number(a.amount || 0), type: a.type || '其他' })) : defaultAssets;
+const cleanBudgets = (rows) => Array.isArray(rows) ? rows.filter((b) => b?.id && b?.name).map((b) => ({ ...b, amount: Number(b.amount || 0), mode: b.id === 'b-living' ? 'living_cycle' : b.id === 'b-invest' ? 'investment' : (b.mode || 'project') })) : defaultBudgets;
 const isInvestmentTx = (t) => t.type === '支出' && (t.category === '投資' || t.category === '富邦DCA' || t.account === '投資' || /幣安|投資|DCA|0050|VOO|QQQM/i.test(t.note || ''));
 
 function livingCycle(date = new Date()) {
@@ -54,8 +56,6 @@ function autoCat(note) {
   if (/飲料/.test(note)) return '飲料';
   if (/加油|停車|機車|罰單/.test(note)) return '機車';
   if (/耳|鼻|醫|看耳朵|洗鼻器/.test(note)) return '醫療健康';
-  if (/Chat/i.test(note)) return 'ChatGPT';
-  if (/Google/i.test(note)) return 'Google One';
   return '其他';
 }
 
@@ -64,8 +64,7 @@ function fubonRows(r) {
   let d = new Date(parseDate(r.start).getFullYear(), parseDate(r.start).getMonth(), 1);
   const end = parseDate(r.end);
   while (d <= end) {
-    const due = new Date(d.getFullYear(), d.getMonth(), INVEST_DAY);
-    const ds = fmt(due);
+    const ds = fmt(new Date(d.getFullYear(), d.getMonth(), INVEST_DAY));
     if (ds >= r.start && ds <= r.end) rows.push({ id: 'invest-' + ds, date: ds, type: '投資扣款', amount: FUBON_MONTHLY, account: '投資', category: '富邦DCA', note: '富邦DCA：0050 2000 + VOO 30USD + QQQM 30USD' });
     d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
   }
@@ -82,7 +81,6 @@ function stat(txs, r) {
   const sum = (a) => a.reduce((s, x) => s + Number(x.amount || 0), 0);
   const income = sum(inc);
   const normalExpense = sum(normalRows);
-  const actualInvestment = sum(actualInvestmentRows);
   const investmentRows = [...actualInvestmentRows, ...fubon];
   const investment = sum(investmentRows);
   const totalOutflow = normalExpense + investment;
@@ -95,8 +93,8 @@ function stat(txs, r) {
     { name: '自用', amount: sum(selfRows), rows: selfRows },
     { name: '投資', amount: investment, rows: investmentRows },
   ].filter((g) => g.amount > 0);
-  const salaryTransfer = sum(inc.filter((t) => t.account === '薪轉' || t.category === '薪轉' || t.category === '薪水'));
-  return { tx, ex, inc, income, normalExpense, actualInvestment, investment, totalOutflow, balance: income - totalOutflow, life: sum(lifeRows), lifeRows, groups, investmentRows, salaryTransfer, outflowRows: [...normalRows, ...investmentRows] };
+  const salaryTransfer = sum(inc.filter((t) => ['薪轉', '薪水'].includes(t.account) || ['薪轉', '薪水'].includes(t.category)));
+  return { income, normalExpense, investment, totalOutflow, balance: income - totalOutflow, life: sum(lifeRows), lifeRows, groups, investmentRows, salaryTransfer, outflowRows: [...normalRows, ...investmentRows] };
 }
 
 async function apiWrite(entity, action, row) {
@@ -106,12 +104,25 @@ async function apiWrite(entity, action, row) {
   return json;
 }
 
-function Card(p) { return <section style={{ background: 'linear-gradient(160deg,rgba(17,24,39,.97),rgba(8,18,34,.97))', border: '1px solid rgba(34,197,94,.35)', borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: '0 16px 40px rgba(0,0,0,.28)', ...p.style }}>{p.children}</section>; }
+function Card({ children, style }) {
+  return <section style={{ background: 'linear-gradient(160deg,rgba(17,24,39,.97),rgba(8,18,34,.97))', border: '1px solid rgba(34,197,94,.35)', borderRadius: 22, padding: 16, marginBottom: 12, boxShadow: '0 16px 40px rgba(0,0,0,.28)', ...style }}>{children}</section>;
+}
+
 const Title = ({ t, r }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 12, alignItems: 'center' }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{t}</h2>{r && <b style={{ color: '#86efac', fontSize: 12 }}>{r}</b>}</div>;
 const input = () => ({ width: '100%', boxSizing: 'border-box', background: 'rgba(15,23,42,.88)', border: '1px solid rgba(34,197,94,.28)', color: '#f8fafc', borderRadius: 14, padding: 12, fontSize: 15, outline: 'none' });
-function Btn({ children, ...p }) { return <button {...p} style={{ border: '1px solid rgba(212,175,55,.78)', borderRadius: 14, padding: '11px 8px', background: 'linear-gradient(180deg,rgba(250,204,21,.28),rgba(92,64,16,.75))', color: '#fff7bd', fontWeight: 1000, ...p.style }}>{children}</button>; }
-function Metric({ label, value, sub, good, bad }) { return <Card style={{ marginBottom: 0, padding: 14, borderColor: bad ? 'rgba(255,82,82,.55)' : good ? 'rgba(34,197,94,.6)' : undefined }}><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800 }}>{label}</div><div style={{ fontSize: 24, fontWeight: 1000, color: bad ? '#ff5252' : good ? '#86efac' : '#fff' }}>{value}</div>{sub && <div style={{ color: bad ? '#ff5252' : '#94a3b8', fontSize: 12, marginTop: 6 }}>{sub}</div>}</Card>; }
-function TxList({ rows, budgets = [] }) { const budgetName = (id) => budgets.find((b) => b.id === id)?.name; return <div style={{ marginTop: 8, borderTop: '1px solid rgba(148,163,184,.12)' }}>{sortTx(rows).map((t) => <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><div><b>{t.note}</b><div style={{ color: '#94a3b8', fontSize: 12, marginTop: 3 }}>{t.date}｜{t.category}｜{t.account}｜{t.type}{t.budgetId ? `｜專案：${budgetName(t.budgetId) || t.budgetId}` : ''}</div></div><b style={{ color: t.type === '收入' ? '#86efac' : t.type === '投資扣款' || isInvestmentTx(t) ? '#fde68a' : '#fca5a5' }}>{nt(t.amount)}</b></div>)}</div>; }
+
+function Btn({ children, ...p }) {
+  return <button {...p} style={{ border: '1px solid rgba(212,175,55,.78)', borderRadius: 14, padding: '11px 8px', background: 'linear-gradient(180deg,rgba(250,204,21,.28),rgba(92,64,16,.75))', color: '#fff7bd', fontWeight: 1000, ...p.style }}>{children}</button>;
+}
+
+function Metric({ label, value, sub, good, bad }) {
+  return <Card style={{ marginBottom: 0, padding: 14, borderColor: bad ? 'rgba(255,82,82,.55)' : good ? 'rgba(34,197,94,.6)' : undefined }}><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800 }}>{label}</div><div style={{ fontSize: 24, fontWeight: 1000, color: bad ? '#ff5252' : good ? '#86efac' : '#fff' }}>{value}</div>{sub && <div style={{ color: bad ? '#ff5252' : '#94a3b8', fontSize: 12, marginTop: 6 }}>{sub}</div>}</Card>;
+}
+
+function TxList({ rows, budgets = [] }) {
+  const budgetName = (id) => budgets.find((b) => b.id === id)?.name;
+  return <div style={{ marginTop: 8, borderTop: '1px solid rgba(148,163,184,.12)' }}>{sortTx(rows).map((t) => <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(148,163,184,.12)' }}><div><b>{t.note}</b><div style={{ color: '#94a3b8', fontSize: 12, marginTop: 3 }}>{t.date}｜{t.category}｜{t.account}｜{t.type}{t.budgetId ? `｜專案：${budgetName(t.budgetId) || t.budgetId}` : ''}</div></div><b style={{ color: t.type === '收入' ? '#86efac' : t.type === '投資扣款' || isInvestmentTx(t) ? '#fde68a' : '#fca5a5' }}>{nt(t.amount)}</b></div>)}</div>;
+}
 
 const categoryMeta = {
   家用: { icon: '家', hint: '家庭、居家與家用品支出' },
@@ -130,7 +141,7 @@ function Dashboard({ txs, sync }) {
     <Card><Title t="日期篩選" r="Date Range" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input type="date" value={r.start} onChange={(e) => setR({ ...r, start: e.target.value })} style={input()} /><input type="date" value={r.end} onChange={(e) => setR({ ...r, end: e.target.value })} style={input()} /></div><div style={{ color: '#86efac', fontSize: 11, marginTop: 9, fontWeight: 900 }}>生活費週期固定：{cycle.start}～{cycle.end}</div></Card>
     <Card><Title t="可用結餘" r={sync.source === 'neon' ? 'Neon' : 'Local 備援'} /><div style={{ fontSize: 42, fontWeight: 1000, color: s.balance >= 0 ? '#86efac' : '#ff5252' }}>{nt(s.balance)}</div><p style={{ color: '#94a3b8' }}>收入 {nt(s.income)} - 總支出 {nt(s.totalOutflow)}（一般 {nt(s.normalExpense)} + 投資 {nt(s.investment)}）</p></Card>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}><Metric label="區間收入" value={nt(s.income)} good={s.income > 0} /><Metric label="薪轉收入" value={nt(s.salaryTransfer)} good={s.salaryTransfer > 0} /><Metric label="區間總支出" value={nt(s.totalOutflow)} sub={`一般 ${nt(s.normalExpense)}｜投資 ${nt(s.investment)}`} /><Metric label="生活費（自用帳戶）" value={nt(living.life)} sub={`${cycle.start}～${cycle.end}｜${remain < 0 ? `超支 ${nt(Math.abs(remain))}` : `剩餘 ${nt(remain)}`}`} bad={remain < 0} /></div>
-    <Card><Title t="區間大類支出" r="3 類｜點擊看明細" />{s.groups.map((g) => { const meta = categoryMeta[g.name]; const open = selected?.name === g.name; return <div key={g.name} style={{ marginBottom: 10, border: open ? '1px solid rgba(52,211,153,.48)' : '1px solid rgba(71,85,105,.48)', borderRadius: 18, overflow: 'hidden', background: open ? 'linear-gradient(145deg,rgba(15,47,54,.82),rgba(8,24,42,.94))' : 'linear-gradient(145deg,rgba(15,29,50,.96),rgba(8,18,34,.98))', boxShadow: open ? '0 10px 28px rgba(16,185,129,.12)' : '0 8px 22px rgba(0,0,0,.18)' }}><button onClick={() => setSelected(open ? null : g)} style={{ width: '100%', display: 'grid', gridTemplateColumns: '42px minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: '14px', border: 0, background: 'transparent', color: '#f8fafc', textAlign: 'left' }}><span style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', borderRadius: 12, background: 'linear-gradient(145deg,rgba(34,211,238,.16),rgba(16,185,129,.12))', border: '1px solid rgba(45,212,191,.26)', color: '#a7f3d0', fontWeight: 1000, fontSize: 14 }}>{meta.icon}</span><span style={{ minWidth: 0 }}><span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}><b style={{ fontSize: 16 }}>{g.name}</b><b style={{ color: '#f8fafc', fontSize: 17, whiteSpace: 'nowrap' }}>{nt(g.amount)}</b></span><span style={{ display: 'block', color: '#7dd3fc', fontSize: 11, marginTop: 4 }}>{meta.hint}</span><span style={{ display: 'block', height: 7, borderRadius: 999, background: 'rgba(30,41,59,.95)', overflow: 'hidden', marginTop: 9 }}><span style={{ display: 'block', height: '100%', width: Math.min(100, Math.max(2, g.amount / Math.max(1, s.totalOutflow) * 100)) + '%', borderRadius: 999, background: 'linear-gradient(90deg,#22d3ee,#10b981)' }} /></span></span><span style={{ color: '#86efac', fontSize: 20, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .18s ease' }}>›</span></button>{open && <div style={{ padding: '0 14px 14px' }}><TxList rows={g.rows} /></div>}</div>; })}</Card>
+    <Card><Title t="區間大類支出" r="3 類｜點擊看明細" />{s.groups.map((g) => { const meta = categoryMeta[g.name]; const open = selected?.name === g.name; return <div key={g.name} style={{ marginBottom: 10, border: open ? '1px solid rgba(52,211,153,.48)' : '1px solid rgba(71,85,105,.48)', borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(145deg,rgba(15,29,50,.96),rgba(8,18,34,.98))' }}><button onClick={() => setSelected(open ? null : g)} style={{ width: '100%', display: 'grid', gridTemplateColumns: '42px minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: 14, border: 0, background: 'transparent', color: '#f8fafc', textAlign: 'left' }}><span style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', borderRadius: 12, background: 'rgba(34,211,238,.12)', color: '#a7f3d0', fontWeight: 1000 }}>{meta.icon}</span><span><span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><b>{g.name}</b><b>{nt(g.amount)}</b></span><span style={{ display: 'block', color: '#7dd3fc', fontSize: 11, marginTop: 4 }}>{meta.hint}</span></span><span style={{ color: '#86efac', fontSize: 20, transform: open ? 'rotate(90deg)' : 'none' }}>›</span></button>{open && <div style={{ padding: '0 14px 14px' }}><TxList rows={g.rows} /></div>}</div>; })}</Card>
     <Card><Title t="區間支出明細" r={`${s.outflowRows.length} 筆｜含投資`} /><TxList rows={s.outflowRows} /></Card>
   </>;
 }
@@ -140,8 +151,17 @@ function Entry({ txs, setTxs, budgets, onSynced }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const projectBudgets = budgets.filter((b) => !['b-living', 'b-invest'].includes(b.id) && b.mode !== 'project_archived');
-  async function save() { const amount = Number(form.amount || 0); if (!amount || saving) return; const category = form.category === '飲食' ? autoCat(form.note) : form.category; const row = { id: 'm' + Date.now(), ...form, amount, category, account: category === '投資' ? '投資' : form.account, note: form.note || category, budgetId: form.type === '支出' ? form.budgetId : '' }; setSaving(true); setMsg('寫入 Neon 中…'); try { await apiWrite('transaction', 'upsert', row); setTxs([row, ...txs]); setForm({ ...form, amount: '', note: '', budgetId: '' }); setMsg('已同步到 Neon'); onSynced(); } catch (e) { setMsg('儲存失敗：' + e.message); } finally { setSaving(false); } }
-  return <><Card><Title t="快速記帳" r="Neon 主寫入" /><div style={{ display: 'grid', gap: 10 }}><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={{ ...input(), fontSize: 22, fontWeight: 900 }} placeholder="金額" inputMode="numeric" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={input()} placeholder="備註" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={input()} /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={input()}>{['支出', '收入'].map((x) => <option key={x}>{x}</option>)}</select></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} style={input()}>{accountOptions.map((x) => <option key={x}>{x}</option>)}</select><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, account: e.target.value === '投資' ? '投資' : form.account })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select></div>{form.type === '支出' && <select value={form.budgetId} onChange={(e) => setForm({ ...form, budgetId: e.target.value })} style={input()}><option value="">不指定專案預算</option>{projectBudgets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>}<Btn onClick={save} disabled={saving}>{saving ? '同步中…' : '儲存這筆'}</Btn>{msg && <div style={{ color: msg.startsWith('儲存失敗') ? '#fca5a5' : '#86efac', fontSize: 12, fontWeight: 900 }}>{msg}</div>}</div></Card><Card><Title t="交易清單" r={`${txs.length} 筆`} /><TxList rows={txs} budgets={budgets} /></Card></>;
+  async function save() {
+    const amount = Number(form.amount || 0);
+    if (!amount || saving) return;
+    const category = form.category === '飲食' ? autoCat(form.note) : form.category;
+    const row = { id: 'm' + Date.now(), ...form, amount, category, account: category === '投資' ? '投資' : form.account, note: form.note || category, budgetId: form.type === '支出' ? form.budgetId : '' };
+    setSaving(true);
+    try { await apiWrite('transaction', 'upsert', row); setTxs([row, ...txs]); setForm({ ...form, amount: '', note: '', budgetId: '' }); setMsg('已同步到 Neon'); onSynced(); }
+    catch (e) { setMsg('儲存失敗：' + e.message); }
+    finally { setSaving(false); }
+  }
+  return <><Card><Title t="快速記帳" r="Neon 主寫入" /><div style={{ display: 'grid', gap: 10 }}><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={{ ...input(), fontSize: 22, fontWeight: 900 }} placeholder="金額" inputMode="numeric" /><input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={input()} placeholder="備註" /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={input()} /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={input()}>{['支出', '收入'].map((x) => <option key={x}>{x}</option>)}</select></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} style={input()}>{accountOptions.map((x) => <option key={x}>{x}</option>)}</select><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, account: e.target.value === '投資' ? '投資' : form.account })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select></div>{form.type === '支出' && <select value={form.budgetId} onChange={(e) => setForm({ ...form, budgetId: e.target.value })} style={input()}><option value="">不指定專案預算</option>{projectBudgets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>}<Btn onClick={save} disabled={saving}>{saving ? '同步中…' : '儲存這筆'}</Btn>{msg && <div style={{ color: /失敗/.test(msg) ? '#fca5a5' : '#86efac', fontSize: 12, fontWeight: 900 }}>{msg}</div>}</div></Card><Card><Title t="交易清單" r={`${txs.length} 筆`} /><TxList rows={txs} budgets={budgets} /></Card></>;
 }
 
 function Budget({ txs, budgets, setBudgets, onSynced }) {
@@ -158,106 +178,78 @@ function Budget({ txs, budgets, setBudgets, onSynced }) {
   const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);
   const used = (b) => rows(b).reduce((s, x) => s + Number(x.amount || 0), 0);
   const isArchived = (b) => b.mode === 'project_archived';
-  const isExpanded = (b) => Boolean(expandedBudgetIds[b.id]);
-  const toggleDetails = (b) => setExpandedBudgetIds((current) => ({ ...current, [b.id]: !current[b.id] }));
-  const orderedBudgets = [...budgets].sort((a, b) => {
+  const sortRows = (items) => [...items].sort((a, b) => {
     const aSystem = ['b-living', 'b-invest'].includes(a.id);
     const bSystem = ['b-living', 'b-invest'].includes(b.id);
     if (aSystem !== bSystem) return aSystem ? 1 : -1;
-    const aArchived = isArchived(a);
-    const bArchived = isArchived(b);
-    if (aArchived !== bArchived) return aArchived ? 1 : -1;
     return String(b.id).localeCompare(String(a.id));
   });
+  const activeBudgets = sortRows(budgets.filter((b) => !isArchived(b)));
+  const archivedBudgets = sortRows(budgets.filter(isArchived));
   const totalBudget = budgets.reduce((s, b) => s + Number(b.amount || 0), 0);
   const totalUsed = budgets.reduce((s, b) => s + used(b), 0);
   const totalRemaining = totalBudget - totalUsed;
+  const toggleDetails = (b) => setExpandedBudgetIds((x) => ({ ...x, [b.id]: !x[b.id] }));
 
   async function add() {
     const amount = Number(form.amount);
     if (!amount || saving) return;
     const row = { id: 'b' + Date.now(), name: form.name.trim() || form.category, category: form.category, amount, mode: 'project' };
     setSaving(true);
-    try {
-      await apiWrite('budget', 'upsert', row);
-      setBudgets([row, ...budgets]);
-      setForm(empty);
-      setMsg(`已新增：${row.name} ${nt(row.amount)}`);
-      await onSynced();
-    } catch (e) {
-      setMsg('新增失敗：' + e.message);
-    } finally {
-      setSaving(false);
-    }
+    try { await apiWrite('budget', 'upsert', row); setBudgets([row, ...budgets]); setForm(empty); setMsg(`已新增：${row.name} ${nt(row.amount)}`); await onSynced(); }
+    catch (e) { setMsg('新增失敗：' + e.message); }
+    finally { setSaving(false); }
   }
 
-  function startEdit(b) {
-    setEditingId(b.id);
-    setEditForm({ name: b.name, category: b.category, amount: String(b.amount) });
-    setMsg('');
-  }
+  function startEdit(b) { setEditingId(b.id); setEditForm({ name: b.name, category: b.category, amount: String(b.amount) }); setMsg(''); }
 
   async function saveEdit(b) {
     const amount = Number(editForm.amount);
     if (!editForm.name.trim() || !Number.isFinite(amount) || amount < 0 || saving) return;
     const row = { ...b, name: editForm.name.trim(), category: editForm.category, amount };
     setSaving(true);
-    try {
-      await apiWrite('budget', 'upsert', row);
-      setBudgets(budgets.map((x) => x.id === b.id ? row : x));
-      setEditingId('');
-      setMsg(`已儲存修改：${row.name}`);
-      await onSynced();
-    } catch (e) {
-      setMsg('更新失敗：' + e.message);
-    } finally {
-      setSaving(false);
-    }
+    try { await apiWrite('budget', 'upsert', row); setBudgets(budgets.map((x) => x.id === b.id ? row : x)); setEditingId(''); setMsg(`已儲存修改：${row.name}`); await onSynced(); }
+    catch (e) { setMsg('更新失敗：' + e.message); }
+    finally { setSaving(false); }
   }
 
   async function setBudgetArchived(b, archived) {
     if (!String(b.mode || '').startsWith('project')) return;
     const row = { ...b, mode: archived ? 'project_archived' : 'project' };
     setSaving(true);
-    try {
-      await apiWrite('budget', 'upsert', row);
-      setBudgets(budgets.map((x) => x.id === b.id ? row : x));
-      setEditingId('');
-      setMsg(archived ? `預算已結案並封存：${b.name}` : `預算已重新開啟：${b.name}`);
-      await onSynced();
-    } catch (e) {
-      setMsg((archived ? '預算結案失敗：' : '重新開啟失敗：') + e.message);
-    } finally {
-      setSaving(false);
-    }
+    try { await apiWrite('budget', 'upsert', row); setBudgets(budgets.map((x) => x.id === b.id ? row : x)); setEditingId(''); setMsg(archived ? `預算已結案並封存：${b.name}` : `預算已重新開啟：${b.name}`); await onSynced(); }
+    catch (e) { setMsg((archived ? '預算結案失敗：' : '重新開啟失敗：') + e.message); }
+    finally { setSaving(false); }
   }
 
   async function remove(b) {
     if (!confirm(`確定刪除預算「${b.name}」？已綁定的交易不會被刪除。`)) return;
     setSaving(true);
-    try {
-      await apiWrite('budget', 'delete', b);
-      setBudgets(budgets.filter((x) => x.id !== b.id));
-      setEditingId('');
-      setMsg(`已刪除：${b.name}`);
-      await onSynced();
-    } catch (e) {
-      setMsg('刪除失敗：' + e.message);
-    } finally {
-      setSaving(false);
-    }
+    try { await apiWrite('budget', 'delete', b); setBudgets(budgets.filter((x) => x.id !== b.id)); setEditingId(''); setMsg(`已刪除：${b.name}`); await onSynced(); }
+    catch (e) { setMsg('刪除失敗：' + e.message); }
+    finally { setSaving(false); }
   }
+
+  const BudgetCard = ({ b, archived = false }) => {
+    const bRows = rows(b);
+    const bUsed = used(b);
+    const remaining = Number(b.amount || 0) - bUsed;
+    const period = archived ? '已封存' : b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;
+    if (editingId === b.id) return <Card><Title t="編輯預算" r={period} /><div style={{ display: 'grid', gap: 9 }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} /><select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={input()} inputMode="numeric" /><div style={{ color: '#94a3b8', fontSize: 12 }}>目前已使用 {nt(bUsed)}｜修改預算不會改動交易明細</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><Btn onClick={() => saveEdit(b)} disabled={saving}>{saving ? '同步中' : '儲存修改'}</Btn><button onClick={() => setEditingId('')} style={{ border: '1px solid rgba(148,163,184,.38)', background: 'rgba(15,23,42,.7)', color: '#cbd5e1', borderRadius: 12, fontWeight: 900 }}>取消</button><button onClick={() => remove(b)} disabled={saving} style={{ border: '1px solid rgba(248,113,113,.45)', background: 'rgba(127,29,29,.18)', color: '#fca5a5', borderRadius: 12, fontWeight: 900 }}>刪除</button></div></div></Card>;
+    return <Card style={{ opacity: archived ? .78 : 1, borderColor: archived ? 'rgba(125,211,252,.28)' : undefined }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}><div style={{ minWidth: 0 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{b.name}</h2><div style={{ color: archived ? '#7dd3fc' : '#86efac', fontSize: 12, fontWeight: 900, marginTop: 4 }}>{period}</div></div><div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{String(b.mode || '').startsWith('project') && <button onClick={() => setBudgetArchived(b, !archived)} disabled={saving} style={{ border: archived ? '1px solid rgba(56,189,248,.45)' : '1px solid rgba(34,197,94,.48)', background: archived ? 'rgba(14,116,144,.18)' : 'rgba(20,83,45,.24)', color: archived ? '#7dd3fc' : '#86efac', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>{archived ? '重新開啟' : '預算結案'}</button>}<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric label={b.category} value={nt(bUsed)} sub={`預算 ${nt(b.amount)}｜${remaining < 0 ? `超支 ${nt(Math.abs(remaining))}` : `剩餘 ${nt(remaining)}`}`} bad={remaining < 0} />{bRows.length > 0 && <><button onClick={() => toggleDetails(b)} style={{ width: '100%', marginTop: 10, border: '1px solid rgba(56,189,248,.32)', background: 'rgba(14,116,144,.12)', color: '#7dd3fc', borderRadius: 12, padding: 10, fontWeight: 900 }}>{expandedBudgetIds[b.id] ? '收合明細' : `查看明細（${bRows.length} 筆）`}</button>{expandedBudgetIds[b.id] && <TxList rows={bRows} budgets={budgets} />}</>}</Card>;
+  };
 
   return <>
     <Card><Title t="新增預算" r="Neon 主寫入" /><div style={{ display: 'grid', gap: 10 }}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input()} placeholder="預算名稱" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} style={input()} placeholder="預算金額" inputMode="numeric" /><Btn onClick={add} disabled={saving}>{saving ? '同步中…' : '新增預算'}</Btn>{msg && <div style={{ color: /失敗/.test(msg) ? '#fca5a5' : '#86efac', fontSize: 12, fontWeight: 900 }}>{msg}</div>}</div></Card>
-    {orderedBudgets.map((b) => {
-      const bRows = rows(b);
-      const bUsed = used(b);
-      const remaining = Number(b.amount || 0) - bUsed;
-      const period = isArchived(b) ? '已封存' : b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;
-      if (editingId === b.id) return <Card key={b.id}><Title t="編輯預算" r={period} /><div style={{ display: 'grid', gap: 9 }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} /><select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={input()} inputMode="numeric" /><div style={{ color: '#94a3b8', fontSize: 12 }}>目前已使用 {nt(bUsed)}｜修改預算不會改動交易明細</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><Btn onClick={() => saveEdit(b)} disabled={saving}>{saving ? '同步中' : '儲存修改'}</Btn><button onClick={() => setEditingId('')} style={{ border: '1px solid rgba(148,163,184,.38)', background: 'rgba(15,23,42,.7)', color: '#cbd5e1', borderRadius: 12, fontWeight: 900 }}>取消</button><button onClick={() => remove(b)} disabled={saving} style={{ border: '1px solid rgba(248,113,113,.45)', background: 'rgba(127,29,29,.18)', color: '#fca5a5', borderRadius: 12, fontWeight: 900 }}>刪除</button></div></div></Card>;
-      return <Card key={b.id} style={{ opacity: isArchived(b) ? .78 : 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}><div><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{b.name}</h2><div style={{ color: isArchived(b) ? '#7dd3fc' : '#86efac', fontSize: 12, fontWeight: 900, marginTop: 4 }}>{period}</div></div><div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{String(b.mode || '').startsWith('project') && <button onClick={() => setBudgetArchived(b, !isArchived(b))} disabled={saving} style={{ border: isArchived(b) ? '1px solid rgba(56,189,248,.45)' : '1px solid rgba(34,197,94,.48)', background: isArchived(b) ? 'rgba(14,116,144,.18)' : 'rgba(20,83,45,.24)', color: isArchived(b) ? '#7dd3fc' : '#86efac', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>{isArchived(b) ? '重新開啟' : '預算結案'}</button>}<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric label={b.category} value={nt(bUsed)} sub={`預算 ${nt(b.amount)}｜${remaining < 0 ? `超支 ${nt(Math.abs(remaining))}` : `剩餘 ${nt(remaining)}`}`} bad={remaining < 0} />{bRows.length > 0 && <><button onClick={() => toggleDetails(b)} style={{ width: '100%', marginTop: 10, border: '1px solid rgba(56,189,248,.32)', background: 'rgba(14,116,144,.12)', color: '#7dd3fc', borderRadius: 12, padding: '10px', fontWeight: 900 }}>{isExpanded(b) ? '收合明細' : `查看明細（${bRows.length} 筆）`}</button>{isExpanded(b) && <TxList rows={bRows} budgets={budgets} />}</>}</Card>;
-    })}
+
+    <div style={{ margin: '4px 0 10px' }}><Title t="進行中預算" r={`${activeBudgets.length} 項`} /></div>
+    {activeBudgets.map((b) => <BudgetCard key={b.id} b={b} />)}
+
+    {archivedBudgets.length > 0 && <>
+      <div style={{ margin: '24px 0 10px', paddingTop: 16, borderTop: '1px solid rgba(125,211,252,.3)' }}><Title t="已結案預算" r={`${archivedBudgets.length} 項｜封存`} /></div>
+      {archivedBudgets.map((b) => <BudgetCard key={b.id} b={b} archived />)}
+    </>}
+
     <Card style={{ borderColor: 'rgba(56,189,248,.42)' }}><Title t="所有預算總計" r={`${budgets.length} 項`} /><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><div><div style={{ color: '#94a3b8', fontSize: 11 }}>總預算</div><b style={{ fontSize: 18 }}>{nt(totalBudget)}</b></div><div><div style={{ color: '#94a3b8', fontSize: 11 }}>已使用</div><b style={{ fontSize: 18, color: '#fca5a5' }}>{nt(totalUsed)}</b></div><div><div style={{ color: '#94a3b8', fontSize: 11 }}>{totalRemaining < 0 ? '總超支' : '總剩餘'}</div><b style={{ fontSize: 18, color: totalRemaining < 0 ? '#fca5a5' : '#86efac' }}>{nt(Math.abs(totalRemaining))}</b></div></div></Card>
   </>;
 }
@@ -287,8 +279,25 @@ export default function FinancialOS() {
   const [budgets, setBudgets] = useState(defaultBudgets);
   const [assets, setAssets] = useState(defaultAssets);
   const [sync, setSync] = useState({ loading: true, source: '', error: '', lastSync: '', counts: null });
-  async function load() { setSync((s) => ({ ...s, loading: true })); try { const res = await fetch('/api/financial/data?limit=1000&t=' + Date.now(), { cache: 'no-store' }); const json = await res.json(); if (!res.ok || json.ok === false) throw new Error(json.error || 'Neon 讀取失敗'); const cloudTx = cleanDb(json.transactions), cloudBudgets = cleanBudgets(json.budgets), cloudAssets = cleanAssets(json.assets); setTxs(cloudTx); setBudgets(cloudBudgets); setAssets(cloudAssets); localStorage.setItem(TX_KEY, JSON.stringify(cloudTx)); localStorage.setItem(BUDGET_KEY, JSON.stringify(cloudBudgets)); localStorage.setItem(ASSET_KEY, JSON.stringify(cloudAssets)); setSync({ loading: false, source: 'neon', error: '', lastSync: new Date().toLocaleString('zh-TW'), counts: { transactions: cloudTx.length, budgets: cloudBudgets.length, assets: cloudAssets.length } }); } catch (e) { const localTx = cleanDb(JSON.parse(localStorage.getItem(TX_KEY) || '[]')); const localBudgets = cleanBudgets(JSON.parse(localStorage.getItem(BUDGET_KEY) || 'null')); const localAssets = cleanAssets(JSON.parse(localStorage.getItem(ASSET_KEY) || 'null')); setTxs(localTx); setBudgets(localBudgets); setAssets(localAssets); setSync({ loading: false, source: 'local', error: e.message, lastSync: '', counts: { transactions: localTx.length, budgets: localBudgets.length, assets: localAssets.length } }); } }
+  async function load() {
+    setSync((s) => ({ ...s, loading: true }));
+    try {
+      const res = await fetch('/api/financial/data?limit=1000&t=' + Date.now(), { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || json.ok === false) throw new Error(json.error || 'Neon 讀取失敗');
+      const cloudTx = cleanDb(json.transactions), cloudBudgets = cleanBudgets(json.budgets), cloudAssets = cleanAssets(json.assets);
+      setTxs(cloudTx); setBudgets(cloudBudgets); setAssets(cloudAssets);
+      localStorage.setItem(TX_KEY, JSON.stringify(cloudTx)); localStorage.setItem(BUDGET_KEY, JSON.stringify(cloudBudgets)); localStorage.setItem(ASSET_KEY, JSON.stringify(cloudAssets));
+      setSync({ loading: false, source: 'neon', error: '', lastSync: new Date().toLocaleString('zh-TW'), counts: { transactions: cloudTx.length, budgets: cloudBudgets.length, assets: cloudAssets.length } });
+    } catch (e) {
+      const localTx = cleanDb(JSON.parse(localStorage.getItem(TX_KEY) || '[]'));
+      const localBudgets = cleanBudgets(JSON.parse(localStorage.getItem(BUDGET_KEY) || 'null'));
+      const localAssets = cleanAssets(JSON.parse(localStorage.getItem(ASSET_KEY) || 'null'));
+      setTxs(localTx); setBudgets(localBudgets); setAssets(localAssets);
+      setSync({ loading: false, source: 'local', error: e.message, lastSync: '', counts: { transactions: localTx.length, budgets: localBudgets.length, assets: localAssets.length } });
+    }
+  }
   useEffect(() => { load(); }, []);
   const status = sync.loading ? '正在同步 Neon…' : sync.source === 'neon' ? `Neon 已同步｜交易 ${sync.counts?.transactions}・預算 ${sync.counts?.budgets}・資產 ${sync.counts?.assets}｜${sync.lastSync}` : `Local 備援｜${sync.error}`;
-  return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}><section style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V5.8｜Neon 主讀寫｜Local 備援</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section><div style={{ color: sync.source === 'local' ? '#fca5a5' : '#86efac', border: '1px solid rgba(34,197,94,.35)', background: 'rgba(34,197,94,.08)', borderRadius: 12, padding: '9px 11px', fontSize: 11, fontWeight: 900, marginBottom: 12 }}>{status}</div>{tab === 'dashboard' && <Dashboard txs={txs} sync={sync} />}{tab === 'entry' && <Entry txs={txs} setTxs={setTxs} budgets={budgets} onSynced={load} />}{tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} onSynced={load} />}{tab === 'assets' && <AssetPage assets={assets} setAssets={setAssets} onSynced={load} />}</div><nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,.94)', borderTop: '1px solid rgba(34,197,94,.24)', padding: '8px 8px 10px' }}><div style={{ maxWidth: 430, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>{[['dashboard', '總覽'], ['entry', '記帳'], ['audit', '查帳'], ['budget', '預算'], ['assets', '資產']].map(([key, label]) => key === 'audit' ? <a key={key} href="/financial-audit" style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000, textAlign: 'center', textDecoration: 'none' }}>{label}</a> : <button key={key} onClick={() => setTab(key)} style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: tab === key ? 'linear-gradient(180deg,rgba(250,204,21,.32),rgba(92,64,16,.78))' : 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000 }}>{label}</button>)}</div></nav></main>;
+  return <main style={{ minHeight: '100vh', color: '#f8fafc', background: 'radial-gradient(circle at 50% -10%,rgba(34,197,94,.16),transparent 28%),linear-gradient(180deg,#020617,#0f172a 55%,#111827)', fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',Arial,sans-serif" }}><div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 14px 130px' }}><section style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><div><div style={{ fontSize: 22, fontWeight: 1000 }}>Josh 多元記帳本</div><div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, marginTop: 5 }}>多元記帳本 V5.9｜Neon 主讀寫｜Local 備援</div></div><a href="/josh-os" style={{ color: '#bbf7d0', textDecoration: 'none', border: '1px solid rgba(34,197,94,.42)', borderRadius: 999, padding: '7px 10px', fontSize: 12, fontWeight: 950 }}>四合一</a></section><div style={{ color: sync.source === 'local' ? '#fca5a5' : '#86efac', border: '1px solid rgba(34,197,94,.35)', background: 'rgba(34,197,94,.08)', borderRadius: 12, padding: '9px 11px', fontSize: 11, fontWeight: 900, marginBottom: 12 }}>{status}</div>{tab === 'dashboard' && <Dashboard txs={txs} sync={sync} />}{tab === 'entry' && <Entry txs={txs} setTxs={setTxs} budgets={budgets} onSynced={load} />}{tab === 'budget' && <Budget txs={txs} budgets={budgets} setBudgets={setBudgets} onSynced={load} />}{tab === 'assets' && <AssetPage assets={assets} setAssets={setAssets} onSynced={load} />}</div><nav style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,.94)', borderTop: '1px solid rgba(34,197,94,.24)', padding: '8px 8px 10px' }}><div style={{ maxWidth: 430, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>{[['dashboard', '總覽'], ['entry', '記帳'], ['audit', '查帳'], ['budget', '預算'], ['assets', '資產']].map(([key, label]) => key === 'audit' ? <a key={key} href="/financial-audit" style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000, textAlign: 'center', textDecoration: 'none' }}>{label}</a> : <button key={key} onClick={() => setTab(key)} style={{ border: '1px solid rgba(212,175,55,.65)', borderRadius: 13, padding: '9px 2px', background: tab === key ? 'linear-gradient(180deg,rgba(250,204,21,.32),rgba(92,64,16,.78))' : 'rgba(92,64,16,.45)', color: '#fff7bd', fontSize: 11, fontWeight: 1000 }}>{label}</button>)}</div></nav></main>;
 }
