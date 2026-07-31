@@ -1,11 +1,9 @@
-name: Patch budget archive and details
+name: Separate active and archived budgets
 
 on:
   push:
     paths:
-      - '.github/workflows/patch-budget-completion.yml'
-  schedule:
-    - cron: '*/5 * * * *'
+      - 'budget-separation-trigger.txt'
 
 permissions:
   contents: write
@@ -18,71 +16,58 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Patch Financial OS budget archive UX
+      - name: Separate budget sections
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('pages/financial-os.js')
           s = p.read_text()
 
-          if "const [expandedBudgetIds, setExpandedBudgetIds]" not in s:
-              s = s.replace(
-                  "const [saving, setSaving] = useState(false);\n  const cycle = livingCycle();",
-                  "const [saving, setSaving] = useState(false);\n  const [expandedBudgetIds, setExpandedBudgetIds] = useState({});\n  const cycle = livingCycle();"
-              )
-
-          if "const isArchived = (b) => b.mode === 'project_archived';" not in s:
-              s = s.replace(
-                  "const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);",
-                  "const rows = (b) => b.mode === 'living_cycle' ? living.lifeRows : b.mode === 'investment' ? month.investmentRows : txs.filter((t) => t.type === '支出' && t.budgetId === b.id);\n  const isArchived = (b) => b.mode === 'project_archived';\n  const isExpanded = (b) => Boolean(expandedBudgetIds[b.id]);\n  const toggleDetails = (b) => setExpandedBudgetIds((current) => ({ ...current, [b.id]: !current[b.id] }));"
-              )
-
-          if "const aArchived = isArchived(a);" not in s:
-              s = s.replace(
-                  "if (aSystem !== bSystem) return aSystem ? 1 : -1;\n    return String(b.id).localeCompare(String(a.id));",
-                  "if (aSystem !== bSystem) return aSystem ? 1 : -1;\n    const aArchived = isArchived(a);\n    const bArchived = isArchived(b);\n    if (aArchived !== bArchived) return aArchived ? 1 : -1;\n    return String(b.id).localeCompare(String(a.id));"
-              )
-
-          s = s.replace("setMsg(`已完成更新：${row.name}`);", "setMsg(`已儲存修改：${row.name}`);")
-          s = s.replace("{saving ? '同步中' : '完成'}</Btn>", "{saving ? '同步中' : '儲存修改'}</Btn>")
-
-          if "async function setBudgetArchived" not in s:
-              anchor = "  async function remove(b) {"
-              insert = """  async function setBudgetArchived(b, archived) {
-    if (!String(b.mode || '').startsWith('project')) return;
-    const row = { ...b, mode: archived ? 'project_archived' : 'project' };
-    setSaving(true);
-    try {
-      await apiWrite('budget', 'upsert', row);
-      setBudgets(budgets.map((x) => x.id === b.id ? row : x));
-      setEditingId('');
-      setMsg(archived ? `預算已結案並封存：${b.name}` : `預算已重新開啟：${b.name}`);
-      await onSynced();
-    } catch (e) {
-      setMsg((archived ? '預算結案失敗：' : '重新開啟失敗：') + e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-"""
-              s = s.replace(anchor, insert + anchor)
+          old = """  const orderedBudgets = [...budgets].sort((a, b) => {
+    const aSystem = ['b-living', 'b-invest'].includes(a.id);
+    const bSystem = ['b-living', 'b-invest'].includes(b.id);
+    if (aSystem !== bSystem) return aSystem ? 1 : -1;
+    const aArchived = isArchived(a);
+    const bArchived = isArchived(b);
+    if (aArchived !== bArchived) return aArchived ? 1 : -1;
+    return String(b.id).localeCompare(String(a.id));
+  });"""
+          new = """  const sortBudgetRows = (items) => [...items].sort((a, b) => {
+    const aSystem = ['b-living', 'b-invest'].includes(a.id);
+    const bSystem = ['b-living', 'b-invest'].includes(b.id);
+    if (aSystem !== bSystem) return aSystem ? 1 : -1;
+    return String(b.id).localeCompare(String(a.id));
+  });
+  const activeBudgets = sortBudgetRows(budgets.filter((b) => !isArchived(b)));
+  const archivedBudgets = sortBudgetRows(budgets.filter(isArchived));"""
+          if old not in s:
+              raise SystemExit('sorting anchor not found')
+          s = s.replace(old, new)
 
           s = s.replace(
-              "const period = b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;",
-              "const period = isArchived(b) ? '已封存' : b.mode === 'project' ? '專案累計' : b.mode === 'investment' ? '本月' : `${cycle.start.slice(5)}～${cycle.end.slice(5)}`;"
+              """    {orderedBudgets.map((b) => {""",
+              """    <Title t=\"進行中預算\" r={`${activeBudgets.length} 項`} />
+    {activeBudgets.map((b) => {""",
+              1
           )
 
-          old_header = """<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div><Metric"""
-          new_header = """<div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>{String(b.mode || '').startsWith('project') && <button onClick={() => setBudgetArchived(b, !isArchived(b))} disabled={saving} style={{ border: isArchived(b) ? '1px solid rgba(56,189,248,.45)' : '1px solid rgba(34,197,94,.48)', background: isArchived(b) ? 'rgba(14,116,144,.18)' : 'rgba(20,83,45,.24)', color: isArchived(b) ? '#7dd3fc' : '#86efac', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>{isArchived(b) ? '重新開啟' : '預算結案'}</button>}<button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric"""
-          if old_header in s:
-              s = s.replace(old_header, new_header)
-
-          old_details = """{rows(b).length > 0 && <TxList rows={rows(b)} budgets={budgets} />}"""
-          new_details = """{rows(b).length > 0 && <><button onClick={() => toggleDetails(b)} style={{ width: '100%', marginTop: 10, border: '1px solid rgba(56,189,248,.32)', background: 'rgba(14,116,144,.12)', color: '#7dd3fc', borderRadius: 12, padding: '10px', fontWeight: 900 }}>{isExpanded(b) ? '收合明細' : `查看明細（${rows(b).length} 筆）`}</button>{isExpanded(b) && <TxList rows={rows(b)} budgets={budgets} />}</>}"""
-          s = s.replace(old_details, new_details)
-
-          s = s.replace('多元記帳本 V5.7｜Neon 主讀寫｜Local 備援', '多元記帳本 V5.8｜Neon 主讀寫｜Local 備援')
+          anchor = """    <Card style={{ borderColor: 'rgba(56,189,248,.42)' }}><Title t=\"所有預算總計\""""
+          archived = """    {archivedBudgets.length > 0 && <>
+      <div style={{ margin: '22px 0 10px', paddingTop: 14, borderTop: '1px solid rgba(125,211,252,.28)' }}><Title t=\"已結案預算\" r={`${archivedBudgets.length} 項｜封存`} /></div>
+      {archivedBudgets.map((b) => {
+        const bRows = rows(b);
+        const bUsed = used(b);
+        const remaining = Number(b.amount || 0) - bUsed;
+        const period = '已封存';
+        if (editingId === b.id) return <Card key={b.id}><Title t=\"編輯預算\" r={period} /><div style={{ display: 'grid', gap: 9 }}><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={input()} /><select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} style={input()}>{cats.map((x) => <option key={x}>{x}</option>)}</select><input value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} style={input()} inputMode=\"numeric\" /><div style={{ color: '#94a3b8', fontSize: 12 }}>目前已使用 {nt(bUsed)}｜修改預算不會改動交易明細</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}><Btn onClick={() => saveEdit(b)} disabled={saving}>{saving ? '同步中' : '儲存修改'}</Btn><button onClick={() => setEditingId('')} style={{ border: '1px solid rgba(148,163,184,.38)', background: 'rgba(15,23,42,.7)', color: '#cbd5e1', borderRadius: 12, fontWeight: 900 }}>取消</button><button onClick={() => remove(b)} disabled={saving} style={{ border: '1px solid rgba(248,113,113,.45)', background: 'rgba(127,29,29,.18)', color: '#fca5a5', borderRadius: 12, fontWeight: 900 }}>刪除</button></div></div></Card>;
+        return <Card key={b.id} style={{ opacity: .78, borderColor: 'rgba(125,211,252,.28)' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}><div><h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>{b.name}</h2><div style={{ color: '#7dd3fc', fontSize: 12, fontWeight: 900, marginTop: 4 }}>{period}</div></div><div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}><button onClick={() => setBudgetArchived(b, false)} disabled={saving} style={{ border: '1px solid rgba(56,189,248,.45)', background: 'rgba(14,116,144,.18)', color: '#7dd3fc', borderRadius: 12, padding: '9px 10px', fontWeight: 900 }}>重新開啟</button><button onClick={() => startEdit(b)} style={{ border: '1px solid rgba(212,175,55,.58)', background: 'rgba(92,64,16,.35)', color: '#fff7bd', borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>編輯</button></div></div><Metric label={b.category} value={nt(bUsed)} sub={`預算 ${nt(b.amount)}｜${remaining < 0 ? `超支 ${nt(Math.abs(remaining))}` : `剩餘 ${nt(remaining)}`}`} bad={remaining < 0} />{bRows.length > 0 && <><button onClick={() => toggleDetails(b)} style={{ width: '100%', marginTop: 10, border: '1px solid rgba(56,189,248,.32)', background: 'rgba(14,116,144,.12)', color: '#7dd3fc', borderRadius: 12, padding: '10px', fontWeight: 900 }}>{isExpanded(b) ? '收合明細' : `查看明細（${bRows.length} 筆）`}</button>{isExpanded(b) && <TxList rows={bRows} budgets={budgets} />}</>}</Card>;
+      })}
+    </>}
+"""
+          if anchor not in s:
+              raise SystemExit('total anchor not found')
+          s = s.replace(anchor, archived + anchor, 1)
+          s = s.replace('多元記帳本 V5.8｜Neon 主讀寫｜Local 備援', '多元記帳本 V5.9｜Neon 主讀寫｜Local 備援')
           p.write_text(s)
           PY
 
@@ -91,9 +76,5 @@ jobs:
           git config user.name "changeros-bot"
           git config user.email "chang.eros@gmail.com"
           git add pages/financial-os.js
-          if git diff --cached --quiet; then
-            echo "Patch already applied"
-            exit 0
-          fi
-          git commit -m "fix(financial-os): add budget close archive and collapsible details"
+          git commit -m "fix(financial-os): separate active and archived budgets"
           git push
