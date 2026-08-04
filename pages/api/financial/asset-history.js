@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     await ensureSchema(sql);
 
     if (req.method === 'GET') {
-      const limit = Math.min(365, Math.max(1, Number(req.query.limit || 30)));
+      const limit = Math.min(5000, Math.max(1, Number(req.query.limit || 5000)));
       const rows = await sql.query(
         `select to_char(snapshot_date, 'YYYY-MM-DD') as date,
                 total_twd, manual_twd, investment_usd, exchange_rate
