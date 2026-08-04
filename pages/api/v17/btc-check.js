@@ -1,4 +1,5 @@
 import { fetchBinanceExchangePositions, requiredEnv } from "../../../lib/v17/binance-exchange-provider";
+import { automationErrorStatus, requireAutomationWriteAuth } from "../../../lib/v17-automation-security";
 
 async function callJson(baseUrl, path) {
   const startedAt = Date.now();
@@ -78,6 +79,12 @@ export default async function handler(req, res) {
 
   if (req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "method_not_allowed" });
+  }
+
+  try {
+    requireAutomationWriteAuth(req);
+  } catch (error) {
+    return res.status(automationErrorStatus(error)).json({ ok: false, error: error.message });
   }
 
   const baseUrl = baseUrlFromReq(req);

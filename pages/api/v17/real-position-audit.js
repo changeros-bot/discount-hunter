@@ -1,9 +1,21 @@
+const crypto = require("crypto");
 const { fetchWalletTokenTransfers, hasMoralisKey, hasMegaNodeKey } = require("../../../lib/xstocks/transfer-source");
 const { buildBuyRecordsFromTransfers, calculateHoldings } = require("../../../lib/xstocks/costBasis");
 const { fetchTokenPrices, fetchReferenceStockPrices } = require("../../../lib/xstocks/prices");
 const { fetchWalletBalancesViaRpc } = require("../../../lib/xstocks/rpcBalances");
 const { WATCHLIST } = require("../../../lib/xstocks/constants");
 const { requiredEnv, getBinanceRestUrl, fetchBinanceExchangePositions } = require("../../../lib/v17/binance-exchange-provider");
+
+function auditAuthStatus(req) {
+  const expected = String(process.env.V17_AUTOMATION_API_TOKEN || "").trim();
+  if (!expected) return { ok: false, status: 503, error: "automation_auth_not_configured" };
+  const header = String(req.headers?.authorization || "").trim();
+  const supplied = /^Bearer\s+/i.test(header) ? header.replace(/^Bearer\s+/i, "").trim() : String(req.headers?.["x-v17-automation-token"] || "").trim();
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  const ok = a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
+  return ok ? { ok: true } : { ok: false, status: 401, error: "automation_auth_failed" };
+}
 
 function safeNumber(value) {
   const n = Number(value || 0);
@@ -195,6 +207,9 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ ok: false, message: "Method not allowed" });
   }
+
+  const auth = auditAuthStatus(req);
+  if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
 
   const [btc, xstocks] = await Promise.all([auditBinanceBtc(), auditXStocks()]);
   const status = overallStatus(btc, xstocks);
